@@ -36,7 +36,7 @@
     "package:windows": "node scripts/build-windows-app.mjs --zip"
   },
   "devDependencies": {
-    "@biomejs/biome": "2.5.14",
+    "@biomejs/biome": "2.6.4",
     "electron": "44.4.5"
   },
   "engines": {
