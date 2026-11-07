@@ -1,0 +1,487 @@
+/* diagnostics.css —— 诊断浮层的内容：状态变更时间线（泳道 + 清单）与历史复盘（#dlgTimeline）、
+   端点检测（#dlgEndpoint）、Doctor 输出（#dlgDoctor）、日志浮层的输出框（#dlgLogs 的 .console-box）、
+   更新日志（#changelogModal）。浮层骨架见 dialogs.css，日志行本身见 logs.css，折线图见 charts.css。
+   归属：render/diagnostics.js、render/timeline-swim.js、render/endpoint-panel.js。 */
+
+/* ---- 输出框：日志 / 端点报文 / Doctor 共用的固定高度滚动窗 ---- */
+.console-box {
+  background: var(--panel-solid-2);
+  border: 1px solid var(--hud-border);
+  border-radius: var(--radius-md);
+  padding: 12px;
+  height: 200px;
+  overflow: auto;
+  contain: content;
+}
+
+/* ---- 状态变更时间线 ---- */
+/* 弹层正文是一列：摘要与泳道固定在上面（flex: none），清单占剩下的高度自己滚动——
+   不出现里外两层滚动条；窗口很矮时清单至少留 120px，再放不下才由正文整体滚动 */
+#timelinePanel { display: flex; flex-direction: column; }
+.timeline-list {
+  flex: 1 1 auto;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  min-height: 120px;
+  overflow-y: auto;
+  font-size: var(--text-sm);
+}
+.timeline-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 2px;
+  border-bottom: 1px solid var(--hud-border);
+  white-space: nowrap;
+}
+.timeline-item:last-child {
+  border-bottom: none;
+}
+.timeline-dot {
+  flex: 0 0 auto;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  /* 取 state-<level> 的 --tone（styles.css「状态语气」）；unknown 等未映射级别用中性灰 */
+  background: var(--tone, var(--muted-strong));
+}
+.timeline-layer {
+  flex: 0 0 auto;
+  color: var(--muted-strong);
+}
+.timeline-key {
+  flex: 0 0 auto;
+  font-weight: 600;
+}
+.timeline-transition {
+  flex: 0 0 auto;
+  color: var(--text-softer);
+}
+.timeline-time {
+  flex: 0 0 auto;
+  color: var(--muted);
+  margin-left: auto;
+  font-variant-numeric: tabular-nums;
+}
+.timeline-reason {
+  flex: 1 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--muted);
+}
+.timeline-empty {
+  padding: 10px 4px;
+  color: var(--gray);
+  text-align: center;
+}
+
+/* ---- 清单按段归组（render/timeline-episodes.js）：左侧一条竖轴，每段一个节点 + 一张可展开的卡 ---- */
+.tl-ep-bar {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: var(--space-2);
+  color: var(--muted);
+  font-size: var(--text-xs);
+}
+.tl-ep-bar-text { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tl-ep-btn {
+  flex: none;
+  padding: 3px 10px;
+  border: 1px solid var(--hud-border);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-softer);
+  font: inherit;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background-color 0.15s ease, color 0.15s ease;
+}
+.tl-ep-btn:hover { border-color: var(--hud-border-strong); color: var(--text-soft); }
+.tl-ep-btn[aria-pressed="true"] {
+  border-color: color-mix(in srgb, var(--yellow) 55%, transparent);
+  background: color-mix(in srgb, var(--yellow) 12%, transparent);
+  color: var(--text-soft);
+}
+
+/* 段落时间轴：一条细轨，每段一个可点的标记（宽度 = 历时，最短也是一个点） */
+.tl-ep-strip { display: flex; flex: none; align-items: center; gap: 10px; margin: 0 0 var(--space-3); padding: 0 2px; }
+.tl-strip-label { flex: none; color: var(--label-dim); font-size: var(--text-xs); font-variant-numeric: tabular-nums; }
+.tl-strip-track {
+  position: relative;
+  display: block;
+  flex: 1 1 auto;
+  height: 14px;
+  border-radius: 7px;
+  background: linear-gradient(90deg, transparent, rgba(var(--surface-rgb), 0.05) 6%, rgba(var(--surface-rgb), 0.05) 94%, transparent);
+}
+.tl-strip-track::before {
+  content: "";
+  position: absolute;
+  top: 50%;
+  right: 0;
+  left: 0;
+  height: 1px;
+  background: var(--hud-border-strong);
+}
+.tl-strip-mark {
+  --mark-tone: var(--green);
+  position: absolute;
+  top: 2px;
+  min-width: 10px;
+  height: 10px;
+  padding: 0;
+  border: 2px solid var(--panel-solid-2, var(--panel));
+  border-radius: 5px;
+  background: var(--mark-tone);
+  transform: translateX(-5px);
+  cursor: pointer;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+.tl-strip-mark[data-tone="warn"] { --mark-tone: var(--yellow); z-index: 1; }
+.tl-strip-mark[data-tone="error"] { --mark-tone: var(--red); z-index: 2; }
+.tl-strip-mark[data-tone="idle"] { --mark-tone: var(--gray); }
+.tl-strip-mark:hover,
+.tl-strip-mark:focus-visible { outline: none; transform: translateX(-5px) scale(1.25); box-shadow: 0 0 0 3px color-mix(in srgb, var(--mark-tone) 30%, transparent); }
+
+.timeline-list:has(.tl-ep) { position: relative; padding: 2px 2px 2px 22px; }
+.timeline-list:has(.tl-ep)::before {
+  content: "";
+  position: absolute;
+  top: 10px;
+  bottom: 14px;
+  left: 7px;
+  width: 2px;
+  border-radius: 1px;
+  background: linear-gradient(180deg, var(--hud-border-strong), color-mix(in srgb, var(--hud-border-strong) 25%, transparent));
+}
+.tl-ep { --ep-tone: var(--green); position: relative; margin-bottom: 8px; list-style: none; }
+.tl-ep[data-tone="warn"] { --ep-tone: var(--yellow); }
+.tl-ep[data-tone="error"] { --ep-tone: var(--red); }
+.tl-ep[data-tone="idle"] { --ep-tone: var(--gray); }
+.tl-ep-node {
+  position: absolute;
+  top: 14px;
+  left: -20px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--ep-tone);
+  box-shadow: 0 0 0 3px var(--panel-solid-2, var(--panel)), 0 0 0 5px color-mix(in srgb, var(--ep-tone) 28%, transparent);
+}
+.tl-ep[data-outcome="bad"] .tl-ep-node { animation: tl-ep-pulse 1.8s ease-in-out infinite; }
+@keyframes tl-ep-pulse {
+  50% { box-shadow: 0 0 0 3px var(--panel-solid-2, var(--panel)), 0 0 0 8px color-mix(in srgb, var(--ep-tone) 12%, transparent); }
+}
+.tl-ep-card {
+  border: 1px solid var(--hud-border);
+  border-left: 3px solid color-mix(in srgb, var(--ep-tone) 70%, transparent);
+  border-radius: var(--radius-md);
+  background: var(--well-bg);
+  transition: border-color 0.15s ease, background-color 0.15s ease;
+}
+.tl-ep-card:hover { border-color: var(--hud-border-strong); border-left-color: var(--ep-tone); }
+.tl-ep-head {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  padding: 9px 12px;
+  cursor: pointer;
+  list-style: none;
+  user-select: none;
+}
+.tl-ep-head::-webkit-details-marker { display: none; }
+.tl-ep-head:focus-visible { outline: 2px solid var(--border-focus); outline-offset: 2px; border-radius: var(--radius-md); }
+.tl-ep-line { display: flex; align-items: baseline; gap: 10px; min-width: 0; font-size: var(--text-sm); }
+.tl-ep-when { flex: none; color: var(--text-softer); font-variant-numeric: tabular-nums; }
+.tl-ep-when b { color: var(--text); font-weight: 600; }
+.tl-ep-dash { margin: 0 4px; color: var(--muted); }
+.tl-ep-ago { flex: none; color: var(--muted); font-size: var(--text-xs); }
+.tl-ep-outcome {
+  flex: none;
+  padding: 0 7px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--ep-tone) 14%, transparent);
+  color: var(--ep-tone);
+  font-size: var(--text-xs);
+  line-height: 1.7;
+}
+.tl-ep[data-outcome="calm"] .tl-ep-outcome { background: rgba(var(--surface-rgb), 0.06); color: var(--muted-strong); }
+.tl-ep-meta { flex: 1 1 auto; min-width: 0; overflow: hidden; color: var(--muted); font-size: var(--text-xs); text-overflow: ellipsis; white-space: nowrap; }
+.tl-ep-chev {
+  flex: none;
+  align-self: center;
+  width: 7px;
+  height: 7px;
+  margin-right: 2px;
+  border-right: 1.5px solid var(--muted-strong);
+  border-bottom: 1.5px solid var(--muted-strong);
+  transform: translateY(-2px) rotate(45deg);
+  transition: transform 0.2s ease;
+}
+.tl-ep-card[open] .tl-ep-chev { transform: translateY(1px) rotate(-135deg); }
+.tl-ep-chips { display: flex; flex-wrap: wrap; gap: 5px; }
+.tl-chip {
+  --chip-tone: var(--green);
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  max-width: 100%;
+  padding: 2px 9px 2px 7px;
+  border: 1px solid var(--hud-border);
+  border-radius: 999px;
+  background: rgba(var(--surface-rgb), 0.03);
+  color: var(--text-soft);
+  font-size: var(--text-xs);
+  line-height: 1.6;
+  white-space: nowrap;
+}
+.tl-chip[data-tone="warn"] { --chip-tone: var(--yellow); border-color: color-mix(in srgb, var(--yellow) 35%, var(--hud-border)); }
+.tl-chip[data-tone="error"] { --chip-tone: var(--red); border-color: color-mix(in srgb, var(--red) 40%, var(--hud-border)); }
+.tl-chip[data-tone="idle"] { --chip-tone: var(--gray); }
+.tl-chip-dot { flex: none; width: 6px; height: 6px; border-radius: 50%; background: var(--chip-tone); }
+/* 中途坏过、最后恢复：圆点外圈描出最坏的颜色 */
+.tl-chip[data-dip="warn"] .tl-chip-dot { box-shadow: 0 0 0 2px color-mix(in srgb, var(--yellow) 55%, transparent); }
+.tl-chip[data-dip="error"] .tl-chip-dot { box-shadow: 0 0 0 2px color-mix(in srgb, var(--red) 55%, transparent); }
+.tl-chip-name { overflow: hidden; max-width: 18em; text-overflow: ellipsis; }
+.tl-chip-from { color: var(--muted); }
+.tl-chip-arrow { color: var(--muted); }
+.tl-chip-to { color: var(--chip-tone); font-weight: 550; }
+.tl-chip[data-tone="idle"] .tl-chip-to { color: var(--muted-strong); }
+.tl-chip-more { color: var(--muted); }
+.tl-ep-items {
+  margin: 0;
+  padding: 2px 12px 6px;
+  border-top: 1px dashed var(--hud-border);
+  list-style: none;
+}
+.tl-ep-card[open] .tl-ep-items { animation: tl-ep-open 0.22s ease; }
+@keyframes tl-ep-open { from { opacity: 0; transform: translateY(-3px); } }
+.tl-ep-items .timeline-item { padding: 6px 0; font-size: var(--text-xs); }
+@media (prefers-reduced-motion: reduce) {
+  .tl-ep[data-outcome="bad"] .tl-ep-node,
+  .tl-ep-card[open] .tl-ep-items { animation: none; }
+}
+
+/* ---- 泳道图：清单上方，一行一个对象（绿底 = 正常，只把不正常的段画出来；与隧道在线条同一画法）---- */
+.tl-swim {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  gap: 7px;
+  margin-bottom: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--hud-border);
+  border-radius: var(--radius-md);
+  background: var(--well-bg);
+  font-size: var(--text-sm);
+}
+.tl-head { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4px var(--space-3); color: var(--label-dim); font-size: var(--text-xs); }
+.tl-legend { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+.tl-key { display: inline-block; width: 10px; height: 6px; margin-left: 4px; border-radius: 2px; background: color-mix(in srgb, var(--green) 55%, transparent); }
+.tl-key[data-tone="warn"] { background: var(--yellow); }
+.tl-key[data-tone="error"] { background: var(--red); }
+.tl-key[data-tone="none"] { background: repeating-linear-gradient(135deg, var(--hud-border-strong) 0 2px, var(--well-bg) 2px 4px); }
+/* 所有行共用一套列：名字列、统计列按最长的那个定宽（不截断），条占中间 */
+.tl-rows { display: grid; grid-template-columns: minmax(0, max-content) minmax(120px, 1fr) max-content; align-items: center; gap: 7px var(--space-3); }
+.tl-name { overflow: hidden; max-width: 16em; color: var(--text-soft); text-overflow: ellipsis; white-space: nowrap; }
+.tl-bar { position: relative; height: 10px; border-radius: 3px; background: color-mix(in srgb, var(--green) 38%, transparent); }
+.tl-seg { position: absolute; top: 0; bottom: 0; border-radius: 1px; }
+.tl-seg[data-tone="warn"] { z-index: 1; background: var(--yellow); }
+.tl-seg[data-tone="error"] { z-index: 2; background: var(--red); }
+.tl-seg[data-tone="idle"],
+.tl-seg[data-tone="none"] { background: repeating-linear-gradient(135deg, var(--hud-border-strong) 0 3px, var(--well-bg) 3px 6px); }
+.tl-seg:hover { outline: 2px solid color-mix(in srgb, var(--text) 35%, transparent); outline-offset: 1px; }
+.tl-stat { color: var(--muted); font-size: var(--text-xs); font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; }
+.tl-stat[data-tone="warn"] { color: var(--text-soft); }
+/* 时刻刻度与条同一列，按位置绝对定位；0 点加粗 */
+.tl-axis { position: relative; height: 14px; margin-top: -2px; color: var(--label-dim); font-size: var(--text-xs); font-variant-numeric: tabular-nums; }
+.tl-tick { position: absolute; top: 0; transform: translateX(-50%); white-space: nowrap; }
+.tl-tick.is-strong { color: var(--text-softer); font-weight: 600; }
+.tl-now { align-self: start; margin-top: -2px; color: var(--label-dim); font-size: var(--text-xs); line-height: 14px; }
+.tl-note,
+.tl-empty { margin: 0; color: var(--muted); font-size: var(--text-xs); }
+
+/* v2.16 历史复盘：日期下拉（覆写 .styled-select 的字号与底色）+ 当日统计摘要 */
+.timeline-date-select {
+  font-size: var(--text-xs);
+  max-width: 132px;
+  background: var(--panel);
+}
+.timeline-summary {
+  flex: none;
+  margin-bottom: var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  font-size: var(--text-sm);
+  color: var(--text);
+  background: var(--well-bg);
+  border: 1px solid var(--hud-border);
+  border-radius: var(--radius-md);
+}
+
+/* ---- 端点检测：指标一行 + 全宽延迟图（charts.css 的通用折线图）+ 结论条 ---- */
+/* 页头：标题 · 弹层内切 Agent 的分段控件 · 状态徽标 · 关闭 */
+.ep-agents { flex: none; }
+.ep-trend { display: flex; flex-direction: column; gap: var(--space-2); margin-bottom: var(--space-3); }
+.ep-stats { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: var(--space-2); }
+.ep-stat { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.ep-stat-label,
+.ep-stat-hint { color: var(--label-dim); font-size: var(--text-xs); }
+/* 没有说明的那格也占一行，五格的大字才对得齐 */
+.ep-stat-hint { min-height: 1.5em; }
+.ep-stat-value { color: var(--text-strong); font-size: var(--text-lg); font-variant-numeric: tabular-nums; font-weight: 600; white-space: nowrap; }
+.ep-stat[data-tone="warn"] .ep-stat-value { color: var(--yellow); }
+.ep-stat[data-tone="critical"] .ep-stat-value { color: var(--red); }
+.ep-caption { color: var(--label-dim); font-size: var(--text-xs); }
+.ep-empty { padding: var(--space-5) 0; color: var(--muted); font-size: var(--text-sm); text-align: center; }
+/* 失败标记带（绿底 = 检测正常，红色刻度 = 那次检测失败）与超出量程的三角标 */
+.ep-rail { fill: color-mix(in srgb, var(--green) 38%, transparent); }
+.ep-fail { fill: var(--red); }
+.ep-clip { fill: var(--muted-strong); }
+@media (max-width: 900px) {
+  /* 窄窗：页头放不下徽标（结论条里有同样的结论），指标排成三列 */
+  #dlgEndpoint .dialog-header .badge { display: none; }
+  .ep-stats { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+
+/* 结论条 */
+.endpoint-brief {
+  font-size: var(--text-sm);
+  font-weight: 500;
+  padding: 8px 12px;
+  border-radius: var(--radius-md);
+  margin-bottom: 10px;
+  border: 1px solid transparent;
+  border-left-width: 3px;
+}
+.endpoint-brief.state-ok {
+  background: color-mix(in srgb, var(--green) 8%, transparent);
+  border-color: color-mix(in srgb, var(--green) 18%, transparent);
+  color: var(--green);
+}
+.endpoint-brief.state-bad {
+  background: color-mix(in srgb, var(--red) 8%, transparent);
+  border-color: color-mix(in srgb, var(--red) 18%, transparent);
+  color: var(--red);
+}
+
+/* ---- Doctor 输出染色（输出框更高一些：须在 .console-box 之后覆写高度） ---- */
+.doc-box {
+  height: 220px;
+}
+.doc-line {
+  display: block;
+  padding: 1px 4px;
+  border-left: 3px solid transparent;
+}
+.doc-line.fail {
+  color: var(--red-soft);
+  background: color-mix(in srgb, var(--red) 10%, transparent);
+  border-left-color: var(--red);
+}
+.doc-line.warn {
+  color: var(--yellow);
+  background: color-mix(in srgb, var(--yellow) 6%, transparent);
+  border-left-color: var(--yellow);
+}
+.doc-line.ok {
+  color: var(--green);
+}
+
+/* ---- 更新日志（版本徽章在 shell.css） ---- */
+.changelog-timeline {
+  position: relative;
+  border-left: 1px solid var(--hud-border-strong);
+  margin-left: 8px;
+  padding-left: 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+  padding-top: 4px;
+  padding-bottom: 8px;
+}
+
+.changelog-version-block {
+  position: relative;
+}
+
+.changelog-version-block::before {
+  content: "";
+  position: absolute;
+  left: -27px;
+  top: 7px;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--panel);
+  border: 2px solid var(--hud-border-strong);
+}
+
+.changelog-version-block:first-child::before {
+  border-color: var(--cyan);
+}
+
+.changelog-version-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.changelog-version-title {
+  font-size: var(--text-lg);
+  font-weight: 600;
+  color: var(--text-strong);
+  font-variant-numeric: tabular-nums;
+}
+
+.changelog-version-date {
+  font-size: var(--text-xs);
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.changelog-changes-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-left: 2px;
+}
+
+.changelog-change-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  font-size: var(--text-base);
+  line-height: 1.6;
+}
+
+.changelog-tag {
+  font-size: var(--text-xs);
+  font-weight: 500;
+  padding: 0 6px;
+  border-radius: var(--radius-sm);
+  flex-shrink: 0;
+  margin-top: 2px;
+  /* 着色胶囊：变体只设 --c */
+  color: var(--c);
+  background: color-mix(in srgb, var(--c) 13%, transparent);
+}
+
+.changelog-tag.tag-feat { --c: var(--cyan); }
+.changelog-tag.tag-perf { --c: var(--green); }
+.changelog-tag.tag-fix { --c: var(--yellow); }
+
+.changelog-change-text {
+  color: var(--text-soft);
+}
+
+/* 版本详情里要人照着敲的命令：整条不折行（窄窗下不会从 -- 中间断开），点一下就全选 */
+.version-details .changelog-change-text code {
+  font-family: var(--font-mono);
+  font-size: 0.95em;
+  white-space: nowrap;
+  user-select: all;
+}

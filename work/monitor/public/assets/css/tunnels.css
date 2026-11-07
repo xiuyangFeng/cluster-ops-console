@@ -1,0 +1,139 @@
+/* tunnels.css —— 「隧道稳定性」的共用件：断线清单表格、SSH 响应线、近 7 天日色块。
+   模块本身在概览链路面板底部（#chainUptime，布局见 brief.css 的 .cu-*）；v2.46 起服务器页不再有单独的面板。
+   归属：app/tunnel-stability-controller.js（接线）/ render/tunnel-stability-view.js（HTML）/
+   render/tunnel-stability-model.js（模型）。SSH 响应线的十字线 / 气泡复用 tiles.css 的 .trend-crosshair / .trend-value-bubble。
+   约束：只用 styles.css 的令牌（深浅两套自动跟随）；颜色只表达状态且都配文字，语气一律读 data-tone。 */
+
+/* ---- 断线清单 ---- */
+
+.ts-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--text-sm);
+}
+
+.ts-table th {
+  padding: 4px var(--space-2);
+  border-bottom: 1px solid var(--hud-border);
+  color: var(--label-dim);
+  font-weight: 500;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.ts-table td {
+  padding: 5px var(--space-2);
+  border-bottom: 1px solid var(--hud-border);
+  color: var(--text-soft);
+  white-space: nowrap;
+}
+
+.ts-table tr:last-child td { border-bottom: 0; }
+.ts-table tr[data-ongoing="true"] td { color: var(--red-soft); }
+.ts-num { font-variant-numeric: tabular-nums; }
+
+.ts-tag {
+  margin-left: 6px;
+  padding: 0 5px;
+  border: 1px solid var(--hud-border-strong);
+  border-radius: 4px;
+  color: var(--muted);
+  font-size: var(--text-xs);
+}
+
+.ts-empty {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
+
+/* 点在线条上的断线刻度定位到的那一行：短暂高亮（4 秒后由控制器移除） */
+.ts-table tr.is-focus td { background: color-mix(in srgb, var(--cyan) 14%, transparent); }
+@media (prefers-reduced-motion: no-preference) {
+  .ts-table tr td { transition: background-color 0.4s ease; }
+}
+
+/* 组行（连续同一服务器同一原因）：可点击 / 聚焦展开；次数徽标；逐条行缩进 */
+.ts-table tr.ts-group { cursor: pointer; }
+.ts-table tr.ts-group:focus-visible { outline: 2px solid var(--cyan); outline-offset: -2px; }
+.ts-group-caret {
+  display: inline-block;
+  width: 14px;
+  margin-right: 4px;
+  color: var(--muted-strong);
+}
+.ts-group-count {
+  margin-left: 6px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--cyan) 16%, transparent);
+  color: var(--cyan);
+  font-size: var(--text-xs);
+  font-weight: 600;
+}
+.ts-table tr.ts-group-child td:first-child { padding-left: 26px; }
+.ts-table tr.ts-group-child td { color: var(--text-softer); }
+
+/* ---- SSH 响应：在线条下面的一条细线，与它共用时间轴（慢的时段和断线能对上看） ----
+   数据是每分钟一次资源采集的耗时，5 分钟一段取最慢的一次。容器同时带 .trend-chart-container——十字线 / 气泡沿用
+   tiles.css 里资源趋势的那一套；SVG 横向拉伸到条的宽度，线宽不跟着变形。只表达数值，不表达状态：恒用强调色。 */
+
+.ts-resp svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.ts-resp-line {
+  fill: none;
+  stroke: var(--cyan);
+  stroke-width: 1.25;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+  vector-effect: non-scaling-stroke;
+}
+
+.ts-resp-area {
+  fill: var(--cyan);
+  opacity: 0.1;
+}
+
+.ts-resp-base {
+  stroke: var(--hud-border-strong);
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
+
+/* ---- 近 7 天：7 块日色块（绿 = 全天无断线 / 黄 / 红按当天可用率，斜纹 = 没有记录），下面是日期 ---- */
+
+.ts-strip-daily {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 4px;
+}
+
+.ts-day {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  align-items: center;
+  min-width: 0;
+}
+
+.ts-day i {
+  width: 100%;
+  height: 8px;
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--green) 45%, transparent);
+}
+
+.ts-day[data-tone="warn"] i { background: var(--yellow); }
+.ts-day[data-tone="critical"] i { background: var(--red); }
+.ts-day[data-tone="none"] i { background: repeating-linear-gradient(135deg, var(--hud-border-strong) 0 3px, var(--well-bg) 3px 6px); }
+
+.ts-day b {
+  color: var(--label-dim);
+  font-size: var(--text-xs);
+  font-weight: 400;
+  font-variant-numeric: tabular-nums;
+}

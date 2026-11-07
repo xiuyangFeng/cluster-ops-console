@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src http://127.0.0.1:8877; object-src 'none'; base-uri 'none'">
+  <title>集群状态面板</title>
+  <link rel="stylesheet" href="island.css">
+</head>
+<body>
+  <div id="island" class="island-container">
+    
+    <!-- 头部：状态与展开主面板按钮 -->
+    <div class="island-header">
+      <div class="status-group">
+        <span class="status-dot" id="expandedDot"></span>
+        <span class="status-label" id="expandedText">正在获取状态...</span>
+      </div>
+      <div class="header-actions">
+        <button type="button" class="pin-btn" id="pinBtn" title="钉在桌面：常驻、可拖动" aria-label="钉在桌面" aria-pressed="false">
+          <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <line x1="12" y1="17" x2="12" y2="22"></line>
+            <path d="M5 17h14v-1.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V6h1a2 2 0 0 0 0-4H8a2 2 0 0 0 0 4h1v4.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24Z"></path>
+          </svg>
+        </button>
+        <button type="button" class="open-console-btn" id="openConsoleBtn" title="打开主控制面板" aria-label="打开主控制面板">
+          <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <polyline points="15 3 21 3 21 9"></polyline>
+            <line x1="10" y1="14" x2="21" y2="3"></line>
+            <polyline points="9 21 3 21 3 15"></polyline>
+            <line x1="14" y1="10" x2="3" y2="21"></line>
+          </svg>
+        </button>
+        <button type="button" class="quit-app-btn" id="quitAppBtn" title="退出并停止后台" aria-label="退出并停止后台">
+          <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M18.36 6.64a9 9 0 1 1-12.73 0"></path>
+            <line x1="12" y1="2" x2="12" y2="12"></line>
+          </svg>
+        </button>
+      </div>
+    </div>
+
+    <!-- 节点监控状态（与主面板「请求之路」同序：集群 → 隧道 → 代理 → 出网） -->
+    <div class="nodes-grid">
+      <div class="node-item" id="node-remote">
+        <span class="node-dot"></span>
+        <span class="node-name">远端监听</span>
+      </div>
+      <div class="node-item" id="node-tunnel">
+        <span class="node-dot"></span>
+        <span class="node-name">SSH 隧道</span>
+      </div>
+      <div class="node-item" id="node-proxy">
+        <span class="node-dot"></span>
+        <span class="node-name">本地代理</span>
+      </div>
+      <div class="node-item" id="node-egress">
+        <span class="node-dot"></span>
+        <span class="node-name">本机出网</span>
+      </div>
+    </div>
+
+    <!-- 多台服务器时：每台一个隧道状态点（只有一台时不显示） -->
+    <div class="servers-strip" id="serversStrip" hidden></div>
+
+    <!-- 资源占用进度条（查看中的服务器） -->
+    <div class="resources-section">
+      <div class="section-head">
+        <span class="section-title" id="serverName">服务器</span>
+      </div>
+      <div class="res-item">
+        <div class="res-label">CPU</div>
+        <div class="res-bar-container">
+          <div class="res-bar" id="cpuBar"></div>
+        </div>
+        <div class="res-val" id="cpuVal">-</div>
+      </div>
+      <div class="res-item">
+        <div class="res-label">内存</div>
+        <div class="res-bar-container">
+          <div class="res-bar" id="ramBar"></div>
+        </div>
+        <div class="res-val" id="ramVal">-</div>
+      </div>
+    </div>
+
+    <!-- 集群（Slurm）：读数与主控制台集群面板同一口径（render/glance-model.js） -->
+    <section class="cluster-section" id="clusterSection" hidden>
+      <div class="section-head">
+        <span class="section-title">计算节点</span>
+        <span class="section-meta" id="clusterMeta"></span>
+      </div>
+      <div class="res-item" title="Slurm 节点已分配的 CPU 核占比">
+        <div class="res-label">核分配</div>
+        <div class="res-bar-container">
+          <div class="res-bar" id="coreBar"></div>
+        </div>
+        <div class="res-val" id="coreVal">-</div>
+      </div>
+      <div class="res-item" id="gpuRow" hidden>
+        <div class="res-label">GPU</div>
+        <div class="slot-groups" id="gpuSlots"></div>
+        <div class="res-val" id="gpuVal">-</div>
+      </div>
+      <div class="res-item">
+        <div class="res-label">节点</div>
+        <div class="node-cells" id="nodeCells"></div>
+        <div class="res-val" id="nodeVal">-</div>
+      </div>
+      <div class="cluster-jobs" id="clusterJobs"></div>
+    </section>
+
+    <!-- 底部快捷操作栏（钉在桌面时收起，见 island.css） -->
+    <div class="actions-footer">
+      <button type="button" class="action-btn" id="startBtn">启动</button>
+      <button type="button" class="action-btn" id="restartBtn">一键修复</button>
+      <button type="button" class="action-btn danger" id="stopBtn">停止</button>
+    </div>
+
+  </div>
+
+  <script type="module" src="island.js"></script>
+</body>
+</html>

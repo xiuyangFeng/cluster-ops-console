@@ -1,0 +1,48 @@
+{
+  "_comment": "个人配置层示例（字段截至 v2.61）。本文件用来说明字段，不是模板：团队集群的接入请运行 `npm run setup`，不要复制本文件后手改端口——其中的端口号只是示意，照抄可能与同事已登记的端口冲突。确需手写时复制成 config.local.json 再改；config.local.json 已被 .gitignore 排除，不会入库。打包运行时的个人层在 ~/Library/Application Support/codex-tunnel-monitor/config.local.json，开发模式在仓库根目录。向导会生成同样的内容，并把团队服务器的专属端口写进 portOverrides（如 { \"server-01\": { \"remotePort\": 7893, \"localPort\": 8893 } }，本地端口 = 远端端口 + 1000；远端端口须是向导在集群登记目录里原子领取的）。当前团队 config.json 已启用 portRegistry.required=true：登记目录不可用时会停止分配，不会使用只能看到在线监听的旧回退方式。",
+  "_comment_fields": "个人层白名单字段：activeServerId / activeAgentId / sshUser / sshIdentityFile / portOverrides / servers / autoRepair / storageBudgetBytes / egress / storageAdmin，另有两个合并方式不同的字段 proxyAllowedTargets（与团队层取并集）和 noProxyExtra（登录引导写入）。写在这些之外的键会被忽略。",
+  "activeAgentId": "codex",
+  "_comment_storageAdmin": "storageAdmin 只给团队管理员（adminUsers）：{ identityFile?, targets: [{ id, label, host, port, roots }] }。服务器页「存储管理」以 root 经专用受限密钥只读查看这些机器的磁盘与按用户占用；roots 是允许扫描的目录。普通同事不用写。",
+  "activeServerId": "server-01",
+  "_comment_servers": "servers 按 id 与团队层 config.json 合并：id 不同 = 新增自己的机器（id/host/remotePort 必填）；id 相同 = 覆盖团队条目，且只允许覆盖 disabled / remotePort / localPort / tunnel —— 覆盖 host / sshHostName / sshPort 的字段会被丢弃并告警（团队服务器指向哪台机器由团队层决定）。",
+  "_comment_disable_team_server": "servers 里最后一条是屏蔽团队服务器的示例：不在这个集群的同事写 { id: server-01, disabled: true }，server-01 从此不显示、不建隧道、不注册探针，控制台不会恒红刷噪音。想恢复就删掉这条（或重跑 npm run setup 正常填用户名）。在这个集群的同事必须删掉它。",
+  "servers": [
+    {
+      "_comment": "个人服务器示例一：建隧道（tunnel 默认 true，可省略）。sshUser 写这台机器自己的登录名（不写会回落到团队集群账号并告警）。",
+      "id": "server-tengxun",
+      "name": "腾讯云服务器 (tengxunserver)",
+      "host": "tengxunserver",
+      "sshUser": "ubuntu",
+      "remotePort": 7893,
+      "localPort": 8893,
+      "tunnel": true,
+      "description": "腾讯云 AI 处理及外部边缘计算节点"
+    },
+    {
+      "_comment": "个人服务器示例二：tunnel:false = 只监控不建隧道。这台机器照样出现在控制台（负载、GPU、Agent 状态都能看），但不会为它常驻一条 ssh -R，也不占用任何反向端口、不写团队心跳。",
+      "id": "server-aliyun",
+      "name": "阿里云服务器 (vpn-aliyun)",
+      "host": "vpn-aliyun",
+      "sshUser": "root",
+      "remotePort": 7894,
+      "localPort": 8894,
+      "tunnel": false,
+      "description": "阿里云 VPN 专线网络及代理转发节点"
+    },
+    {
+      "id": "server-01",
+      "disabled": true
+    }
+  ],
+  "_comment_autoRepair": "L2 自动修复。enabled:false 完全回到 v2.17 的手动模式；observeOnly:true 只在日志里记录「本该执行什么」而不真的执行，适合先观察一两天再放开。个人层写了 autoRepair 会整段替换团队层的同名字段。",
+  "_comment_autoRepair_probeBackoff": "探针退避（v2.61 引入，v2.64 起默认开）：服务器 SSH 连不上超过 30 秒时探测改为 10 → 120 秒退避、只放一条探路的，连上即恢复。要关掉：\"autoRepair\": { \"enabled\": true, \"observeOnly\": false, \"rules\": { \"probe-backoff\": false } }。保存后自动生效，不用重启。",
+  "autoRepair": { "enabled": true, "observeOnly": false },
+  "_comment_egress": "本机代理的出网方式（v2.54），建议在「配置 → 出网」里改并点「测试本机出网」。mode: direct = 直接拨号（默认；本机能直连外网或代理软件开了 TUN 时用）；system = 跟随系统设置里的 HTTP 代理（代理软件只开「系统代理」时用）；manual = 经手填的上游，另写 url，只支持 http://主机:端口（不支持 https、socks、PAC、路径或账号密码）。",
+  "egress": { "mode": "direct" },
+  "_comment_proxyAllowedTargets": "本机代理默认只放行 443 端口。中转站用了别的端口时在这里追加 \"主机名:端口\"（端口必须写出、不能是 443、不能是内网地址，最多 32 条）；登录引导测通中转站时会自动加。",
+  "proxyAllowedTargets": [],
+  "_comment_noProxyExtra": "{ 服务器 id: [主机, …] }：集群上不走隧道、直接连的内网中转站，写进集群 env.sh 的 NO_PROXY。由登录引导写入，一般不手改。",
+  "noProxyExtra": {},
+  "_comment_storageBudgetBytes": "本地 runtime 目录（日志/历史/指标）的总量预算，缺省 50MB（52428800）。超限时按「多余日志分卷 → 最旧 history → 最后一份分卷」淘汰，活动日志与 metrics.json 永不删除。",
+  "storageBudgetBytes": 52428800
+}

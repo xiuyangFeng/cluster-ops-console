@@ -1,0 +1,15 @@
+# 文本一律以 LF 检出：Windows 上 Git 默认 core.autocrlf=true 会转成 CRLF，读源码做正则断言的
+# 测试与 bash 脚本（*.sh / *.command / remote/collect.sh）都依赖 LF。
+* text=auto eol=lf
+
+# Windows 批处理例外：cmd.exe 解析纯 LF 的 .cmd/.bat 有已知问题（标签、跨 512 字节的行）。
+*.cmd text eol=crlf
+*.bat text eol=crlf
+
+# 二进制：不做换行转换，也不做文本 diff。
+*.png binary
+*.icns binary
+*.ico binary
+*.gz binary
+*.tgz binary
+*.zip binary

@@ -1,0 +1,1289 @@
+/* cluster.css —— 服务器视图：「集群节点与队列」面板（Slurm 的 KPI 行、节点卡、作业队列表、按用户占用）。
+   归属：render/cluster-panel.js（接线）/ cluster-view.js（HTML）/ cluster-model.js（模型）；
+   「我的历史」另有 cluster-history-model.js（模型）与 cluster-history-loader.js（拉取与轮询）。
+   复用 tiles.css 的 .res-fresh 新鲜度胶囊与 .res-meter 细条；本文件只加面板自己的结构。
+   约束：只用 styles.css 的令牌（深浅两套自动跟随）；颜色只表达状态——分配 / 在用恒用强调色
+   --cyan（在干活不是告警），负载与其他用户用中性灰，warn/critical 才用黄 / 红，且都配文字标签；
+   不发光、不渐变、不做悬停位移。级别 / 语气一律读 data-* 属性。 */
+
+/* ---- 1. 面板骨架 ---- */
+
+/* 折行与标题不断行同资源面板（tiles.css 分组规则），这里只收紧折行后的行距 */
+.panel-cluster .panel-header { row-gap: var(--space-1); }
+
+.cl-refresh {
+  padding: 4px 10px;
+  font-size: var(--text-sm);
+  white-space: nowrap;
+}
+
+.cl-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  padding: var(--space-4);
+  container-type: inline-size;
+}
+
+.cl-error {
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--red) 8%, transparent);
+  box-shadow: inset 3px 0 0 var(--red);
+  color: var(--red-soft);
+  font-size: var(--text-sm);
+}
+/* 从没拿到过数据：#clusterError 换成整块空状态（empty-state.js），去掉红条外观；节点 / 队列的空架子不显示 */
+.cl-error[data-empty="true"] { padding: 0; background: none; box-shadow: none; color: inherit; }
+.cl-body[data-no-data="true"] > :not(.cl-error) { display: none; }
+
+/* ---- 2. KPI 行（stat tile：标签 / 数值 / 说明 + 图形：环形仪表 / 状态点阵 / 占比条 / GPU 卡位） ---- */
+
+/* 汇总带：一张分栏卡（栏间 1px 发丝线 = 容器底色透过 1px 间隙），任意折行都对齐；
+   每栏 标签 / 大字 / 说明（至多两行）+ 底部图形。比各自独立的卡片更紧凑、更像一块仪表。
+   用 flex 折行而不是 auto-fit 网格：末行不满时各栏拉伸铺满（5 栏排 3 列不再露出一块容器底色）。 */
+.cl-kpis {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1px;
+  overflow: hidden;
+  background: var(--hud-border);
+  border: 1px solid var(--hud-border);
+  border-radius: var(--radius-hud);
+}
+
+.cl-kpi {
+  flex: 1 1 176px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  padding: 13px 16px 14px;
+  background:
+    linear-gradient(180deg, rgba(var(--surface-rgb), 0.025), transparent 60%),
+    var(--card-bg);
+}
+
+.cl-kpi-main {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.cl-kpi-label {
+  font-size: var(--text-xs);
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.cl-kpi-figure {
+  display: flex;
+  align-items: baseline;
+  gap: 5px;
+  min-width: 0;
+  margin-top: 2px;
+}
+
+/* 大数值用比例数字（tabular 会让 "121" 显得松散），只有表格列才用等宽数字 */
+.cl-kpi-value {
+  font-family: var(--font-display);
+  font-size: 26px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  line-height: 1.15;
+  letter-spacing: -0.02em;
+  color: var(--text-strong);
+}
+
+.cl-kpi-unit {
+  font-size: var(--text-sm);
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+/* 说明一行放不下就省略（完整内容在整栏的悬停提示里） */
+.cl-kpi-sub {
+  font-size: var(--text-xs);
+  color: var(--muted-strong);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.cl-kpi-sub2 { color: var(--muted); }
+
+.cl-kpi[data-level="warn"] .cl-kpi-value { color: var(--yellow); }
+.cl-kpi[data-level="critical"] .cl-kpi-value { color: var(--red); }
+/* 自己有作业时轻轻点出这一栏：顶边一道强调色细线 */
+.cl-kpi[data-emphasis="true"] { box-shadow: inset 0 2px 0 color-mix(in srgb, var(--cyan) 70%, transparent); }
+
+/* 图形一律铺在底部整行 */
+.cl-kpi-visual { min-width: 0; margin-top: auto; padding-top: 10px; }
+
+/* 节点状态点阵：一台一格，顺序同节点卡 */
+.cl-dots {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.cl-dotcell {
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+  background: rgba(var(--surface-rgb), 0.07);
+  box-shadow: inset 0 0 0 1px rgba(var(--surface-rgb), 0.16);
+}
+.cl-dotcell[data-tone="busy"] { background: var(--cyan); box-shadow: none; }
+.cl-dotcell[data-tone="warn"] { background: var(--yellow); box-shadow: none; }
+.cl-dotcell[data-tone="critical"] { background: var(--red); box-shadow: none; }
+
+/* 运行 / 排队占比条（段间 2px 间隙） */
+.cl-splitbar {
+  display: flex;
+  gap: 2px;
+  height: 6px;
+  border-radius: 3px;
+  overflow: hidden;
+  background: rgba(var(--surface-rgb), 0.08);
+}
+.cl-split-seg { flex: 0 1 0; min-width: 4px; }
+.cl-split-seg[data-tone="busy"] { background: var(--cyan); }
+.cl-split-seg[data-tone="pending"] { background: rgba(var(--surface-rgb), 0.34); }
+
+/* GPU 卡位条：按节点分组，组间留白 */
+.cl-slot-groups {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+}
+.cl-slot-group { display: inline-flex; gap: 3px; }
+
+/* 集群面板正文较窄（窗口 1028 + 细栏时约 870px）：五栏收紧内边距、大字与点阵，排进一行，
+   不让最后一栏（GPU）单独掉到第二行。正文再窄于约 700px 才照常折行。 */
+@container (max-width: 1000px) {
+  .cl-kpi { flex-basis: 140px; padding: 12px 12px 13px; }
+  .cl-kpi-value { font-size: 22px; }
+  .cl-dots { gap: 3px; }
+  .cl-dotcell { width: 10px; height: 10px; border-radius: 2.5px; }
+  .cl-slot-groups { gap: 4px 8px; }
+}
+
+/* ---- 3. 分区块（节点 / 队列 / 用户）公共头 ---- */
+
+.cl-section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--hud-border);
+}
+
+.cl-section-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-1) var(--space-2);
+  min-width: 0;
+}
+
+.cl-section-head h3 {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--text-strong);
+}
+
+.cl-section-count,
+.cl-section-hint {
+  font-size: var(--text-xs);
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.cl-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1) var(--space-4);
+  margin-left: auto;
+  font-size: var(--text-xs);
+  color: var(--muted);
+}
+
+.cl-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.cl-legend-item::before {
+  content: "";
+  width: 12px;
+  height: 4px;
+  border-radius: 2px;
+  background: rgba(var(--surface-rgb), 0.38);
+}
+.cl-legend-item[data-kind="alloc"]::before { background: var(--cyan); }
+
+/* ---- 4. 状态点（节点状态与作业状态共用） ---- */
+
+.cl-state {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: var(--text-xs);
+  color: var(--text-soft);
+  white-space: nowrap;
+}
+
+.cl-dot {
+  flex: none;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--gray);
+}
+
+.cl-state[data-tone="busy"] .cl-dot { background: var(--cyan); }
+.cl-state[data-tone="warn"] { color: var(--yellow); }
+.cl-state[data-tone="warn"] .cl-dot { background: var(--yellow); }
+.cl-state[data-tone="critical"] { color: var(--red); }
+.cl-state[data-tone="critical"] .cl-dot { background: var(--red); }
+/* 排队不是告警：空心点表示「还没开始」 */
+.cl-state[data-tone="pending"] .cl-dot {
+  background: transparent;
+  box-shadow: inset 0 0 0 1.5px var(--muted);
+}
+
+/* ---- 5. 环形仪表（KPI 与节点卡共用）：外环 = 分配 / 利用率（强调色），内环 = 负载（中性灰） ---- */
+
+.cl-ring {
+  position: relative;
+  flex: none;
+  display: inline-block;
+  width: 60px;
+  height: 60px;
+}
+.cl-ring[data-size="kpi"] { width: 52px; height: 52px; }
+
+.cl-ring svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.cl-ring-outer-track,
+.cl-ring-inner-track {
+  fill: none;
+  stroke: rgba(var(--surface-rgb), 0.08);
+}
+.cl-ring-outer-track { stroke-width: 6; }
+.cl-ring-inner-track { stroke-width: 3.5; }
+.cl-ring[data-size="kpi"] .cl-ring-outer-track { stroke-width: 7; }
+
+.cl-ring-outer,
+.cl-ring-inner {
+  fill: none;
+  stroke-linecap: round;
+  transition: stroke-dasharray 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.cl-ring-outer { stroke: var(--cyan); stroke-width: 6; }
+.cl-ring[data-size="kpi"] .cl-ring-outer { stroke-width: 7; }
+.cl-ring-inner { stroke: rgba(var(--surface-rgb), 0.42); stroke-width: 3.5; }
+
+.cl-ring-center {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  line-height: 1.1;
+}
+
+.cl-ring-value {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--text-strong);
+}
+.cl-ring[data-size="kpi"] .cl-ring-value { font-size: var(--text-sm); }
+
+.cl-ring-caption {
+  font-size: 9.5px;
+  color: var(--muted);
+}
+
+/* ---- 5b. 节点卡 ---- */
+
+.cl-nodes {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(252px, 100%), 1fr));
+  gap: var(--space-3);
+}
+
+/* 节点卡网格：首行 名称 / 直连徽标 / 分区·作业（省略） / 状态胶囊，其下各段通栏。
+   .cl-node-head 是 display: contents，名称与状态直接参与这个网格——分区说明并进首行，卡片少一行。 */
+.cl-node {
+  appearance: none;
+  display: grid;
+  grid-template-columns: auto auto minmax(0, 1fr) auto;
+  align-items: center;
+  align-content: start; /* 同一行卡片被拉到等高时内容贴顶，首行名称对齐 */
+  column-gap: var(--space-2);
+  row-gap: 8px;
+  min-width: 0;
+  padding: 11px 13px 12px;
+  background:
+    linear-gradient(180deg, rgba(var(--surface-rgb), 0.025), transparent 55%),
+    var(--card-bg);
+  border: 1px solid var(--hud-border);
+  border-radius: var(--radius-hud);
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background-color 0.15s ease;
+}
+
+.cl-node:hover { border-color: var(--hud-border-strong); }
+
+.cl-node[aria-pressed="true"] {
+  background: var(--card-bg-selected);
+  border-color: color-mix(in srgb, var(--cyan) 60%, var(--hud-border));
+}
+
+/* 人为下线 / 故障 / 直连中断：左侧状态色条（与注意力队列、告警同一语言），文字标签在状态点里 */
+.cl-node[data-level="warn"] { box-shadow: inset 3px 0 0 var(--yellow); }
+.cl-node[data-level="critical"] { box-shadow: inset 3px 0 0 var(--red); }
+
+.cl-node-head { display: contents; }
+.cl-node-name { grid-column: 1; grid-row: 1; }
+.cl-node-badge { grid-column: 2; grid-row: 1; }
+.cl-node-head .cl-state { grid-column: 4; grid-row: 1; }
+.cl-node-meta { grid-column: 3; grid-row: 1; }
+.cl-node-main,
+.cl-node-offline,
+.cl-node-gpu,
+.cl-node-note { grid-column: 1 / -1; }
+
+.cl-node-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-mono);
+  font-size: var(--text-base);
+  font-weight: 600;
+  color: var(--text-strong);
+}
+
+.cl-node-badge {
+  flex: none;
+  padding: 0 5px;
+  border-radius: 3px;
+  background: rgba(var(--surface-rgb), 0.07);
+  box-shadow: inset 0 0 0 1px rgba(var(--surface-rgb), 0.14);
+  color: var(--muted-strong);
+  font-size: 10.5px;
+  line-height: 1.6;
+}
+
+.cl-node-head .cl-state {
+  margin-left: auto;
+  padding: 1px 8px 1px 7px;
+  border-radius: 99px;
+  background: rgba(var(--surface-rgb), 0.05);
+}
+.cl-node-head .cl-state[data-tone="busy"] { background: color-mix(in srgb, var(--cyan) 12%, transparent); }
+.cl-node-head .cl-state[data-tone="warn"] { background: color-mix(in srgb, var(--yellow) 12%, transparent); }
+.cl-node-head .cl-state[data-tone="critical"] { background: color-mix(in srgb, var(--red) 12%, transparent); }
+
+.cl-node-meta {
+  min-width: 0;
+  font-size: var(--text-xs);
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cl-node-main {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+.cl-node-stats {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.cl-stat {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: baseline;
+  gap: 2px var(--space-2);
+  min-width: 0;
+}
+
+.cl-stat-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+/* 与环同色的图例点：强调色 = 外环，灰 = 内环 */
+.cl-stat[data-dot] .cl-stat-label::before {
+  content: "";
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+}
+.cl-stat[data-dot="accent"] .cl-stat-label::before { background: var(--cyan); }
+.cl-stat[data-dot="neutral"] .cl-stat-label::before { background: rgba(var(--surface-rgb), 0.42); }
+
+.cl-stat-value {
+  min-width: 0;
+  text-align: right;
+  font-size: var(--text-xs);
+  color: var(--text-soft);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.cl-stat-mem { margin-top: 2px; }
+.cl-stat-mem .cl-meter { grid-column: 1 / -1; }
+.cl-stat-mem .res-meter-fill { background: rgba(var(--surface-rgb), 0.38); }
+.cl-stat-mem[data-level="warn"] .res-meter-fill { background: var(--yellow); }
+.cl-stat-mem[data-level="critical"] .res-meter-fill { background: var(--red); }
+/* 汇总带「CPU 核分配」的进度条（须在 .cl-stat-mem 之后：同类选择器靠顺序覆写） */
+.cl-meter[data-kind="kpi"] { height: 6px; border-radius: 3px; }
+.cl-meter[data-kind="kpi"] .res-meter-fill { background: var(--cyan); }
+
+/* GPU 卡位：每卡一根小柱，柱高 = 利用率；在用的卡描一圈强调色 */
+.cl-node-gpu {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px var(--space-2);
+  padding-top: 7px;
+  border-top: 1px solid rgba(var(--surface-rgb), 0.06);
+}
+
+.cl-node-gpu-label {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.cl-slots { display: inline-flex; gap: 3px; }
+
+.cl-slot {
+  position: relative;
+  display: inline-block;
+  width: 9px;
+  height: 16px;
+  border-radius: 2px;
+  background: rgba(var(--surface-rgb), 0.08);
+  overflow: hidden;
+}
+.cl-slot[data-busy="true"] { box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--cyan) 70%, transparent); }
+
+.cl-slot-fill {
+  position: absolute;
+  inset: 0;
+  background: var(--cyan);
+  transform-origin: bottom center;
+  transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* KPI 行里的卡位略小（须在 .cl-slot 之后：同类选择器靠顺序与权重覆写） */
+.cl-slot-groups .cl-slot { width: 8px; height: 14px; }
+
+.cl-node-gpu-text {
+  font-size: var(--text-xs);
+  color: var(--muted-strong);
+  white-space: nowrap;
+}
+
+.cl-node-gpu-users {
+  flex-basis: 100%;
+  font-size: 11px;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 直连中断：卡片正文换成说明，名字弱化 */
+.cl-node[data-offline="true"] .cl-node-name { color: var(--muted-strong); }
+
+.cl-node-offline {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 10px 12px;
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--yellow) 7%, transparent);
+}
+
+.cl-node-offline-text {
+  font-size: var(--text-sm);
+  color: var(--yellow);
+}
+
+.cl-node-offline-note {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.cl-node-note {
+  font-size: var(--text-xs);
+  color: var(--text-softer);
+  overflow-wrap: anywhere;
+}
+.cl-node-note[data-kind="off-slurm"]::before {
+  content: "";
+  display: inline-block;
+  width: 5px;
+  height: 5px;
+  margin: 0 6px 1px 0;
+  border-radius: 50%;
+  background: var(--muted);
+  vertical-align: middle;
+}
+.cl-node-note[data-kind="reason"] { color: var(--yellow); }
+
+/* ---- 6. 队列 + 用户：容器够宽（≥1280，约等于窗宽 1360）才并排；更窄时作业表独占一行、
+        不被挤出省略号，「按用户占用」挪到表格下方收成一行（见 9） ---- */
+
+.cl-split {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0 var(--space-5);
+}
+
+@container (min-width: 1280px) {
+  .cl-split { grid-template-columns: minmax(0, 1fr) 272px; }
+}
+
+/* ---- 7. 过滤芯片 ---- */
+
+.cl-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-left: auto;
+}
+
+.cl-filter {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 10px;
+  border: 1px solid var(--hud-border-strong);
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--muted-strong);
+  font: inherit;
+  font-size: var(--text-xs);
+  line-height: 1.6;
+  cursor: pointer;
+  transition: border-color 0.15s ease, color 0.15s ease, background-color 0.15s ease;
+}
+
+.cl-filter:hover { color: var(--text); border-color: var(--hud-border-strong); }
+
+.cl-filter[aria-pressed="true"] {
+  background: rgba(var(--surface-rgb), 0.08);
+  border-color: var(--hud-border-strong);
+  color: var(--text-strong);
+}
+
+.cl-filter:disabled { opacity: 0.45; cursor: not-allowed; }
+
+.cl-filter-count {
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.cl-filter-node[aria-pressed="true"] {
+  border-color: color-mix(in srgb, var(--cyan) 60%, var(--hud-border));
+}
+
+.cl-filter-clear {
+  color: var(--muted);
+  font-size: var(--text-base);
+  line-height: 1;
+}
+
+/* ---- 8. 作业表：固定列宽 + 单行省略，任何宽度都不横向滚动；窄屏改成两行卡片 ---- */
+
+/* 限高约 14 行：一次提交大量实验也不拉长整页，超出在表格内部滚动，表头吸顶 */
+.cl-table-wrap {
+  max-height: 470px;
+  border: 1px solid var(--hud-border);
+  border-radius: var(--radius-md);
+  overflow: auto;
+}
+
+.cl-jobs {
+  width: 100%;
+  table-layout: fixed;
+  border-collapse: collapse;
+  font-size: var(--text-sm);
+}
+
+/* 时长列放得下「已用 / 时限」，节点列放得下「node01–07 · 6 台」；资源列不再带分区名，可以窄一点 */
+.cl-col-job { width: 29%; }
+.cl-col-user { width: 12%; }
+.cl-col-state { width: 11%; }
+.cl-col-time { width: 19%; }
+.cl-col-res { width: 14%; }
+.cl-col-where { width: 15%; }
+
+/* 表格标题只给读屏：视觉上由区块标题「作业队列」承担 */
+.cl-caption {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.cl-jobs th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding: 6px 10px;
+  background: var(--well-bg);
+  border-bottom: 1px solid var(--hud-border);
+  color: var(--muted);
+  font-size: var(--text-xs);
+  font-weight: 500;
+  text-align: left;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.cl-jobs td {
+  padding: 5px 10px;
+  border-bottom: 1px solid rgba(var(--surface-rgb), 0.05);
+  color: var(--text-soft);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-variant-numeric: tabular-nums;
+}
+
+.cl-jobs tbody tr:last-child td { border-bottom: none; }
+.cl-jobs tbody tr:hover td { background: rgba(var(--surface-rgb), 0.03); }
+/* 同名实验组行与组内作业的底色（结构样式见 8.1） */
+.cl-jobs tbody tr.cl-group td { background: rgba(var(--surface-rgb), 0.025); }
+.cl-jobs tbody tr.cl-group-child td { background: rgba(var(--surface-rgb), 0.012); }
+.cl-jobs tbody tr.cl-group:hover td { background: rgba(var(--surface-rgb), 0.05); }
+.cl-jobs tbody tr.cl-group-child:hover td { background: rgba(var(--surface-rgb), 0.035); }
+
+/* 自己的作业：首列左侧一道强调色细线 */
+.cl-jobs tr[data-mine="true"] td:first-child { box-shadow: inset 2px 0 0 var(--cyan); }
+
+.cl-job-num {
+  margin-right: 8px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.cl-job-name {
+  color: var(--text-strong);
+  font-weight: 500;
+}
+
+.cl-job-sub {
+  font-size: var(--text-xs);
+  color: var(--muted);
+}
+
+/* 时限进度细线：贴在时长单元格底边（已用 / 时限；一组实验画的是组内最小–最大那一段）。
+   常态中性灰，用到 80% 转黄、95% 转红——到时限作业会被 Slurm 杀掉，值得提前看见。没有时限的不画。 */
+.cl-jobs td.cl-job-time { position: relative; }
+
+.cl-job-progress {
+  position: absolute;
+  left: 10px;
+  right: 10px;
+  bottom: 3px;
+  height: 2px;
+  border-radius: 1px;
+  background: rgba(var(--surface-rgb), 0.08);
+  overflow: hidden;
+}
+
+.cl-job-progress i {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  border-radius: 1px;
+  background: rgba(var(--surface-rgb), 0.42);
+}
+.cl-job-progress[data-tone="warn"] i { background: var(--yellow); }
+.cl-job-progress[data-tone="critical"] i { background: var(--red); }
+
+.cl-job-where {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+}
+.cl-job-where[data-reason="true"] {
+  font-family: var(--font-sans);
+  color: var(--text-softer);
+}
+
+.cl-me {
+  display: inline-block;
+  margin-left: 5px;
+  padding: 0 4px;
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--cyan) 16%, transparent);
+  color: var(--cyan);
+  font-size: 10.5px;
+  font-weight: 500;
+  line-height: 1.5;
+  vertical-align: 1px;
+}
+
+.cl-gpu-hazard,
+.cl-slow-badge,
+.cl-deadlock-badge,
+.cl-hist-session {
+  display: inline-block;
+  margin-left: 5px;
+  padding: 0 4px;
+  border-radius: 3px;
+  font-size: 10.5px;
+  font-weight: 500;
+  line-height: 1.5;
+  vertical-align: 1px;
+}
+
+.cl-gpu-hazard,
+.cl-slow-badge {
+  background: color-mix(in srgb, var(--yellow) 16%, transparent);
+  color: var(--yellow);
+}
+
+.cl-gpu-hazard[data-tone="critical"],
+.cl-deadlock-badge {
+  background: color-mix(in srgb, var(--red) 16%, transparent);
+  color: var(--red);
+}
+
+.cl-hist-session {
+  background: color-mix(in srgb, var(--cyan) 12%, transparent);
+  color: var(--cyan);
+  font-family: var(--font-mono);
+}
+
+.cl-deadlock-copy {
+  margin-left: 6px;
+  font-size: var(--text-xs);
+}
+
+.cl-job-empty td {
+  padding: var(--space-5) var(--space-3);
+  color: var(--muted);
+  text-align: center;
+  white-space: normal;
+}
+/* 表格里的空状态（队列为空 / 筛选没命中 / 近 48 小时为空）：单元格已有留白，空状态本身收紧 */
+.cl-job-empty .empty-state { padding: var(--space-1) 0; }
+.cl-jobs tbody tr.cl-job-empty:hover td { background: none; }
+
+/* 中等宽度：先收起时限后缀（底边的进度细线还在），把宽度留给主信息，减少省略号 */
+@container (max-width: 860px) {
+  .cl-job-time .cl-job-sub { display: none; }
+}
+
+/* 窄屏（容器 ≤700；560–700 之间六列放不下，原来是一排省略号）：表头收起，每个作业两行——
+   作业名 / 用户·状态·时长·资源·节点。「我的历史」列更长，≤940 就改用同一种布局（见 8.2）。 */
+@container (max-width: 700px) {
+  .cl-jobs thead { display: none; }
+  .cl-jobs,
+  .cl-jobs tbody { display: block; }
+  .cl-jobs tr {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 2px 12px;
+    padding: 8px 10px;
+    border-bottom: 1px solid rgba(var(--surface-rgb), 0.05);
+  }
+  .cl-jobs tbody tr:last-child { border-bottom: none; }
+  .cl-jobs td {
+    padding: 0;
+    border: none;
+    font-size: var(--text-xs);
+    overflow: visible;
+  }
+  .cl-jobs td.cl-job-id {
+    flex: 1 1 100%;
+    font-size: var(--text-sm);
+    overflow: hidden;
+  }
+  .cl-jobs tr[data-mine="true"] { box-shadow: inset 2px 0 0 var(--cyan); }
+  .cl-jobs tr[data-mine="true"] td:first-child { box-shadow: none; }
+  .cl-jobs tr.cl-group-child td:first-child { padding-left: 20px; }
+  /* 进度细线画在时长文字正下方 */
+  .cl-job-progress { left: 0; right: 0; bottom: -3px; }
+  /* 组行底色与悬停底色画在整行上（单元格各画各的会成一块块） */
+  .cl-jobs tbody tr:hover td,
+  .cl-jobs tbody tr.cl-group td,
+  .cl-jobs tbody tr.cl-group-child td,
+  .cl-jobs tbody tr.cl-group:hover td,
+  .cl-jobs tbody tr.cl-group-child:hover td { background: none; }
+  .cl-jobs tbody tr.cl-group { background: rgba(var(--surface-rgb), 0.025); }
+  .cl-jobs tbody tr.cl-group-child { background: rgba(var(--surface-rgb), 0.012); }
+  .cl-jobs tbody tr.cl-group:hover { background: rgba(var(--surface-rgb), 0.05); }
+}
+
+/* ---- 8.1 同名实验分组（cluster-model.groupJobRows）与「我的」汇总条 ---- */
+
+.cl-mine {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 14px;
+  margin-bottom: var(--space-2);
+  padding: 7px 12px;
+  border: 1px solid var(--hud-border);
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--cyan) 6%, var(--card-bg));
+  box-shadow: inset 2px 0 0 var(--cyan);
+  font-size: var(--text-sm);
+}
+
+.cl-mine-label { color: var(--cyan); font-weight: 600; }
+.cl-mine-item { color: var(--text-soft); white-space: nowrap; }
+.cl-mine-item b { color: var(--text-strong); font-weight: 600; font-variant-numeric: tabular-nums; }
+.cl-mine-item[data-tone="busy"] b { color: var(--cyan); }
+.cl-mine-groups { color: var(--muted); }
+.cl-expand-all { margin-left: auto; font-size: var(--text-xs); }
+
+/* 组行：可点击 / 可聚焦展开；底色略深以区分；数量徽标 + 阶段分布 */
+.cl-jobs tr.cl-group { cursor: pointer; }
+.cl-jobs tr.cl-group:focus-visible { outline: 2px solid var(--cyan); outline-offset: -2px; }
+
+.cl-group-caret {
+  display: inline-block;
+  width: 14px;
+  margin-right: 6px;
+  color: var(--muted-strong);
+}
+
+.cl-group-count {
+  margin-left: 6px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--cyan) 16%, transparent);
+  color: var(--cyan);
+  font-size: var(--text-xs);
+  font-weight: 600;
+}
+
+.cl-group-stages { margin-left: 8px; }
+.cl-state-tail { margin-left: 10px; }
+
+/* 组内作业：缩进，表明从属 */
+.cl-jobs tr.cl-group-child td:first-child { padding-left: 30px; }
+
+.cl-truncated {
+  font-size: var(--text-xs);
+  color: var(--muted);
+}
+
+/* ---- 8.2 我的历史 · 48 小时：与当前队列共用一块区域（标题旁的分段切换）；汇总条沿用「我的」汇总条。
+        有问题的行（失败 / 超时 / 取消）排最前，首列左侧一道状态色（红 = 失败类，黄 = 取消） ---- */
+
+.cl-queue-mode { margin-left: var(--space-2); }
+.cl-queue-mode span { color: var(--muted); font-variant-numeric: tabular-nums; }
+
+/* 两种看法各自一个容器，间距与区块内其它行一致（接线层只切 hidden） */
+.cl-queue-view,
+.cl-history {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+}
+
+/* 作业列要放得下「▸ 名字 ×620 cfd1 ×600 · prepare1 ×20」，结束列放得下「昨天 07:29 – 今天 20:17」 */
+.cl-hcol-job { width: 36%; }
+.cl-hcol-state { width: 10%; }
+.cl-hcol-end { width: 18%; }
+.cl-hcol-time { width: 11%; }
+.cl-hcol-where { width: 13%; }
+.cl-hcol-exit { width: 12%; }
+
+/* 完成 = 绿点（只在历史里出现；队列里的状态点见 4） */
+.cl-state[data-tone="ok"] .cl-dot { background: var(--green); }
+.cl-mine-item[data-tone="ok"] b { color: var(--green); }
+.cl-mine-item[data-tone="warn"] b { color: var(--yellow); }
+.cl-mine-item[data-tone="critical"] b { color: var(--red); }
+.cl-hist-fresh { margin-left: auto; color: var(--muted); }
+
+.cl-jobs-history tr[data-level="critical"] td:first-child { box-shadow: inset 2px 0 0 var(--red); }
+.cl-jobs-history tr[data-level="warn"] td:first-child { box-shadow: inset 2px 0 0 var(--yellow); }
+.cl-jobs-history tr[data-level] .cl-job-exit { color: var(--text-strong); }
+.cl-jobs-history .cl-job-where { font-family: var(--font-sans); }
+.cl-jobs-history .cl-group-more-cell { color: var(--muted); font-size: var(--text-xs); }
+
+/* ---- 8.3 失败作业诊断（v2.49，render/cluster-diagnosis-model.js）：不另开面板，并在历史行里——
+        失败行下面紧跟一行原因（分类小标签 + 等宽单行 headline），点开看证据、日志路径与提交脚本；
+        列表上方的「N 个失败同因」只是几行可点的筛选，不是卡片。配色只用中性灰与强调色 ---- */
+
+/* 作业行与它的原因行读作一体：中间不画分隔线，原因行收紧上边距 */
+.cl-jobs.cl-jobs-history tbody tr.cl-has-diag td { border-bottom-color: transparent; }
+.cl-jobs-history tr.cl-has-diag[data-cl-diag] { cursor: pointer; }
+.cl-jobs-history tr.cl-has-diag[data-cl-diag]:focus-visible { outline: 2px solid var(--cyan); outline-offset: -2px; }
+
+.cl-jobs td.cl-diag-cell {
+  padding-top: 0;
+  white-space: normal;
+  overflow: visible;
+}
+
+.cl-diag-line {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+  font-size: var(--text-xs);
+}
+.cl-diag-line[data-cl-diag] { cursor: pointer; }
+/* 不能展开的原因行没有箭头：空出箭头 + 间距的宽度，标签与上下行对齐 */
+.cl-diag-line:not([data-cl-diag]) { padding-left: 18px; }
+.cl-diag-line .cl-group-caret { width: 10px; margin-right: 0; }
+
+.cl-diag-tag {
+  flex: none;
+  padding: 0 6px;
+  border-radius: 4px;
+  background: rgba(var(--surface-rgb), 0.07);
+  color: var(--text-soft);
+  font-size: 10.5px;
+  line-height: 1.6;
+}
+
+.cl-diag-headline {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-softer);
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+
+.cl-diag-muted {
+  color: var(--muted);
+  font-size: var(--text-xs);
+}
+
+/* 展开详情：证据与脚本保留原样空白，限高后在框内滚动 */
+.cl-diag-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 6px 0 2px 18px;
+  min-width: 0;
+}
+
+.cl-diag-pre {
+  max-height: 220px;
+  margin: 0;
+  padding: 6px 8px;
+  overflow: auto;
+  border: 1px solid var(--hud-border);
+  border-radius: var(--radius-sm);
+  background: var(--well-bg);
+  color: var(--text-soft);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  cursor: text;
+}
+.cl-diag-script { max-height: 320px; }
+
+.cl-diag-files {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.cl-diag-files li {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+}
+
+.cl-diag-path {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-soft);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  cursor: text;
+}
+
+.cl-diag-copy,
+.cl-diag-script-btn { flex: none; font-size: var(--text-xs); }
+
+.cl-diag-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 12px;
+}
+
+/* 列表上方的同因合并：每类一行，按下 = 正在只看这些作业 */
+.cl-diag-causes {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  min-width: 0;
+}
+
+.cl-diag-cause {
+  display: flex;
+  align-items: baseline;
+  gap: 2px;
+  max-width: 100%;
+  min-width: 0;
+  padding: 2px 8px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--text-soft);
+  font: inherit;
+  font-size: var(--text-sm);
+  text-align: left;
+  cursor: pointer;
+}
+.cl-diag-cause:hover { background: rgba(var(--surface-rgb), 0.04); }
+.cl-diag-cause:focus-visible { outline: 2px solid var(--cyan); outline-offset: 1px; }
+.cl-diag-cause[aria-pressed="true"] {
+  border-color: color-mix(in srgb, var(--cyan) 45%, var(--hud-border));
+  background: color-mix(in srgb, var(--cyan) 8%, transparent);
+}
+.cl-diag-cause-count { flex: none; }
+.cl-diag-cause .cl-diag-headline { font-size: var(--text-xs); color: var(--text-strong); }
+
+.cl-diag-causes-foot {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  padding: 0 8px;
+}
+.cl-diag-all { font-size: var(--text-xs); color: var(--cyan); }
+
+/* 历史表的单元格比队列长（「昨天 07:29 – 今天 20:17」「node01–07 · CPU」「退出码 1 等 2 种」）：
+   容器 ≤940 六列就放不下，比当前队列（≤700）更早改成两行卡片——作业名 / 状态·结束·耗时·节点·退出。
+   规则与 8 里 ≤700 的那组相同（改一处记得改另一处）；状态色条画在整行左侧。
+   须在上面几条之后：同权重靠顺序覆写。 */
+@container (max-width: 940px) {
+  .cl-jobs-history thead { display: none; }
+  .cl-jobs-history,
+  .cl-jobs-history tbody { display: block; }
+  .cl-jobs-history tr {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 2px 12px;
+    padding: 8px 10px;
+    border-bottom: 1px solid rgba(var(--surface-rgb), 0.05);
+  }
+  .cl-jobs-history tbody tr:last-child { border-bottom: none; }
+  .cl-jobs-history td {
+    padding: 0;
+    border: none;
+    font-size: var(--text-xs);
+    overflow: visible;
+  }
+  .cl-jobs-history td.cl-job-id {
+    flex: 1 1 100%;
+    font-size: var(--text-sm);
+    overflow: hidden;
+  }
+  .cl-jobs-history tr.cl-group-child td:first-child { padding-left: 20px; }
+  .cl-jobs-history tbody tr:hover td,
+  .cl-jobs-history tbody tr.cl-group td,
+  .cl-jobs-history tbody tr.cl-group-child td,
+  .cl-jobs-history tbody tr.cl-group:hover td,
+  .cl-jobs-history tbody tr.cl-group-child:hover td { background: none; }
+  .cl-jobs-history tbody tr.cl-group { background: rgba(var(--surface-rgb), 0.025); }
+  .cl-jobs-history tbody tr.cl-group-child { background: rgba(var(--surface-rgb), 0.012); }
+  .cl-jobs-history tbody tr.cl-group:hover { background: rgba(var(--surface-rgb), 0.05); }
+  .cl-jobs-history tr[data-level="critical"] { box-shadow: inset 2px 0 0 var(--red); }
+  .cl-jobs-history tr[data-level="warn"] { box-shadow: inset 2px 0 0 var(--yellow); }
+  .cl-jobs-history tr[data-level] td:first-child { box-shadow: none; }
+  /* 原因行：整格占满一行，与上面的作业行之间不画分隔线 */
+  .cl-jobs-history tr.cl-has-diag { padding-bottom: 2px; border-bottom-color: transparent; }
+  .cl-jobs-history tr.cl-diag { padding-top: 0; }
+  .cl-jobs-history td.cl-diag-cell { flex: 1 1 100%; min-width: 0; }
+  .cl-jobs-history tr.cl-group-child td.cl-diag-cell:first-child { padding-left: 20px; }
+  /* v2.51 段头与组内「还有 N 个」：整格占满一行 */
+  .cl-jobs-history td.cl-hist-seg-cell,
+  .cl-jobs-history td.cl-group-more-cell { flex: 1 1 100%; min-width: 0; white-space: normal; }
+  .cl-jobs-history tr.cl-hist-seg { background: var(--well-bg); }
+}
+
+/* ---- 8.4 按需回查（v2.51，render/cluster-history-lookup.js）：历史表上方一行查询框，表内「更早…」各段的段头，
+        组内「再显示 N 个」与表下的覆盖范围。不另开面板，文字按钮用强调色（与「显示全部」一致） ---- */
+
+.cl-hist-lookup {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 10px;
+  min-width: 0;
+}
+.cl-hist-lookup input {
+  flex: 0 1 300px;
+  min-width: 0;
+  width: 100%;
+  padding: 4px 8px;
+  border: 1px solid var(--hud-border-strong);
+  border-radius: var(--radius-md);
+  background: var(--control-bg);
+  color: var(--text);
+  font: inherit;
+  font-size: var(--text-xs);
+  outline: none;
+}
+.cl-hist-lookup input::placeholder { color: var(--label-dim); }
+.cl-hist-lookup input:focus-visible { border-color: var(--cyan); }
+.cl-hist-lookup .text-btn,
+.cl-hist-more .text-btn,
+.cl-hist-seg .text-btn,
+.cl-group-more .text-btn { font-size: var(--text-xs); color: var(--cyan); }
+.cl-hist-lookup .text-btn:disabled,
+.cl-hist-more .text-btn:disabled,
+.cl-group-more .text-btn:disabled { color: var(--muted); cursor: default; }
+.cl-hist-lookup-hint { font-size: var(--text-xs); color: var(--muted); }
+.cl-hist-lookup-hint:empty { display: none; }
+
+.cl-hist-more {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 12px;
+  font-size: var(--text-xs);
+  color: var(--muted);
+}
+
+/* 段头：一行灰底，日期加粗 + 本段合计；跨在整行上 */
+.cl-jobs.cl-jobs-history tbody tr.cl-hist-seg td {
+  padding-top: 8px;
+  background: var(--well-bg);
+  border-bottom: 1px solid var(--hud-border);
+  white-space: normal;
+}
+.cl-hist-seg-label { margin-right: 10px; color: var(--text-strong); font-size: var(--text-xs); font-weight: 600; }
+.cl-hist-seg-text { color: var(--muted); font-size: var(--text-xs); }
+
+/* ---- 9. 按用户占用（emphasis：自己强调色，其他人中性灰；条长 = 占全集群核数比例） ---- */
+
+.cl-users {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.cl-user {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: baseline;
+  gap: 3px var(--space-2);
+  min-width: 0;
+}
+
+.cl-user .cl-meter { grid-column: 1 / -1; }
+.cl-user .cl-meter .res-meter-fill { background: rgba(var(--surface-rgb), 0.38); }
+.cl-user[data-mine="true"] .cl-meter .res-meter-fill { background: var(--cyan); }
+
+.cl-user-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--text-sm);
+  color: var(--text-soft);
+}
+.cl-user[data-other="true"] .cl-user-name { color: var(--muted); }
+
+.cl-user-value {
+  font-size: var(--text-xs);
+  color: var(--text-strong);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.cl-user-detail {
+  grid-column: 1 / -1;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+/* 在作业表下方时（容器 <1280，见 6）收成一行：标题 + 每人「名字 核数 细条」，
+   明细（几个运行 / 排队）在悬停提示里。须在上面几条之后：同权重靠顺序覆写。 */
+@container (max-width: 1279.98px) {
+  .cl-users-section {
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px var(--space-5);
+    padding-top: var(--space-3);
+  }
+  .cl-users {
+    flex: 1;
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px var(--space-6);
+    min-width: 0;
+  }
+  .cl-user {
+    grid-template-columns: auto auto 84px;
+    align-items: center;
+    gap: 0 8px;
+  }
+  .cl-user .cl-meter { grid-column: 3; grid-row: 1; width: 84px; }
+  .cl-user-detail { display: none; }
+}
+
+.cl-empty {
+  font-size: var(--text-xs);
+  color: var(--muted);
+}

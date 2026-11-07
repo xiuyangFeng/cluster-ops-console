@@ -1,0 +1,69 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <title>集群运维工作台</title>
+  <!-- 集群运维工作台 App 图标母版。造型：上方两个本机/通道节点相连，各自连到下方的集群节点；
+       一枚光点沿链路流向集群（与概览页「数据链路」的流光同一语言）。
+       改完运行 `npx electron scripts/build-app-icon.mjs` 重新生成 app-icon.icns。
+       画布遵循 macOS 图标网格：主体 824×824 位于 (100,100)，圆角 185，四周留出投影空间。 -->
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#2c313c"/>
+      <stop offset="1" stop-color="#131519"/>
+    </linearGradient>
+    <radialGradient id="sheen" cx="0.3" cy="0.12" r="0.75">
+      <stop offset="0" stop-color="#ffffff" stop-opacity="0.10"/>
+      <stop offset="1" stop-color="#ffffff" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="linkL" gradientUnits="userSpaceOnUse" x1="362" y1="404" x2="512" y2="664">
+      <stop offset="0" stop-color="#7aa7f0"/>
+      <stop offset="1" stop-color="#5cc48a"/>
+    </linearGradient>
+    <linearGradient id="linkR" gradientUnits="userSpaceOnUse" x1="662" y1="404" x2="512" y2="664">
+      <stop offset="0" stop-color="#7aa7f0"/>
+      <stop offset="1" stop-color="#5cc48a"/>
+    </linearGradient>
+    <radialGradient id="haloBlue">
+      <stop offset="0.45" stop-color="#7aa7f0" stop-opacity="0.38"/>
+      <stop offset="1" stop-color="#7aa7f0" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="haloGreen">
+      <stop offset="0.45" stop-color="#5cc48a" stop-opacity="0.45"/>
+      <stop offset="1" stop-color="#5cc48a" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="cometGlow">
+      <stop offset="0" stop-color="#e9fff1" stop-opacity="0.95"/>
+      <stop offset="0.35" stop-color="#5cc48a" stop-opacity="0.55"/>
+      <stop offset="1" stop-color="#5cc48a" stop-opacity="0"/>
+    </radialGradient>
+    <filter id="shadow" x="-10%" y="-10%" width="120%" height="125%">
+      <feDropShadow dx="0" dy="12" stdDeviation="14" flood-color="#000" flood-opacity="0.32"/>
+    </filter>
+  </defs>
+
+  <rect x="100" y="100" width="824" height="824" rx="185" fill="url(#bg)" filter="url(#shadow)"/>
+  <rect x="100" y="100" width="824" height="824" rx="185" fill="url(#sheen)"/>
+  <rect x="101.5" y="101.5" width="821" height="821" rx="183.5" fill="none" stroke="#ffffff" stroke-opacity="0.09" stroke-width="3"/>
+
+  <!-- 光晕 -->
+  <circle cx="362" cy="404" r="150" fill="url(#haloBlue)"/>
+  <circle cx="662" cy="404" r="150" fill="url(#haloBlue)"/>
+  <circle cx="512" cy="664" r="170" fill="url(#haloGreen)"/>
+
+  <!-- 链路 -->
+  <line x1="362" y1="404" x2="662" y2="404" stroke="#7aa7f0" stroke-opacity="0.85" stroke-width="30" stroke-linecap="round"/>
+  <line x1="362" y1="404" x2="512" y2="664" stroke="url(#linkL)" stroke-width="30" stroke-linecap="round"/>
+  <line x1="662" y1="404" x2="512" y2="664" stroke="url(#linkR)" stroke-width="30" stroke-linecap="round"/>
+
+  <!-- 节点：深色底 + 彩色环 + 实心核 -->
+  <g stroke-width="24">
+    <circle cx="362" cy="404" r="72" fill="#1a1d23" stroke="#7aa7f0"/>
+    <circle cx="662" cy="404" r="72" fill="#1a1d23" stroke="#7aa7f0"/>
+    <circle cx="512" cy="664" r="84" fill="#1a1d23" stroke="#5cc48a"/>
+  </g>
+  <circle cx="362" cy="404" r="26" fill="#a9c6f6"/>
+  <circle cx="662" cy="404" r="26" fill="#a9c6f6"/>
+  <circle cx="512" cy="664" r="32" fill="#8fe0b1"/>
+
+  <!-- 沿左侧链路流向集群的光点 -->
+  <circle cx="448" cy="553" r="60" fill="url(#cometGlow)"/>
+  <circle cx="448" cy="553" r="15" fill="#f3fff7"/>
+</svg>

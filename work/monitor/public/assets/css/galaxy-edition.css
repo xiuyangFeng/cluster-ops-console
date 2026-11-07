@@ -1,0 +1,1277 @@
+/* ==========================================================================
+   galaxy-edition.css —— 银河系列（星空版 starry / 纸面天台版 paper / 简洁版 classic）的外壳与舞台：
+   1.（v2.87 起页头不再有版本切换器，视觉版本只在「配置」里切）
+   2. 换肤过场（#celestialOverlay，render/skin-transition.js）与全局星野画布（#galaxyGlobalSkyCanvas）
+   3. 星空版 / 纸面版的全局令牌与外壳
+   4. 事件页天象舞台、日志哈佛光谱星表、团队管理控件在两种皮肤下的适配
+   用量 / 时间线 / 端点三处的星图样式在 observatory.css（v2.80）。
+   ========================================================================== */
+
+:root {
+  --gx-serif: "Iowan Old Style", "Palatino Linotype", Palatino, Baskerville, "Instrument Serif", "Playfair Display", Georgia, "Songti SC", "STSong", "Noto Serif CJK SC", "Source Han Serif SC", serif;
+  --serif: var(--gx-serif);
+  --font-serif: var(--gx-serif);
+  --mono: ui-monospace, "SF Mono", Menlo, Monaco, Consolas, monospace;
+  --font-mono: var(--mono);
+  --gx-brass: #c6a97a;
+  --gx-brass-hi: #e5cca0;
+  --gx-brass-dim: rgba(198, 169, 122, 0.38);
+  --gx-brass-line: rgba(198, 169, 122, 0.26);
+  --gx-cinnabar: #b8432e;
+  --gx-cyan: #8fa7de;
+  --gx-mint: #86c9b4;
+  --gx-sand: #c9a57b;
+  --gx-ok: #62c99a;
+  --gx-warn: #e0a758;
+  --gx-crit: #ef8078;
+}
+
+/* ---------- 2. 全局团簇呼吸星野 Canvas & 全舞台「日月升落 · 昼夜交替」动效剧场 ---------- */
+.galaxy-global-sky-canvas {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  pointer-events: none;
+  z-index: 0;
+  display: none;
+}
+
+body[data-skin="starry"] .galaxy-global-sky-canvas,
+body[data-skin="paper"] .galaxy-global-sky-canvas {
+  display: block;
+}
+
+/* 换肤过场：popover（top layer，盖得住 showModal 打开的「配置」）。一层层出来——
+   幕布淡入 0.7s → 卡片浮起去模糊 0.9s → 日 / 月沿弧线升起 1.6s、光晕扩开 → 标题 / 副题依次浮现；
+   停留后加 .is-leaving 整体淡出。时刻表在 render/skin-transition.js。 */
+.celestial-stage-overlay {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  max-width: none;
+  max-height: none;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  overflow: hidden;
+  z-index: 9990;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  opacity: 1;
+}
+
+.celestial-stage-overlay:popover-open {
+  display: flex;
+}
+
+.cso-backdrop {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  backdrop-filter: blur(0);
+  background: radial-gradient(90% 70% at 50% 62%, rgba(114, 144, 218, 0.24), rgba(10, 14, 26, 0.80) 55%, rgba(7, 9, 16, 0.92));
+  transition: opacity 0.7s ease, backdrop-filter 0.9s ease;
+}
+
+.celestial-stage-overlay[data-dir="to-light"] .cso-backdrop {
+  background: radial-gradient(90% 70% at 50% 62%, rgba(246, 200, 118, 0.32), rgba(242, 235, 220, 0.78) 55%, rgba(241, 237, 225, 0.92));
+}
+
+.celestial-stage-overlay[data-dir="to-classic"] .cso-backdrop {
+  background: radial-gradient(90% 70% at 50% 55%, rgba(147, 180, 245, 0.18), rgba(17, 19, 24, 0.82) 55%, rgba(12, 13, 17, 0.92));
+}
+
+.cso-card {
+  --cso-ground: #060a16;
+  position: relative;
+  z-index: 1;
+  width: min(680px, 90vw);
+  height: 280px;
+  border-radius: 22px;
+  overflow: hidden;
+  border: 1px solid rgba(198, 169, 122, 0.48);
+  box-shadow: 0 28px 80px rgba(0, 0, 0, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.18);
+  background: linear-gradient(180deg, #05070f 0%, #0d1630 62%, #1b2a55 100%);
+  opacity: 0;
+  filter: blur(8px);
+  transform: translateY(22px) scale(0.94);
+  transition: opacity 0.8s ease 0.12s, filter 0.9s ease 0.12s, transform 0.95s cubic-bezier(0.22, 1, 0.36, 1) 0.12s;
+}
+
+.celestial-stage-overlay[data-dir="to-light"] .cso-card {
+  --cso-ground: #5a3a26;
+  background: linear-gradient(180deg, #27305a 0%, #6b4f72 42%, #e0905a 82%, #f3c27e 100%);
+}
+
+.celestial-stage-overlay[data-dir="to-classic"] .cso-card {
+  --cso-ground: #1a1f2b;
+  border-color: rgba(147, 180, 245, 0.35);
+  background: linear-gradient(180deg, #14161c 0%, #1a1e27 60%, #222837 100%);
+}
+
+/* 画面占标题带以上的部分（按比例缩放、不裁切）；标题带的底色接着画面里的地面，看上去是同一片地平线 */
+#celestialOverlaySvg {
+  position: absolute;
+  inset: 0 0 74px;
+}
+
+.cso-card svg,
+.cso-svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+/* 画面里的元件：日 / 月沿弧线升起，光晕扩开，地平线描出来，星星点亮 */
+.cso-orb-group {
+  opacity: 0;
+  transform: translate(-26px, 54px) rotate(-8deg);
+  transform-box: view-box;
+  transform-origin: 130px 150px;
+  transition: opacity 0.9s ease 0.35s, transform 1.7s cubic-bezier(0.16, 1, 0.3, 1) 0.3s;
+}
+
+.cso-halo {
+  opacity: 0;
+  transform: scale(0.5);
+  transform-box: fill-box;
+  transform-origin: center;
+  transition: opacity 1.4s ease 0.55s, transform 2s cubic-bezier(0.22, 1, 0.36, 1) 0.5s;
+}
+
+.cso-horizon {
+  stroke-dashoffset: 240;
+  transition: stroke-dashoffset 1.6s ease 0.25s;
+}
+
+
+.cso-stars circle {
+  opacity: 0;
+  transition: opacity 0.6s ease;
+}
+
+.cso-stars circle:nth-child(3n + 1) { transition-delay: 0.9s; }
+.cso-stars circle:nth-child(3n + 2) { transition-delay: 1.2s; }
+.cso-stars circle:nth-child(3n) { transition-delay: 1.5s; }
+
+.cso-rays {
+  transform-box: view-box;
+  transform-origin: 130px 86px;
+}
+
+.celestial-stage-overlay.is-active .cso-rays {
+  animation: cso-rays-spin 14s linear infinite;
+}
+
+@keyframes cso-rays-spin {
+  to { transform: rotate(360deg); }
+}
+
+.cso-caption {
+  position: absolute;
+  z-index: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 74px;
+  justify-content: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  text-align: center;
+  font-family: var(--gx-serif);
+  color: #f6efe0;
+  text-shadow: 0 2px 10px rgba(0, 0, 0, 0.75);
+}
+
+.cso-caption::before {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  inset: 0;
+  background: var(--cso-ground);
+  box-shadow: 0 -1px 0 rgba(255, 255, 255, 0.12), 0 -18px 30px -12px var(--cso-ground);
+  opacity: 0;
+  transition: opacity 0.8s ease 0.2s;
+}
+
+.cso-caption-title {
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  opacity: 0;
+  transform: translateY(10px);
+  transition: opacity 0.7s ease 0.85s, transform 0.8s cubic-bezier(0.22, 1, 0.36, 1) 0.85s, letter-spacing 1.2s ease 0.85s;
+}
+
+.cso-caption-sub {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  letter-spacing: 0.14em;
+  color: rgba(246, 239, 224, 0.78);
+  opacity: 0;
+  transform: translateY(8px);
+  transition: opacity 0.7s ease 1.15s, transform 0.8s cubic-bezier(0.22, 1, 0.36, 1) 1.15s;
+}
+
+.celestial-stage-overlay.is-active .cso-backdrop { opacity: 1; backdrop-filter: blur(6px); }
+.celestial-stage-overlay.is-active .cso-card { opacity: 1; filter: blur(0); transform: none; }
+.celestial-stage-overlay.is-active .cso-orb-group { opacity: 1; transform: none; }
+.celestial-stage-overlay.is-active .cso-halo { opacity: 1; transform: scale(1); }
+.celestial-stage-overlay.is-active .cso-horizon { stroke-dashoffset: 0; }
+.celestial-stage-overlay.is-active .cso-caption::before { opacity: 1; }
+.celestial-stage-overlay.is-active .cso-stars circle { opacity: 0.9; }
+.celestial-stage-overlay.is-active .cso-caption-title { opacity: 1; transform: none; letter-spacing: 0.08em; }
+.celestial-stage-overlay.is-active .cso-caption-sub { opacity: 1; transform: none; }
+
+/* 收场：整体缓缓淡出，卡片略微放大散开（不带入场的错峰延迟） */
+.celestial-stage-overlay.is-leaving .cso-backdrop { opacity: 0; backdrop-filter: blur(0); transition: opacity 0.7s ease, backdrop-filter 0.7s ease; }
+.celestial-stage-overlay.is-leaving .cso-card { opacity: 0; filter: blur(6px); transform: scale(1.03); transition: opacity 0.55s ease, filter 0.6s ease, transform 0.7s ease; }
+
+@media (prefers-reduced-motion: reduce) {
+  .cso-backdrop,
+  .cso-card,
+  .cso-orb-group,
+  .cso-halo,
+  .cso-horizon,
+  .cso-caption::before,
+  .cso-stars circle,
+  .cso-caption-title,
+  .cso-caption-sub {
+    transform: none;
+    filter: none;
+    transition: opacity 0.15s ease;
+    transition-delay: 0s;
+  }
+  .celestial-stage-overlay.is-active .cso-rays { animation: none; }
+}
+
+/* ---------- 3. 星空版 (starry) 与纸面天台版 (paper) 全局令牌与外壳 ---------- */
+body[data-skin="starry"] {
+  --bg: #080a0e;
+  --panel: #0d0e13;
+  --panel-2: #12141b;
+  --panel-3: #171a22;
+  --panel-hover: #161924;
+  --panel-solid-2: #070b18;
+  --card-bg: #12141b;
+  --btn-bg: #151924;
+  --control-bg: #12151f;
+  --well-bg: #06080f;
+  --well: rgba(4, 6, 12, 0.45);
+  --inset-bg: #070912;
+  --sidebar-bg: #080a0f;
+  --surface-raised: #171b27;
+  --ink: #e6e3dc;
+  --ink-strong: #f4f1e9;
+  --dim: #9a9890;
+  --faint: #6d6c66;
+  --hair: rgba(190, 205, 255, 0.095);
+  --hair-2: rgba(190, 205, 255, 0.17);
+  --hair-3: rgba(190, 205, 255, 0.28);
+  --brass: #c6a97a;
+  --brass-dim: rgba(198, 169, 122, 0.32);
+  --gx-brass: #c6a97a;
+  --gx-brass-dim: rgba(198, 169, 122, 0.38);
+  --cyan: #8fa7de;
+  --gx-cyan: #8fa7de;
+  --mint: #86c9b4;
+  --gx-mint: #86c9b4;
+  --sand: #c9a57b;
+  --gx-sand: #c9a57b;
+  --ok: #62c99a;
+  --gx-ok: #62c99a;
+  --warn: #e0a758;
+  --gx-warn: #e0a758;
+  --crit: #ef8078;
+  --gx-crit: #ef8078;
+  --ok-bg: rgba(98, 201, 154, 0.12);
+  --warn-bg: rgba(224, 167, 88, 0.13);
+  --crit-bg: rgba(239, 128, 120, 0.13);
+  --hover: rgba(190, 205, 255, 0.055);
+  --active: rgba(190, 205, 255, 0.09);
+  --border: rgba(198, 169, 122, 0.22);
+  --hud-border: rgba(190, 205, 255, 0.11);
+  --hud-border-strong: rgba(198, 169, 122, 0.34);
+  --text: #e6e3dc;
+  --text-strong: #f4f1e9;
+  --text-soft: #d2d6e2;
+  --text-softer: #aeb4c6;
+  --muted: #9a9890;
+  --muted-strong: #c2c0b8;
+  --label-dim: #7b7a73;
+  --bg-base: #080a0e;
+  --bg-panel: #0d0e13;
+  --bg-card: #12141b;
+  --bg-elevated: #171a22;
+  --bg-hover: rgba(198, 169, 122, 0.10);
+  --border-subtle: rgba(190, 205, 255, 0.095);
+  --border-hover: rgba(198, 169, 122, 0.42);
+  --text-primary: #f4f1e9;
+  --text-secondary: #b8b6ae;
+  --text-muted: #7a7972;
+  --accent: #c6a97a;
+  --accent-dim: rgba(198, 169, 122, 0.15);
+  /* 星空版焦点环：比主题青再亮一档，深底上更容易看见（styles.css 的通用 :focus-visible 读它） */
+  --border-focus: color-mix(in srgb, var(--cyan) 76%, #ffffff 24%);
+  background-color: #080a0e;
+  background-image:
+    radial-gradient(ellipse 90% 60% at 50% 0%, rgba(20, 30, 58, 0.35), transparent 72%),
+    linear-gradient(180deg, #090c14 0%, #06080d 100%);
+}
+
+body[data-skin="paper"] {
+  --bg: #f1ede1;
+  --panel: #fbf8f0;
+  --panel-2: #f6f1e4;
+  --panel-3: #efe9da;
+  --panel-hover: #f3ecdc;
+  --panel-solid-2: #ede4d2;
+  --card-bg: #f6f1e4;
+  --btn-bg: #efe6d4;
+  --control-bg: #efe6d4;
+  --well-bg: #e9dec8;
+  --well: rgba(120, 98, 58, 0.07);
+  --inset-bg: #ebe1cc;
+  --sidebar-bg: #ece5d5;
+  --surface-raised: #fbf8f0;
+  --ink: #241f18;
+  --ink-strong: #14110c;
+  --dim: #5d5546;
+  --faint: #7c7362;
+  --hair: rgba(72, 56, 28, 0.13);
+  --hair-2: rgba(72, 56, 28, 0.24);
+  --hair-3: rgba(72, 56, 28, 0.4);
+  --brass: #96743a;
+  --brass-dim: rgba(150, 116, 58, 0.32);
+  --gx-brass: #96743a;
+  --gx-brass-dim: rgba(150, 116, 58, 0.38);
+  --cyan: #3a5da6;
+  --gx-cyan: #3a5da6;
+  --mint: #2c7361;
+  --gx-mint: #2c7361;
+  --sand: #a2632a;
+  --gx-sand: #a2632a;
+  --ok: #2f6b3a;
+  --gx-ok: #2f6b3a;
+  --warn: #96620c;
+  --gx-warn: #96620c;
+  --crit: #b3261e;
+  --gx-crit: #b3261e;
+  --ok-bg: rgba(47, 107, 58, 0.1);
+  --warn-bg: rgba(150, 98, 12, 0.1);
+  --crit-bg: rgba(179, 38, 30, 0.09);
+  --hover: rgba(72, 56, 28, 0.05);
+  --active: rgba(72, 56, 28, 0.085);
+  --border: rgba(120, 90, 48, 0.22);
+  --hud-border: rgba(72, 56, 28, 0.14);
+  --hud-border-strong: rgba(150, 116, 58, 0.38);
+  --text: #241f18;
+  --text-strong: #14110c;
+  --text-soft: #3d3426;
+  --text-softer: #5d5546;
+  --muted: #5d5546;
+  --muted-strong: #3e3629;
+  --label-dim: #7c7362;
+  --bg-base: #f1ede1;
+  --bg-panel: #fbf8f0;
+  --bg-card: #f6f1e4;
+  --bg-elevated: #efe9da;
+  --bg-hover: rgba(150, 116, 58, 0.10);
+  --border-subtle: rgba(72, 56, 28, 0.13);
+  --border-hover: rgba(150, 116, 58, 0.45);
+  --text-primary: #14110c;
+  --text-secondary: #5d5546;
+  --text-muted: #7c7362;
+  --accent: #96743a;
+  --accent-dim: rgba(150, 116, 58, 0.12);
+  /* 纸面版焦点环：主题青再压深一档，浅底上对比度足够（styles.css 的通用 :focus-visible 读它） */
+  --border-focus: color-mix(in srgb, var(--cyan) 86%, #000000 14%);
+  background-color: #f1ede1;
+  background-image:
+    radial-gradient(ellipse 85% 55% at 50% 0%, rgba(218, 196, 152, 0.35), transparent 70%),
+    linear-gradient(180deg, #f4efe2 0%, #efe8d7 100%);
+}
+
+/* 保证外壳层级高于全局星野画布，且不使用 backdrop-filter（遵守性能守卫） */
+body[data-skin="starry"] .app,
+body[data-skin="paper"] .app {
+  position: relative;
+  z-index: 1;
+}
+
+body[data-skin="starry"] .sidebar {
+  background: #080a0f;
+  border-right-color: var(--hair);
+}
+
+body[data-skin="paper"] .sidebar {
+  background: #ece5d5;
+  border-right-color: var(--hair);
+}
+
+body[data-skin="starry"] .pagebar {
+  background: #080a0f;
+  border-bottom-color: var(--hair);
+}
+
+body[data-skin="paper"] .pagebar {
+  background: #f1ede1;
+  border-bottom-color: var(--hair);
+}
+
+body[data-skin="starry"] .pagebar-title,
+body[data-skin="paper"] .pagebar-title,
+body[data-skin="starry"] .panel-head h3,
+body[data-skin="paper"] .panel-head h3 {
+  font-family: var(--gx-serif);
+  letter-spacing: 0.02em;
+}
+
+body[data-skin="starry"] .panel {
+  border-color: var(--hair);
+  border-radius: 16px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.022), rgba(255, 255, 255, 0) 140px), var(--panel);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03), 0 24px 48px -36px rgba(0, 0, 0, 0.9);
+}
+
+body[data-skin="paper"] .panel {
+  border-color: var(--hair);
+  border-radius: 16px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.45), rgba(255, 255, 255, 0) 140px), var(--panel);
+  box-shadow: 0 2px 8px rgba(40, 30, 10, 0.06);
+}
+
+/* 在星空版与纸面天台版中隐藏旧版纯文字 4 卡片（由 #gxUsageVkpi 图文微缩图表速读带替代） */
+body[data-skin="starry"] .us-metrics,
+body[data-skin="paper"] .us-metrics {
+  display: none !important;
+}
+
+/* ---------- 4. 用量页与事件页银河天象舞台（1:1 对应 usage-events-pro.html） ---------- */
+.gx-observatory-stage {
+  display: none;
+  margin-bottom: 16px;
+}
+
+body[data-skin="starry"] .gx-observatory-stage,
+body[data-skin="paper"] .gx-observatory-stage {
+  display: block;
+}
+
+/* 章节分隔横幅 (
+
+@keyframes gxFxPulse {
+  0%, 100% { opacity: 0.45; transform: scale(0.88); }
+  50% { opacity: 1; transform: scale(1.2); }
+}
+
+/* ── 图文一体速读指标带（紧凑版 Visual KPI Band · 
+
+/* ── 用量主舞台：左夫琅禾费双层发射光谱仪 + 右牛顿立体水晶分光仪 & Agent 行星矩阵 ── */
+
+/* 左侧画布容器脱离固有高度死锁：高度 100% 跟随右侧面板自然伸缩，减少 Agent 时立刻变短 */
+
+/* 右侧上下双舱：紧凑立体水晶棱镜 + 自然高度的 Agent 星体矩阵 */
+
+/* 智能体自定义增删管理面板 */
+
+/* 智能体星体矩阵：紧凑自然高度，不拉伸卡片，减少智能体时高度立刻收短 */
+
+/* 奇数个数（如 5 个、7 个）时最后一张卡片自动横跨两列铺满，避免右下角留空 */
+
+/* 卡片右上角移除按钮 ×（悬停显现） */
+
+/* 行星呼吸与缓慢微动（仅使用 transform 与 opacity；只在允许动效时播放，遵守合成线程守卫） */
+
+@keyframes gxPlanetFloat {
+  0%, 100% { transform: scale(0.97); opacity: 0.92; }
+  50% { transform: scale(1.04); opacity: 1; }
+}
+
+@keyframes gxAstrolabeSpin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+/* ── 事件主舞台：天顶火流星 + 浑天星盘罗盘 + 现场取证处置舱（紧凑版） ── */
+
+/* 选中火流星详情舱 (
+
+/* SVG 交互悬浮高亮 */
+
+/* ---------- 5. 团队管理 6 项新功能控件在星空版与纸面天台版下的全量美化适配 ---------- */
+
+/* (1) 排序下拉框 (#teamAdminSortSelect) 与搜索栏 */
+body[data-skin="starry"] .tm-sort-select,
+body[data-skin="starry"] #teamAdminSortSelect {
+  background-color: rgba(16, 24, 48, 0.88);
+  border: 1px solid rgba(198, 169, 122, 0.34);
+  color: #f4f1ea;
+  border-radius: 999px;
+  padding: 5px 28px 5px 12px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.28);
+}
+
+body[data-skin="paper"] .tm-sort-select,
+body[data-skin="paper"] #teamAdminSortSelect {
+  background-color: rgba(248, 241, 227, 0.95);
+  border: 1px solid rgba(138, 100, 46, 0.38);
+  color: #2b2116;
+  border-radius: 999px;
+  padding: 5px 28px 5px 12px;
+  box-shadow: 0 1px 4px rgba(80, 56, 24, 0.10);
+}
+
+/* (2) 批量上线 (#teamAdminBatchOnboardBtn)、批量分配 (#teamAdminBatchAssignBtn)、导出 CSV (#teamAdminExportBtn) */
+body[data-skin="starry"] #teamAdminBatchOnboardBtn,
+body[data-skin="starry"] #teamAdminBatchAssignBtn,
+body[data-skin="starry"] #teamAdminExportBtn {
+  border-color: rgba(198, 169, 122, 0.36);
+  background: linear-gradient(180deg, rgba(26, 38, 72, 0.88), rgba(16, 24, 48, 0.92));
+  color: #f3e5c8;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.32), 0 0 0 1px rgba(198, 169, 122, 0.12) inset;
+}
+
+body[data-skin="starry"] #teamAdminBatchOnboardBtn:hover:not(:disabled),
+body[data-skin="starry"] #teamAdminBatchAssignBtn:hover:not(:disabled),
+body[data-skin="starry"] #teamAdminExportBtn:hover:not(:disabled) {
+  border-color: rgba(229, 204, 160, 0.68);
+  background: linear-gradient(180deg, rgba(198, 169, 122, 0.28), rgba(28, 42, 78, 0.94));
+  color: #ffffff;
+}
+
+body[data-skin="paper"] #teamAdminBatchOnboardBtn,
+body[data-skin="paper"] #teamAdminBatchAssignBtn,
+body[data-skin="paper"] #teamAdminExportBtn {
+  border-color: rgba(138, 100, 46, 0.42);
+  background: linear-gradient(180deg, #faf5ea, #efe5d0);
+  color: #3a2b18;
+  box-shadow: 0 2px 6px rgba(90, 64, 28, 0.10);
+}
+
+body[data-skin="paper"] #teamAdminBatchOnboardBtn:hover:not(:disabled),
+body[data-skin="paper"] #teamAdminBatchAssignBtn:hover:not(:disabled),
+body[data-skin="paper"] #teamAdminExportBtn:hover:not(:disabled) {
+  border-color: #b8432e;
+  color: #b8432e;
+}
+
+/* (3) 端口自动推荐空闲按钮 (#tmRecommendPortBtn) */
+body[data-skin="starry"] #tmRecommendPortBtn {
+  border-color: rgba(198, 169, 122, 0.48);
+  background: linear-gradient(135deg, rgba(198, 169, 122, 0.22), rgba(95, 168, 255, 0.16));
+  color: #ffe8bd;
+}
+
+body[data-skin="paper"] #tmRecommendPortBtn {
+  border-color: rgba(158, 107, 36, 0.52);
+  background: linear-gradient(135deg, rgba(184, 67, 46, 0.12), rgba(158, 107, 36, 0.18));
+  color: #5c3a14;
+}
+
+/* (4) 分配弹窗自定义成员搜索选择器 (#tmAssignUserPicker) */
+
+/* (5) 告警药丸直达动作按钮 (.tm-tag-flag.tm-tag-action) 与成员详情抽屉 (.tm-detail) */
+body[data-skin="starry"] .tm-tag-flag.tm-tag-action {
+  box-shadow: 0 0 0 1px rgba(198, 169, 122, 0.28) inset;
+}
+
+body[data-skin="paper"] .tm-tag-flag.tm-tag-action {
+  box-shadow: 0 0 0 1px rgba(138, 100, 46, 0.28) inset;
+}
+
+body[data-skin="starry"] .tm-detail,
+body[data-skin="starry"] .tm-modal-card {
+  background: linear-gradient(180deg, #0c1328 0%, #080d1c 100%);
+  border-color: rgba(198, 169, 122, 0.36);
+  box-shadow: 0 20px 52px rgba(0, 0, 0, 0.68), 0 0 0 1px rgba(198, 169, 122, 0.16) inset;
+}
+
+body[data-skin="paper"] .tm-detail,
+body[data-skin="paper"] .tm-modal-card {
+  background: linear-gradient(180deg, #fbf7ee 0%, #f3ead8 100%);
+  border-color: rgba(138, 100, 46, 0.42);
+  box-shadow: 0 18px 44px rgba(68, 48, 22, 0.24), 0 0 0 1px rgba(138, 100, 46, 0.16) inset;
+}
+
+/* ==========================================================================
+   6. 星空版 v5.0 高定星系与环轨呼吸版 (Haute Horlogerie & Deep-Space Galaxies)
+   ========================================================================== */
+
+/* 全局深空背景画布 */
+.gx-global-sky-canvas {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  pointer-events: none;
+  z-index: 0;
+  opacity: 0.92;
+}
+
+body:not([data-skin="starry"]):not([data-skin="paper"]) .gx-global-sky-canvas,
+body:not([data-skin="starry"]):not([data-skin="paper"]) .gx-wormhole-stage,
+body:not([data-skin="starry"]):not([data-skin="paper"]) .gx-timeline-stage,
+body:not([data-skin="starry"]):not([data-skin="paper"]) .gx-logs-catalog-bar {
+  display: none !important;
+}
+
+/* 通用天象舞台外壳 (.gx-stage-shell) */
+.gx-stage-shell {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 14px 16px;
+  margin-bottom: 14px;
+  border-radius: 16px;
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  background:
+    radial-gradient(120% 90% at 15% 10%, rgba(56, 189, 248, 0.08), transparent 55%),
+    radial-gradient(100% 90% at 88% 85%, rgba(167, 139, 250, 0.08), transparent 55%),
+    linear-gradient(180deg, rgba(8, 12, 24, 0.92) 0%, rgba(5, 8, 18, 0.95) 100%);
+  box-shadow: 0 18px 42px -24px rgba(0, 0, 0, 0.82), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+body[data-skin="paper"] .gx-stage-shell {
+  border-color: rgba(138, 100, 46, 0.28);
+  background:
+    radial-gradient(120% 90% at 15% 10%, rgba(217, 119, 6, 0.06), transparent 55%),
+    linear-gradient(180deg, #faf5e8 0%, #f2e8d5 100%);
+  box-shadow: 0 8px 24px -12px rgba(72, 52, 24, 0.14), inset 0 1px 0 rgba(255, 255, 255, 0.7);
+}
+
+.gx-stage-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.gx-stage-title-group {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.gx-eyebrow {
+  font-family: var(--mono);
+  font-size: 9.5px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #38bdf8;
+  opacity: 0.88;
+}
+
+body[data-skin="paper"] .gx-eyebrow {
+  color: #b45309;
+}
+
+.gx-stage-title {
+  margin: 0;
+  font: 600 15px/1.3 var(--gx-serif, -apple-system, BlinkMacSystemFont, "PingFang SC", sans-serif);
+  color: #f8fafc;
+}
+
+body[data-skin="paper"] .gx-stage-title {
+  color: #292524;
+}
+
+.gx-stage-badges {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.gx-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 24px;
+  padding: 0 10px;
+  border-radius: 999px;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: #cbd5e1;
+  background: rgba(15, 23, 42, 0.76);
+  border: 1px solid rgba(148, 163, 184, 0.22);
+}
+
+body[data-skin="paper"] .gx-pill {
+  color: #44403c;
+  background: rgba(255, 251, 235, 0.85);
+  border-color: rgba(138, 100, 46, 0.28);
+}
+
+.gx-pill-accent {
+  color: #fde68a;
+  border-color: rgba(251, 191, 36, 0.35);
+  background: rgba(251, 191, 36, 0.1);
+}
+
+body[data-skin="paper"] .gx-pill-accent {
+  color: #92400e;
+  border-color: rgba(180, 83, 9, 0.35);
+  background: rgba(217, 119, 6, 0.1);
+}
+
+/* 顶部 4 枚 KPI 遥测卡 (
+
+/* ── 模块 1：模型能耗双栏布局（左环轨四卫星 + 右零遮挡高定激光星弦直读舱，左右严格 328px 等高对齐） ── */
+
+.gx-stage-canvas {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100% !important;
+  height: 100% !important;
+}
+
+/* 右侧：零遮挡高定激光星弦直读舱 (
+
+/* 呼吸圆点：动画只在指针悬停 / 键盘聚焦这张模型卡时播放，空闲不跑常驻动画。
+   此前动画常驻在 span 上、每帧触发一次样式重算（无头 Chrome 实测用量页空闲 6s：
+   RecalcStyleCount 194 / RecalcStyleDuration 46.6ms；把该动画去掉后同一时段 0 次 / 0ms）。
+   播放时动画挂在一个独立、只动 transform/opacity 的绝对定位伪元素上并显式 will-change，
+   让合成线程接管、不回主线程。空闲时圆点保持静态亮核 + 光晕，卡片本身仍由
+   .is-breathing 的边框 / 外发光标出「正在呼吸」，识别性不受影响。 */
+
+@keyframes gxOrbBreathPulse {
+  0%, 100% { transform: scale(0.92); opacity: 0.82; }
+  50% { transform: scale(1.28); opacity: 1; }
+}
+
+/* 3px 激光星弦轨道 (
+
+/* 零遮挡三栏对齐指标行 (
+
+/* ── 模块 3：跨星系团连接 · 引力透镜虫洞与超空间星网 (
+
+/* ── 模块 2：时间线 · 实名端口服务延迟定轨火流星卷轴 (
+
+/* ── 模块 5：事件页顶部超紧凑微缩天象横幅 (#eventsGalaxyStage) ── */
+.gx-events-shell {
+  padding: 10px 14px;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.gx-events-shell .gx-stage-header {
+  align-items: center;
+}
+
+.gx-events-shell .gx-stage-title {
+  font-size: 13.5px;
+}
+
+.gx-events-main-grid {
+  display: grid;
+  grid-template-columns: minmax(220px, 0.92fr) minmax(260px, 1.28fr);
+  gap: 10px;
+  height: 108px;
+  min-height: 108px;
+  max-height: 108px;
+  align-items: stretch;
+  overflow: hidden;
+}
+
+.gx-events-canvas-wrap {
+  position: relative;
+  width: 100%;
+  height: 108px;
+  min-height: 108px;
+  max-height: 108px;
+  border-radius: 10px;
+  border: 1px solid rgba(56, 189, 248, 0.2);
+  background: radial-gradient(circle at 50% 52%, rgba(15, 23, 42, 0.52), rgba(3, 7, 18, 0.96));
+  overflow: hidden;
+}
+
+body[data-skin="paper"] .gx-events-canvas-wrap {
+  border-color: rgba(138, 100, 46, 0.28);
+  background: radial-gradient(circle at 50% 52%, #fffbeb, #efe5d0);
+}
+
+.gx-canvas-hint {
+  position: absolute;
+  left: 10px;
+  bottom: 6px;
+  font-size: 9.5px;
+  color: rgba(148, 163, 184, 0.78);
+  pointer-events: none;
+  z-index: 2;
+}
+
+body[data-skin="paper"] .gx-canvas-hint {
+  color: #78716c;
+}
+
+.gx-canvas-tooltip {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 5;
+  min-width: 180px;
+  max-width: 220px;
+  padding: 6px 9px;
+  border-radius: 8px;
+  border: 1px solid rgba(56, 189, 248, 0.35);
+  background: rgba(8, 13, 26, 0.94);
+  color: #f8fafc;
+  font-size: 10.5px;
+  pointer-events: none;
+}
+
+.gx-flare-sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  height: 108px;
+  min-height: 108px;
+  max-height: 108px;
+  padding: 7px 10px;
+  border-radius: 10px;
+  border: 1px solid rgba(148, 163, 184, 0.14);
+  background: rgba(10, 15, 28, 0.72);
+  overflow: hidden;
+}
+
+body[data-skin="paper"] .gx-flare-sidebar {
+  background: rgba(255, 252, 245, 0.85);
+  border-color: rgba(138, 100, 46, 0.22);
+}
+
+.gx-flare-sidebar-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-family: var(--mono);
+  font-size: 9.5px;
+  color: #94a3b8;
+  flex-shrink: 0;
+}
+
+.gx-flare-sidebar-head strong {
+  color: #e2e8f0;
+  font-size: 10px;
+}
+
+body[data-skin="paper"] .gx-flare-sidebar-head strong {
+  color: #292524;
+}
+
+.gx-flare-list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.gx-flare-empty {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 100%;
+  padding: 4px 8px;
+  border-radius: 8px;
+  background: rgba(15, 23, 42, 0.45);
+}
+
+body[data-skin="paper"] .gx-flare-empty {
+  background: rgba(254, 243, 199, 0.4);
+}
+
+.gx-flare-empty-orb {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #34d399;
+  box-shadow: 0 0 8px #34d399;
+  flex-shrink: 0;
+}
+
+.gx-flare-empty strong {
+  font-size: 11.5px;
+  color: #e2e8f0;
+  white-space: nowrap;
+}
+
+body[data-skin="paper"] .gx-flare-empty strong {
+  color: #1c1917;
+}
+
+.gx-flare-empty p {
+  margin: 0;
+  font-size: 10.5px;
+  color: #64748b;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.gx-flare-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 4px 8px;
+  border-radius: 7px;
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  background: rgba(15, 23, 42, 0.78);
+  cursor: pointer;
+}
+
+body[data-skin="paper"] .gx-flare-card {
+  background: rgba(255, 251, 235, 0.9);
+  border-color: rgba(138, 100, 46, 0.24);
+}
+
+.gx-flare-card.is-error {
+  border-color: rgba(248, 113, 113, 0.4);
+}
+
+.gx-flare-card.is-warn {
+  border-color: rgba(251, 191, 36, 0.35);
+}
+
+.gx-flare-body {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  flex: 1;
+}
+
+.gx-flare-top {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-family: var(--mono);
+  font-size: 9.5px;
+  color: #94a3b8;
+  flex-shrink: 0;
+}
+
+.gx-flare-title {
+  font-size: 11px;
+  color: #f1f5f9;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+body[data-skin="paper"] .gx-flare-title {
+  color: #292524;
+}
+
+.gx-flare-ack-btn {
+  padding: 2px 7px;
+  border-radius: 999px;
+  border: 1px solid rgba(56, 189, 248, 0.4);
+  background: rgba(56, 189, 248, 0.14);
+  color: #bae6fd;
+  font-size: 10px;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.gx-flare-acked-tag {
+  font-size: 9.5px;
+  color: #64748b;
+  flex-shrink: 0;
+}
+
+/* 下钻抽屉通用紧凑样式 (.gx-Inspect-drawer) */
+.gx-Inspect-drawer {
+  padding: 8px 12px;
+  border-radius: 10px;
+  border: 1px solid rgba(56, 189, 248, 0.28);
+  background: rgba(9, 14, 28, 0.92);
+}
+
+body[data-skin="paper"] .gx-Inspect-drawer {
+  background: #fffbeb;
+  border-color: rgba(180, 83, 9, 0.32);
+}
+
+.gx-drawer-inner {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.gx-drawer-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.gx-drawer-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.gx-drawer-title {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+  flex-wrap: wrap;
+}
+
+.gx-drawer-title strong {
+  font-size: 12px;
+  color: #f8fafc;
+}
+
+body[data-skin="paper"] .gx-drawer-title strong {
+  color: #1c1917;
+}
+
+.gx-drawer-title span {
+  font-size: 10.5px;
+  color: #94a3b8;
+}
+
+.gx-drawer-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.gx-drawer-btn,
+.gx-drawer-close {
+  padding: 2px 8px;
+  border-radius: 6px;
+  border: 1px solid rgba(148, 163, 184, 0.25);
+  background: rgba(15, 23, 42, 0.8);
+  color: #e2e8f0;
+  font-size: 10.5px;
+  cursor: pointer;
+}
+
+.gx-drawer-metrics {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 6px;
+}
+
+.gx-drawer-metrics > div {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  font-size: 10px;
+  color: #64748b;
+}
+
+.gx-drawer-metrics strong {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: #e2e8f0;
+}
+
+body[data-skin="paper"] .gx-drawer-metrics strong {
+  color: #292524;
+}
+
+/* ── 模块 4：日志 · 哈佛光谱星表与 2.00 MB 星环容量回环守护 (.gx-logs-catalog-bar) ── */
+.gx-logs-catalog-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 10px 14px;
+  margin-bottom: 10px;
+  border-radius: 12px;
+  border: 1px solid rgba(56, 189, 248, 0.22);
+  background: linear-gradient(90deg, rgba(8, 13, 26, 0.94), rgba(13, 20, 38, 0.92));
+}
+
+body[data-skin="paper"] .gx-logs-catalog-bar {
+  border-color: rgba(138, 100, 46, 0.3);
+  background: linear-gradient(90deg, #faf4e6, #f2e8d4);
+}
+
+.gx-logs-spectral-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.gx-logs-eyebrow {
+  font-family: var(--mono);
+  font-size: 9.5px;
+  letter-spacing: 0.12em;
+  color: #38bdf8;
+}
+
+body[data-skin="paper"] .gx-logs-eyebrow {
+  color: #b45309;
+}
+
+.gx-logs-spectral-pills {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.gx-spec-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  background: rgba(15, 23, 42, 0.78);
+  color: #e2e8f0;
+  font-size: 11px;
+  cursor: pointer;
+  transition: border-color 0.16s ease, transform 0.16s ease;
+}
+
+body[data-skin="paper"] .gx-spec-pill {
+  background: rgba(255, 252, 245, 0.9);
+  border-color: rgba(138, 100, 46, 0.28);
+  color: #292524;
+}
+
+.gx-spec-pill:hover {
+  border-color: #38bdf8;
+  transform: translateY(-1px);
+}
+
+.gx-spec-code {
+  font-family: var(--mono);
+  font-size: 9.5px;
+  font-weight: 700;
+  padding: 1px 5px;
+  border-radius: 4px;
+}
+
+.gx-spec-code.is-all { background: rgba(148, 163, 184, 0.22); color: #f8fafc; }
+.gx-spec-code.is-o { background: rgba(248, 113, 113, 0.22); color: #fca5a5; }
+.gx-spec-code.is-b { background: rgba(251, 191, 36, 0.22); color: #fde68a; }
+.gx-spec-code.is-a { background: rgba(167, 139, 250, 0.22); color: #ddd6fe; }
+.gx-spec-code.is-g { background: rgba(52, 211, 153, 0.22); color: #a7f3d0; }
+
+.gx-logs-cap-meter {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 4px 10px;
+  border-radius: 10px;
+  border: 1px solid rgba(56, 189, 248, 0.2);
+  background: rgba(6, 10, 22, 0.65);
+}
+
+body[data-skin="paper"] .gx-logs-cap-meter {
+  background: rgba(255, 251, 235, 0.82);
+  border-color: rgba(138, 100, 46, 0.25);
+}
+
+.gx-cap-text {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.gx-cap-text strong {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: #e0f2fe;
+}
+
+body[data-skin="paper"] .gx-cap-text strong {
+  color: #78350f;
+}
+
+.gx-cap-text span {
+  font-family: var(--mono);
+  font-size: 9.5px;
+  color: #64748b;
+}
+
+/* 星空版日志行：自动前置哈佛恒星光谱分级星等徽章（纯 CSS ::before，不改 DOM 文本） */
+body[data-skin="starry"] #dlgLogs .log-line::before,
+body[data-skin="paper"] #dlgLogs .log-line::before {
+  display: inline-block;
+  margin-right: 6px;
+  padding: 0 5px;
+  border-radius: 4px;
+  font-family: var(--mono);
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  vertical-align: baseline;
+}
+
+body[data-skin="starry"] #dlgLogs .log-line.log-ok::before {
+  content: "G2";
+  color: #6ee7b7;
+  background: rgba(16, 185, 129, 0.16);
+}
+
+body[data-skin="starry"] #dlgLogs .log-line.log-warn::before {
+  content: "B1";
+  color: #fde68a;
+  background: rgba(245, 158, 11, 0.2);
+}
+
+body[data-skin="starry"] #dlgLogs .log-line.log-error::before {
+  content: "O2";
+  color: #fca5a5;
+  background: rgba(239, 68, 68, 0.24);
+}
+
+body[data-skin="starry"] #dlgLogs .log-line.log-signal::before {
+  content: "A0";
+  color: #ddd6fe;
+  background: rgba(139, 92, 246, 0.24);
+}
+
+body[data-skin="paper"] #dlgLogs .log-line.log-ok::before {
+  content: "G2";
+  color: #146c4e;
+  background: rgba(20, 108, 78, 0.12);
+}
+
+body[data-skin="paper"] #dlgLogs .log-line.log-warn::before {
+  content: "B1";
+  color: #b45309;
+  background: rgba(180, 83, 9, 0.14);
+}
+
+body[data-skin="paper"] #dlgLogs .log-line.log-error::before {
+  content: "O2";
+  color: #b91c1c;
+  background: rgba(185, 28, 28, 0.14);
+}
+
+@media (max-width: 1080px) {
+  
+  
+  
+  .gx-events-main-grid {
+    grid-template-columns: 1fr;
+    height: auto;
+    max-height: none;
+  }
+}

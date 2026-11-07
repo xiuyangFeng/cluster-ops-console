@@ -1,0 +1,50 @@
+name: CodeQL
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    - cron: "17 3 * * 1"
+
+permissions:
+  # analyze 上传 SARIF 前要读本次 workflow run（get-a-workflow-run），私有仓库缺了它直接 403。
+  actions: read
+  contents: read
+  security-events: write
+
+jobs:
+  analyze:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      # 私有仓库未开通 code scanning 时，上传 SARIF 必然 403，整条 workflow 永远是红的。
+      # 先探测：开通了照常上传到 Security 页；只有明确"未开通"才不上传，改为把结果打成注释。
+      # 其它探测失败（含已开通但还没有任何分析的 404）一律照常上传，不吞真实错误。
+      - name: Detect code scanning availability
+        id: code-scanning
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if out="$(gh api "repos/${GITHUB_REPOSITORY}/code-scanning/analyses?per_page=1" 2>&1)" \
+            || ! grep -qiE "code scanning is not enabled|advanced security must be enabled" <<<"$out"; then
+            echo "upload=always" >> "$GITHUB_OUTPUT"
+          else
+            echo "::notice::本仓库未开通 code scanning：CodeQL 照常分析，结果以注释形式列在本次运行里，不上传 Security 页。"
+            echo "upload=never" >> "$GITHUB_OUTPUT"
+          fi
+      - uses: github/codeql-action/init@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4.38.2
+        with:
+          languages: javascript
+      - uses: github/codeql-action/analyze@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4.38.2
+        with:
+          category: "/language:javascript"
+          upload: ${{ steps.code-scanning.outputs.upload }}
+          output: ${{ runner.temp }}/codeql-results
+      - name: Annotate findings (code scanning unavailable)
+        if: steps.code-scanning.outputs.upload == 'never'
+        run: |
+          # 工作流命令里 % / CR / LF 须转义，否则消息会被截断或误解析。
+          jq -r '.runs[].results[]? | "::warning file=\(.locations[0].physicalLocation.artifactLocation.uri // ""),line=\(.locations[0].physicalLocation.region.startLine // 1)::[\(.ruleId)] \(.message.text | gsub("%"; "%25") | gsub("\r"; "%0D") | gsub("\n"; "%0A"))"' \
+            "$RUNNER_TEMP"/codeql-results/*.sarif

@@ -1,0 +1,486 @@
+/* brief.css —— 概览首屏：「数据链路 + 今日简报」两栏、链路底部「隧道稳定性」、简报卡片，
+   以及「需要处理的事件」空时收成一行。
+   归属：简报 app/brief-controller.js / render/brief-view.js（文案在后端 lib/brief/model.mjs）；
+   隧道稳定性 app/tunnel-stability-controller.js / render/tunnel-stability-view.js（表格 / 响应线 / 日色块在 tunnels.css）。
+   约束：只用 styles.css 的令牌（深浅两套自动跟随）；颜色只表达状态且都配文字，语气读 data-tone。 */
+
+/* ---- 1. 首屏顶部：链路（左）+ 简报（右） ---- */
+
+.ov-top {
+  display: grid;
+  grid-template-columns: minmax(0, 1.5fr) minmax(360px, 1fr);
+  gap: var(--space-3);
+  align-items: stretch;
+}
+
+/* 一侧被隐藏（「界面面板」里关掉了今日简报）：另一侧占满整行。类名由 app/panels.js 切换，不用 :has()；
+   复合选择器的权重高于下方各断点里的 .ov-top，不必逐个断点覆写。 */
+.ov-top.is-single { grid-template-columns: minmax(0, 1fr); }
+
+/* 链路收进左栏：链条撑满面板高度（分叉区吃掉多出来的高度，去向卡与底行贴底），底部是隧道稳定性 */
+.ov-top .panel-chain { min-width: 0; }
+.ov-top .chain-scroller {
+  flex: 1;
+  display: flex;
+  padding: var(--space-5) var(--space-4) var(--space-3);
+}
+
+/* 隧道稳定性：每条隧道一行——名称 | 在线条（绿色底条上红色刻度 = 断开时段，宽度按时长、最窄 2px；
+   斜纹 = 没有记录）+ SSH 响应细线 | 当前状态 +「N 次断线 · 可用率」；底部「最近一次」与可展开的断线清单。
+   数据来自断线账本（/api/tunnel-stability）与 /api/metrics 的采集耗时。 */
+.chain-uptime {
+  display: grid;
+  grid-template-columns: minmax(4.5em, max-content) minmax(0, 1fr) minmax(7.5em, max-content);
+  gap: 7px var(--space-3);
+  padding: var(--space-3) var(--space-4) var(--space-3);
+  border-top: 1px solid var(--hud-border);
+  font-size: var(--text-sm);
+}
+
+/* 两栏时在线条压到链路面板底部；展开节点详情时紧跟详情 */
+.ov-top .chain-uptime { margin-top: auto; }
+.ov-top .chain-detail:not([hidden]) + .chain-uptime { margin-top: 0; }
+
+.cu-head {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px var(--space-2);
+  color: var(--label-dim);
+  font-size: var(--text-xs);
+}
+
+.cu-title { display: inline-flex; align-items: center; gap: var(--space-2); }
+.cu-title b { color: var(--text-soft); font-size: var(--text-sm); font-weight: 600; white-space: nowrap; }
+.cu-window { flex-shrink: 0; }
+.cu-window button { padding: 1px 8px; font-size: 11px; }
+
+/* 时刻刻度与条同一列（同一套 grid），按位置绝对定位；今天 0 点加粗 */
+.cu-axis-row { margin-top: -2px; }
+.cu-axis {
+  position: relative;
+  height: 14px;
+  color: var(--label-dim);
+  font-size: var(--text-xs);
+  font-variant-numeric: tabular-nums;
+}
+.cu-tick {
+  position: absolute;
+  top: 0;
+  transform: translateX(-50%);
+  white-space: nowrap;
+}
+.cu-tick-today { color: var(--text-softer); font-weight: 600; }
+.cu-now {
+  align-self: start;
+  color: var(--label-dim);
+  font-size: var(--text-xs);
+  line-height: 14px;
+  text-align: left;
+}
+
+/* 今天 0 点竖线：穿过每条在线条，略高出条身 */
+.cu-midnight {
+  position: absolute;
+  top: -3px;
+  bottom: -3px;
+  z-index: 1;
+  width: 1px;
+  background: var(--text-softer);
+  opacity: 0.55;
+}
+
+/* 账本开始记录之前：未观测（斜纹灰），不冒充在线 */
+.cu-unobserved {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  background: repeating-linear-gradient(135deg, var(--hud-border-strong) 0 3px, var(--well-bg) 3px 6px);
+}
+
+.cu-legend { display: inline-flex; align-items: center; gap: 6px; }
+.cu-key {
+  display: inline-block;
+  width: 10px;
+  height: 6px;
+  margin-left: 4px;
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--green) 55%, transparent);
+}
+.cu-key-drop { background: var(--red); }
+.cu-key-warn { background: var(--yellow); }
+.cu-key-resp { height: 2px; border-radius: 1px; background: var(--cyan); }
+.cu-key-none { background: repeating-linear-gradient(135deg, var(--hud-border-strong) 0 2px, var(--well-bg) 2px 4px); }
+
+/* 各行共用 .chain-uptime 的三列（subgrid）：名称列与状态列按最长的那条定宽，条的左右缘各行对齐。
+   状态列此前定死 7.5em，「断开中 · 16 分 35 秒」这类较长的文案会被面板边缘裁掉。 */
+.cu-row {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: subgrid;
+  align-items: center;
+}
+
+.cu-name { max-width: 9em; overflow: hidden; text-overflow: ellipsis; color: var(--text-soft); white-space: nowrap; }
+
+.cu-bar {
+  position: relative;
+  height: 10px;
+  overflow: visible;
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--green) 38%, transparent);
+}
+
+.cu-drop {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  z-index: 2;
+  padding: 0;
+  border: 0;
+  border-radius: 1px;
+  background: var(--red);
+  cursor: pointer;
+}
+
+/* 刻度很窄：用伪元素把可点区域上下各扩 5px，不改变画出来的宽度 */
+.cu-drop::after {
+  content: "";
+  position: absolute;
+  inset: -5px -3px;
+}
+
+.cu-drop:hover,
+.cu-drop:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--red) 45%, transparent);
+  outline-offset: 1px;
+}
+
+/* 数据行：状态列两行（在线时长 / 断线次数与可用率），按首行对齐；条与响应线在中间一列上下叠放 */
+.cu-row:not(.cu-axis-row) { align-items: start; }
+.cu-name { line-height: 16px; }
+.cu-track { display: flex; flex-direction: column; gap: 3px; min-width: 0; padding-top: 3px; }
+.cu-resp { height: 14px; }
+.cu-daily { padding-top: 4px; }
+
+.cu-state {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 1px;
+  color: var(--muted-strong);
+  font-variant-numeric: tabular-nums;
+  line-height: 16px;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.cu-state[data-tone="critical"] { color: var(--red-soft); }
+.cu-summary { color: var(--muted); font-size: var(--text-xs); cursor: default; }
+.cu-summary[data-tone="warn"] { color: var(--yellow); }
+.cu-summary[data-tone="critical"] { color: var(--red-soft); }
+
+/* 底部一行：最近一次断线 + 展开清单的按钮；清单在下面通栏 */
+.cu-foot {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  min-width: 0;
+  padding-top: 6px;
+  border-top: 1px dashed var(--hud-border);
+  color: var(--text-softer);
+  font-size: var(--text-xs);
+}
+.cu-last { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cu-label { margin-right: var(--space-2); color: var(--label-dim); }
+.cu-more {
+  flex-shrink: 0;
+  display: inline-flex;
+  gap: 4px;
+  padding: 2px 8px;
+  border: 1px solid var(--hud-border-strong);
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--text-soft);
+  font: inherit;
+  font-size: var(--text-xs);
+  cursor: pointer;
+}
+.cu-more:hover,
+.cu-more:focus-visible { border-color: var(--cyan); color: var(--cyan); }
+
+.cu-drops {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 280px;
+  overflow-y: auto;
+}
+.cu-causes { display: flex; flex-direction: column; gap: 2px; margin: 0; color: var(--text-softer); font-size: var(--text-xs); }
+.cu-causes b { margin-right: var(--space-2); color: var(--text-soft); font-weight: 500; }
+.cu-drops-table { font-size: var(--text-xs); }
+.cu-drops-note { margin: 0; color: var(--muted); font-size: var(--text-xs); }
+/* 近 7 天日色块下的日期（放在 .cu-causes b 之后：特异性升序，见 lint noDescendingSpecificity） */
+.cu-daily .ts-day b { font-size: 10.5px; }
+
+/* ---- 2. 今日简报卡片 ---- */
+
+.panel-brief .panel-header { row-gap: var(--space-1); flex-wrap: wrap; }
+.panel-brief .panel-header h2 { white-space: nowrap; }
+.panel-brief .us-segmented { flex-shrink: 0; }
+
+.bf-body {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4) var(--space-4);
+}
+
+/* 一句话结论：先给判断，再给数字 */
+.bf-headline {
+  margin: 0;
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-md);
+  background: var(--well-bg);
+  box-shadow: inset 3px 0 0 var(--gray);
+  color: var(--text);
+  font-size: var(--text-base);
+  line-height: 1.55;
+}
+
+.bf-headline[data-tone="ok"] { box-shadow: inset 3px 0 0 var(--green); }
+.bf-headline[data-tone="warn"] { box-shadow: inset 3px 0 0 var(--yellow); }
+.bf-headline[data-tone="critical"] { box-shadow: inset 3px 0 0 var(--red); }
+.bf-headline[data-tone="neutral"] { box-shadow: inset 3px 0 0 var(--cyan); }
+.bf-headline strong { color: var(--text-strong); font-weight: 600; }
+
+/* 指标格：一张分栏卡（栏间 1px 发丝线），与集群面板 KPI 同一手法。通常四格；用量 / 作业模块关闭时
+   对应格子不出现（v2.47），剩 2–3 格时末尾落单的一格占满整行，不露出底色空格。 */
+.bf-stats {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1px;
+  overflow: hidden;
+  background: var(--hud-border);
+  border: 1px solid var(--hud-border);
+  border-radius: var(--radius-hud);
+}
+
+.bf-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+  padding: 9px 12px 10px;
+  border: 0;
+  background: var(--card-bg);
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.bf-stat:last-child:nth-child(odd) { grid-column: 1 / -1; }
+.bf-stat:hover { background: var(--panel-hover); }
+.bf-stat:focus-visible { outline: 2px solid var(--cyan); outline-offset: -2px; }
+
+.bf-label {
+  color: var(--label-dim);
+  font-size: var(--text-xs);
+}
+
+.bf-value {
+  color: var(--text-strong);
+  font-family: var(--font-display);
+  font-size: var(--text-xl);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+  font-weight: 600;
+  line-height: 1.25;
+  white-space: nowrap;
+}
+
+.bf-value small {
+  margin-left: 2px;
+  color: var(--muted-strong);
+  font-size: var(--text-sm);
+  font-weight: 500;
+}
+
+.bf-stat[data-tone="warn"] .bf-value { color: var(--yellow); }
+.bf-stat[data-tone="critical"] .bf-value { color: var(--red); }
+
+.bf-sub {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: var(--text-xs);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 值得留意：最多 3 条，每条可跳到对应视图 */
+.bf-notes h3 {
+  margin: 0 0 var(--space-1);
+  color: var(--muted-strong);
+  font-size: var(--text-sm);
+  font-weight: 600;
+}
+
+.bf-notes ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.bf-notes li {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  padding: 5px 0;
+  border-top: 1px solid var(--hud-border);
+  color: var(--text-soft);
+  font-size: var(--text-sm);
+  line-height: 1.5;
+}
+
+.bf-notes li:first-child { border-top: 0; }
+
+.bf-notes li::before {
+  content: "";
+  flex: none;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--gray);
+  transform: translateY(-1px);
+}
+
+.bf-notes li[data-tone="warn"]::before { background: var(--yellow); }
+.bf-notes li[data-tone="critical"]::before { background: var(--red); }
+.bf-notes li[data-tone="info"]::before { background: var(--cyan); }
+
+/* 失败作业的原因可能是很长的报错 / 路径（v2.49）：任意处可断行，右侧「集群队列 →」不被挤走 */
+.bf-note-text { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+
+/* 上次查看之后新出现的条目 */
+.bf-new {
+  display: inline-block;
+  margin-right: 6px;
+  padding: 0 5px;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--cyan) 18%, transparent);
+  color: var(--cyan);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  line-height: 1.6;
+  vertical-align: 1px;
+}
+
+.bf-note-link {
+  flex: none;
+  border: 0;
+  background: none;
+  color: var(--cyan);
+  font: inherit;
+  font-size: var(--text-xs);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.bf-foot {
+  padding: var(--space-2) var(--space-4);
+  border-top: 1px solid var(--hud-border);
+  color: var(--label-dim);
+  font-size: var(--text-xs);
+}
+
+/* ---- 3. 需要处理的事件：没事件时收成一行（只剩表头），有事件时照常展开 ---- */
+
+.panel-overview-events.is-collapsed .panel-header { border-bottom: 0; }
+.panel-overview-events.is-collapsed .overview-incident-summary { display: none; }
+.panel-overview-events .badge[data-tone="ok"] { color: var(--green); }
+
+/* ---- 4. 中等宽度仍并排、只有很窄才上下堆叠（链路在上） ----
+   断点按内容区宽度（shell.css 的 content 容器）：窗口 1028 + 细栏时内容区约 908px、1280 + 展开侧栏约 992px，
+   都落在这一档。上下堆叠会让首屏多出一整屏高度，所以这一档收紧链路节点（圈 / 列宽 / 字号），
+   简报最窄 320px、说明文字允许换行（不出省略号）；内容区窄于 812px 才上下堆叠。 */
+
+@container content (max-width: 1051px) {
+  .ov-top { grid-template-columns: minmax(0, 1.35fr) minmax(320px, 1fr); }
+  .ov-top .chain-scroller { padding: var(--space-4) var(--space-3) var(--space-3); }
+  .ov-top .chain-uptime {
+    grid-template-columns: minmax(3.5em, max-content) minmax(0, 1fr) minmax(6em, max-content);
+    column-gap: var(--space-2);
+    padding-inline: var(--space-3);
+  }
+  .ov-top .bf-body { padding-inline: var(--space-3); }
+  .ov-top .bf-sub { white-space: normal; }
+  .ov-top .bf-value { font-size: var(--text-lg); }
+}
+
+@container content (max-width: 811px) {
+  .ov-top { grid-template-columns: minmax(0, 1fr); }
+}
+
+@container content (max-width: 512px) {
+  .bf-value { font-size: var(--text-lg); }
+  .bf-sub { white-space: normal; }
+  .chain-uptime { grid-template-columns: minmax(3.5em, max-content) minmax(0, 1fr) minmax(6.5em, max-content); column-gap: var(--space-2); }
+  .cu-tick:not(.cu-tick-today):nth-child(odd) { display: none; }
+}
+
+/* ---- 5. 简报杂项：日期切换、加载 / 空状态 ---- */
+
+.bf-days {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-shrink: 0;
+}
+
+.bf-archive {
+  height: 26px;
+  padding-top: 0;
+  padding-bottom: 0;
+  font-size: var(--text-xs);
+}
+
+.bf-loading,
+.bf-empty {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .bf-stat,
+  .cu-drop { transition: background-color 0.15s ease, outline-color 0.15s ease; }
+}
+
+/* v2.88 同账号多台 Mac 接力：本机待命（另一台 Mac 在承载）的时段——淡强调色，不是断线 */
+.cu-standby {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  background: color-mix(in srgb, var(--accent, #4c8bf5) 28%, transparent);
+}
+
+/* 承载切换记录：时间 · 服务器 · 方向（接到本机 / 本机待命） */
+.cu-handovers {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--text-soft);
+}
+.cu-handovers .cu-handover > b { font-weight: 600; color: var(--text); }
+.cu-handovers .cu-handover[data-role="active"] > b { color: var(--accent, #4c8bf5); }

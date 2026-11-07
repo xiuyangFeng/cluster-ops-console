@@ -1,0 +1,45 @@
+{
+  "name": "codex-tunnel-monitor",
+  "version": "2.94.0",
+  "description": "Codex Tunnel Desktop Monitor with macOS Dynamic Island Style",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/xiuyangFeng/cluster-ops-console.git"
+  },
+  "license": "MIT",
+  "main": "electron-main.mjs",
+  "type": "module",
+  "scripts": {
+    "start": "node scripts/launch.mjs",
+    "setup": "node scripts/setup-wizard.mjs",
+    "setup:undo": "node scripts/setup-undo.mjs",
+    "postinstall": "node scripts/install-electron-runtime.mjs",
+    "electron:install": "node scripts/install-electron-runtime.mjs",
+    "dev": "electron .",
+    "monitor": "node scripts/launch.mjs --web",
+    "app:update": "node scripts/hot-update.mjs",
+    "update": "node scripts/self-update.mjs",
+    "test:browser": "node scripts/browser-smoke.mjs",
+    "test": "node --test --test-concurrency=4 \"scripts/*.test.mjs\" \"work/**/*.test.mjs\"",
+    "test:tz": "node scripts/test-tz.mjs",
+    "test:coverage": "node --test --experimental-test-coverage \"scripts/*.test.mjs\" \"work/**/*.test.mjs\"",
+    "clean": "node scripts/clean.mjs",
+    "clean:dry": "node scripts/clean.mjs --dry-run",
+    "release-scan": "node scripts/release-scan.mjs",
+    "release:promote": "node scripts/release-promote.mjs",
+    "perf:baseline": "node scripts/perf-baseline.mjs",
+    "lint": "biome check .",
+    "perf:ui": "node scripts/perf-ui/bench.mjs",
+    "perf:anim": "node scripts/perf-ui/anim-bench.mjs",
+    "package:colleague": "node scripts/package-colleague.mjs",
+    "package:mac": "bash scripts/package-macos.sh",
+    "package:windows": "node scripts/build-windows-app.mjs --zip"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.5.14",
+    "electron": "44.4.5"
+  },
+  "engines": {
+    "node": ">=22.12.0 <27"
+  }
+}

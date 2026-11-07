@@ -1,0 +1,552 @@
+/* shell.css —— 页面外壳：侧边栏（品牌 / 通道状态 / 搜索 / 视图 / 诊断 / 操作）、内容区与吸顶页头条、
+   告警横幅与注意力队列、卡顿信号红条、热更新横幅。
+   归属：app/sidebar.js（侧栏开合 / 浮层 / 提示 / 页名）、app/view-tabs.js（视图切换）、
+   render/checklist.js（#alertBanner）/ attention.js / signal-banner.js / update-banner.js。
+   宽度：侧栏展开 232px、细栏 64px；窗口 <1180 时版面固定按细栏排，展开的侧栏浮在内容上（不重排）。
+   内容区是名为 content 的尺寸容器：各区块的断点一律写 @container content (…)，不要按窗口宽写 @media
+   （有了侧栏，内容宽 ≠ 窗口宽）。 */
+
+:root {
+  --sidebar-expanded: 232px;
+  --sidebar-rail: 64px;
+  --sidebar-w: var(--sidebar-expanded);   /* 侧栏当前画出来的宽度 */
+  --layout-w: var(--sidebar-w);           /* 内容区让出的宽度（窄窗浮层模式下固定为细栏宽） */
+  --content-pad: max(28px, calc((100vw - var(--layout-w) - 1440px) / 2));
+}
+html.sidebar-rail { --sidebar-w: var(--sidebar-rail); }
+html.sidebar-narrow { --sidebar-w: var(--sidebar-rail); --layout-w: var(--sidebar-rail); }
+html.sidebar-narrow.sidebar-overlay-open { --sidebar-w: var(--sidebar-expanded); }
+/* 收起 / 展开的 240ms 里内容区用 transform 补间（sidebar.js 的 FLIP），右缘会短暂伸出窗口：只在这段时间裁掉，
+   平时不裁（真有内容溢出时要看得见，冒烟测试的横向溢出检查也要能报出来） */
+html.sidebar-animating,
+html.sidebar-animating body { overflow-x: clip; }
+
+/* ===== 内容区：面板纵向流式堆叠，整页随内容滚动；最大 1440 居中 ===== */
+.console {
+  container: content / inline-size;
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  margin-left: var(--layout-w);
+  padding: 0 var(--content-pad) var(--space-7);
+}
+.view.active { display: flex; flex-direction: column; gap: var(--space-4); }
+/* 首帧恢复上次停留的视图（sidebar-boot.js 打 data-boot-view，view-tabs.js 接手后撤掉）：概览让位、那一页先显示 */
+html[data-boot-view] #view-overview { display: none; }
+/* 上次是团队管理员：状态回来之前就把「团队管理」入口画出来（sidebar-boot.js 打的标记，app.js 按真实状态撤） */
+/* biome-ignore lint/complexity/noImportantStyles: 要压过全局 [hidden] 的 display: none !important */
+html[data-team-admin] #tab-team[hidden] { display: flex !important; }
+/* biome-ignore lint/complexity/noImportantStyles: 同上（存储管理入口同样只给管理员） */
+html[data-team-admin] #tab-storage[hidden] { display: flex !important; }
+html[data-boot-view="servers"] #view-servers,
+html[data-boot-view="events"] #view-events,
+html[data-boot-view="usage"] #view-usage,
+html[data-boot-view="team"] #view-team,
+html[data-boot-view="storage"] #view-storage {
+  /* biome-ignore lint/complexity/noImportantStyles: 要压过全局 [hidden] 的 display: none !important */
+  display: flex !important;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+.view > * { min-width: 0; }
+/* perf：视口外的大块先不排版、不绘制（服务器页的集群节点 / 作业队列有上千个元素，用量页的会话表同理）。
+   实测切到服务器页首帧 80ms → 24ms、启动主线程工作量少三成。滚到附近时浏览器才排它们。
+   占位高度 --ph 由 app/skeleton.js 按这块上次的真实高度写在元素上：第一次显示时浏览器会先按占位画一帧，
+   占位等于真实高度才不会跳。守护进程面板除外：它由隐藏变显示、又没有可靠的记忆高度，在视口里会闪一下。
+   面板本身就是 overflow: hidden，加上的绘制约束不会多裁掉什么。 */
+.view > .panel:not(#daemonsPanel):not(#resourcesPanel) {
+  content-visibility: auto;
+  contain-intrinsic-size: auto var(--ph, 600px);
+}
+#resourcesPanel,
+#clusterPanel[data-settled="1"] {
+  content-visibility: visible;
+  contain: content;
+}
+#clusterPanel:not([data-settled="1"]) .cl-body > .cl-section,
+#clusterPanel:not([data-settled="1"]) .cl-split {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 600px;
+}
+#clusterPanel[data-settled="1"] .cl-body > .cl-section,
+#clusterPanel[data-settled="1"] .cl-split {
+  contain: layout style;
+}
+
+/* ===== 吸顶页头条：页名（服务器页带查看中的服务器）+ Agent 状态胶囊。
+   高 56：标题中线 28 = macOS 红绿灯中线。实心底色、不用 backdrop-filter（吸顶元素上的模糊每次滚动都要重算）。 */
+.pagebar {
+  position: sticky;
+  top: 0;
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  min-height: 56px;
+  margin: 0 calc(-1 * var(--content-pad));
+  padding: 0 var(--content-pad);
+  background: var(--bg);
+  border-bottom: 1px solid transparent;
+  transition: border-color 0.16s ease;
+}
+.pagebar.is-scrolled { border-bottom-color: var(--hud-border); }
+.pagebar-title { display: flex; align-items: baseline; gap: 10px; min-width: 0; }
+.pagebar-title h1 {
+  font-family: var(--font-display);
+  font-size: 19px;
+  font-weight: 650;
+  letter-spacing: 0.01em;
+  color: var(--text-strong);
+  white-space: nowrap;
+}
+.pagebar-crumb { font-size: var(--text-sm); color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pagebar:not([data-view="servers"]):not([data-view="team"]) .pagebar-crumb { display: none; }
+
+/* 页头条下方的横幅区（注意力队列 / 信号红条 / 热更新 / Agent 详情）：没有横幅时只剩 16px 下边距，
+   恰好是页头条与第一块面板之间的间距——不靠 JS 判断「空不空」。 */
+.console-header {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding-bottom: var(--space-4);
+  position: relative;
+}
+
+/* ===== Agent 状态胶囊（页头条右侧；卡片本体样式在 overview.css 的 .agent-pill，这里改成胶囊形） ===== */
+.pagebar-agents { margin-left: auto; min-width: 0; display: flex; align-items: center; }
+/* 胶囊条必须能缩到父容器以内：flex 子项默认 min-width:auto（= 内容宽），
+   不写 min-width:0 时窄窗下整条撑出视口、整页横向溢出（v2.57 第二轮 #3） */
+.pagebar-agents .agent-strip { display: flex; flex-wrap: nowrap; gap: var(--space-2); min-width: 0; background: transparent; border: 0; border-radius: 0; overflow: visible; }
+.pagebar-agents .agent-pill {
+  flex: 0 1 auto;
+  gap: 7px;
+  min-height: 30px;
+  padding: 4px 5px 4px 11px;
+  border: 1px solid var(--hud-border);
+  border-radius: 999px;
+  background: var(--panel);
+}
+.pagebar-agents .agent-pill:hover { border-color: var(--hud-border-strong); background: var(--panel-hover); }
+/* 卡片版的选中底色 / 顶边线与异常左色条（overview.css）不适合圆角胶囊：选中只描边，异常改为状态色描边 */
+.pagebar-agents .agent-pill.selected { background: var(--panel); box-shadow: none; border-color: color-mix(in srgb, var(--cyan) 38%, var(--hud-border)); }
+.pagebar-agents .agent-pill:is(.state-degraded, .state-waiting, .state-warn, .state-auth-required, .state-down, .state-error, .state-missing, .state-revoked, .state-banned) {
+  box-shadow: none;
+  border-color: color-mix(in srgb, var(--tone) 50%, var(--hud-border));
+}
+.pagebar-agents .agent-pill::before,
+.pagebar-agents .agent-pill::after { display: none; }
+.pagebar-agents .agent-chip-row { display: none; }
+.pagebar-agents :is(.agent-pill-name, .agent-pill-headline) { font-size: var(--text-sm); }
+/* 名称也允许省略：条缩窄后胶囊内容不得顶出胶囊边框（详情箭头始终留在框内） */
+.pagebar-agents .agent-pill-name { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; font-weight: 600; }
+.pagebar-agents .agent-card-metric { font-size: var(--text-sm); color: var(--muted-strong); }
+/* 「详情」收成圆形箭头按钮（文字留给读屏：aria-expanded + aria-controls 不变） */
+.pagebar-agents .agent-drawer-toggle { font-size: 0; width: 22px; height: 22px; padding: 0; border-radius: 50%; display: grid; place-items: center; }
+.pagebar-agents .agent-drawer-toggle .drawer-arrow { font-size: 8px; margin: 0; }
+.pagebar-agents .agent-drawer-toggle:hover { background: var(--hover-bg); }
+@container content (max-width: 640px) {
+  /* 窄窗只留状态点 + 名称 + 详情：结论缩到只剩省略号反而是噪声，完整内容在悬停提示与详情里 */
+  .pagebar-agents :is(.agent-card-metric, .agent-pill-headline) { display: none; }
+}
+
+/* ===== 侧边栏 ===== */
+.sidebar {
+  position: fixed;
+  inset: 0 auto 0 0;
+  z-index: 60;
+  width: var(--sidebar-w);
+  display: flex;
+  flex-direction: column;
+  padding: 14px 10px 12px;
+  background: var(--sidebar-bg);
+  overflow: hidden;
+  user-select: none;
+  transition: width 240ms var(--ease-standard), box-shadow 240ms var(--ease-standard);
+}
+/* 右分隔线用伪元素画：桌面壳里从红绿灯拖拽区下方开始，细栏时绿灯跨在边界上也不会被线穿过 */
+.sidebar::after { content: ""; position: absolute; top: 0; right: 0; bottom: 0; width: 1px; background: var(--hud-border); pointer-events: none; }
+/* ===== macOS 桌面壳（hiddenInset 标题栏，app.js 按 electronAPI.platform 打 data-shell）=====
+   红绿灯在窗口 (18, 22)、三枚共约 52px 宽（desktop/windows.mjs trafficLightPosition）：
+   落在侧栏顶部 46px 的拖拽区里；页头条也是拖拽区（其中的控件排除在外）。 */
+[data-shell="mac-desktop"] .sidebar { padding-top: 50px; }
+[data-shell="mac-desktop"] .sidebar::before { content: ""; position: absolute; inset: 0 0 auto 0; height: 46px; -webkit-app-region: drag; }
+[data-shell="mac-desktop"] .sidebar::after { top: 46px; }
+[data-shell="mac-desktop"] .pagebar { -webkit-app-region: drag; }
+[data-shell="mac-desktop"] .pagebar :is(button, [role="button"], select, input, a) { -webkit-app-region: no-drag; }
+
+html.sidebar-narrow.sidebar-overlay-open .sidebar { box-shadow: 18px 0 48px rgba(0, 0, 0, 0.35); }
+.sidebar-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 55;
+  background: var(--backdrop-bg-2);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 200ms var(--ease-standard);
+}
+html.sidebar-narrow.sidebar-overlay-open .sidebar-scrim { opacity: 1; pointer-events: auto; }
+
+/* 所有行共用：左内边距 14 → 图标中心恰好落在细栏中线（10 + 14 + 8 = 32）；
+   展开 / 收起时图标原地不动、行高不变，只有文字淡入淡出。 */
+.sidebar-item {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 32px;
+  margin: 0;
+  padding: 0 10px 0 14px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--muted-strong);
+  font: inherit;
+  font-size: var(--text-base);
+  text-align: left;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background-color 0.12s ease, color 0.12s ease;
+}
+.sidebar-icon { width: 16px; height: 16px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+.sidebar-item:hover { background: var(--hover-bg); color: var(--text-strong); }
+.sidebar-item:focus-visible { outline: 2px solid var(--border-focus); outline-offset: -2px; }
+.sidebar-item[hidden] { display: none; }
+.sidebar-item[aria-selected="true"] { background: var(--active-bg); color: var(--text-strong); font-weight: 550; }
+.sidebar-item[aria-selected="true"] .sidebar-icon { color: var(--cyan); }
+.sidebar-label { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.sidebar-kbd { font-family: var(--font-mono); font-size: 10.5px; line-height: 16px; color: var(--label-dim); border: 1px solid var(--hud-border-strong); border-radius: 4px; padding: 0 4px; }
+.sidebar-count,
+#jobNotificationsCount {
+  min-width: 18px;
+  margin: 0;
+  padding: 0 5px;
+  border-radius: 9px;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 18px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-strong);
+  background: var(--active-bg);
+}
+.sidebar-count[data-tone="crit"] { color: var(--red); background: var(--tint-crit); }
+#jobNotificationsCount { color: var(--cyan); background: var(--tint-accent); }
+:is(.sidebar-count, #jobNotificationsCount)[hidden] { display: none; }
+/* 细栏时计数换成图标右上角的 7px 圆点 */
+.sidebar-dot {
+  position: absolute;
+  left: 25px;
+  top: 6px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--red);
+  box-shadow: 0 0 0 2px var(--sidebar-bg);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.14s ease;
+}
+#jobNotificationsBtn .sidebar-dot { background: var(--cyan); }
+
+/* 品牌 */
+.sidebar-brand { display: flex; align-items: center; gap: 10px; min-height: 40px; margin-bottom: 6px; padding: 0 8px; }
+.sidebar-logo { width: 28px; height: 28px; flex: none; border-radius: 8px; }
+.sidebar-brand-text { display: flex; flex-direction: column; flex: none; white-space: nowrap; }
+.sidebar-product { font-size: 13.5px; font-weight: 650; letter-spacing: 0.01em; color: var(--text-strong); }
+.version-badge {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 15px;
+  color: var(--label-dim);
+  cursor: pointer;
+  align-self: flex-start;
+  transition: color 0.15s ease;
+}
+.version-badge:hover { color: var(--cyan); text-decoration: underline; text-underline-offset: 2px; }
+
+/* 通道状态：常驻；颜色跟随 body[data-health]（--health，映射在 styles.css「状态语气」）；异常时出「一键修复」 */
+.sidebar-health {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 40px;
+  margin: 2px 0 10px;
+  padding: 8px 10px 8px 14px;
+  border: 1px solid var(--hud-border);
+  border-radius: 10px;
+  background: var(--panel);
+  white-space: nowrap;
+}
+.pulse-ring {
+  width: 8px;
+  height: 8px;
+  margin: 0 4px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: var(--health, var(--gray));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--health, var(--gray)) 22%, transparent);
+  transition: background-color 0.3s ease;
+}
+@media (prefers-reduced-motion: no-preference) {
+  body[data-health="waiting"] .pulse-ring { animation: waitPulse 1.2s ease-in-out infinite alternate; }
+}
+@keyframes waitPulse {
+  to { opacity: 0.35; }
+}
+.health-text { display: flex; align-items: baseline; gap: 6px; min-width: 0; }
+.health-text .caption { font-size: var(--text-xs); color: var(--muted); }
+.overall { font-size: var(--text-base); font-weight: 600; font-variant-numeric: tabular-nums; transition: color 0.3s ease; }
+body[data-health] .overall { color: var(--health); }
+body:is([data-health="stopped"], [data-health="setup"]) .overall { color: var(--muted); }
+.sidebar-repair { margin-left: auto; padding: 3px 8px; font-size: var(--text-xs); flex-shrink: 0; }
+
+/* 搜索（命令面板入口，放大镜图标 .cmd-search-icon 在 dialogs.css） */
+.cmd-trigger-btn {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 32px;
+  margin-bottom: 8px;
+  padding: 0 8px 0 14px;
+  border: 1px solid var(--hud-border);
+  border-radius: 8px;
+  background: var(--panel);
+  color: var(--muted);
+  font: inherit;
+  font-size: var(--text-base);
+  text-align: left;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: border-color 0.15s ease, color 0.15s ease, background-color 0.15s ease;
+}
+.cmd-trigger-btn:hover { border-color: var(--hud-border-strong); color: var(--text); }
+.cmd-trigger-btn .cmd-search-icon { width: 15px; height: 15px; flex: none; margin: 0 0 0 1px; }
+.cmd-kbd-badge {
+  font-family: var(--font-sans);
+  font-size: var(--text-xs);
+  background: rgba(var(--surface-rgb), 0.07);
+  border-radius: 4px;
+  padding: 0 5px;
+  color: var(--muted);
+}
+
+/* 导航：nav 上挂着浮层入口（[data-dialog]）的点击委托（app/dialogs.js）。放不下时只有导航滚动，操作组贴底。 */
+.sidebar-nav {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  scrollbar-width: none;
+}
+.sidebar-nav::-webkit-scrollbar { display: none; }
+.sidebar-group { display: flex; flex-direction: column; gap: 1px; }
+.sidebar-group + .sidebar-group { margin-top: 6px; }
+.sidebar-group-label {
+  position: relative;
+  display: flex;
+  align-items: center;
+  height: 26px;
+  padding-left: 14px;
+  font-size: var(--text-xs);
+  color: var(--label-dim);
+  white-space: nowrap;
+}
+/* 细栏时文字换成一根短分隔线，行高不变 */
+.sidebar-group-label::after {
+  content: "";
+  position: absolute;
+  left: 18px;
+  width: 8px;
+  height: 1px;
+  background: var(--hud-border-strong);
+  opacity: 0;
+  transition: opacity 0.14s ease;
+}
+.view-tabs { display: flex; flex-direction: column; gap: 1px; }
+.sidebar-group.sidebar-actions { margin-top: auto; padding-top: 10px; position: sticky; bottom: 0; background: var(--sidebar-bg); }
+/* 「控制」是侧栏唯一的描边入口 */
+.sidebar-item-primary { margin-top: 6px; border: 1px solid var(--hud-border-strong); background: var(--panel); color: var(--text); }
+.sidebar-item-primary:hover { background: var(--panel-hover); }
+.sidebar-foot { margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--hud-border); }
+.sidebar-foot .sidebar-item { color: var(--label-dim); }
+.sidebar-foot .sidebar-item:hover { color: var(--text-strong); }
+.sidebar-toggle-icon { transition: transform 240ms var(--ease-standard); }
+
+/* 文字类元素：展开时延迟 60ms 淡入（等宽度先长出来），收起时 90ms 先淡出 */
+.sidebar :is(.sidebar-label, .sidebar-kbd, .sidebar-count, #jobNotificationsCount, .sidebar-brand-text, .health-text, .sidebar-group-label span, .cmd-kbd-badge) {
+  transition: opacity 0.14s ease 0.06s;
+}
+
+/* 细栏态（推挤模式收起，或窄窗未展开） */
+html.sidebar-rail:not(.sidebar-narrow) .sidebar :is(.sidebar-label, .sidebar-kbd, .sidebar-count, #jobNotificationsCount, .sidebar-brand-text, .health-text, .sidebar-group-label span, .cmd-kbd-badge),
+html.sidebar-narrow:not(.sidebar-overlay-open) .sidebar :is(.sidebar-label, .sidebar-kbd, .sidebar-count, #jobNotificationsCount, .sidebar-brand-text, .health-text, .sidebar-group-label span, .cmd-kbd-badge) {
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.09s ease;
+}
+/* 细栏里放不下「一键修复」：不显示（也就不在 Tab 顺序里）；内容区顶部横幅里有同一个入口 */
+html.sidebar-rail:not(.sidebar-narrow) .sidebar-repair,
+html.sidebar-narrow:not(.sidebar-overlay-open) .sidebar-repair { display: none; }
+html.sidebar-rail:not(.sidebar-narrow) .sidebar-group-label::after,
+html.sidebar-narrow:not(.sidebar-overlay-open) .sidebar-group-label::after { opacity: 1; }
+html.sidebar-rail:not(.sidebar-narrow) :is(.sidebar-health, .cmd-trigger-btn),
+html.sidebar-narrow:not(.sidebar-overlay-open) :is(.sidebar-health, .cmd-trigger-btn) { border-color: transparent; background: transparent; }
+html.sidebar-rail:not(.sidebar-narrow) .cmd-trigger-btn:hover,
+html.sidebar-narrow:not(.sidebar-overlay-open) .cmd-trigger-btn:hover { background: var(--hover-bg); }
+html.sidebar-rail:not(.sidebar-narrow) .sidebar-item:has(:is(.sidebar-count, #jobNotificationsCount):not([hidden])) .sidebar-dot,
+html.sidebar-narrow:not(.sidebar-overlay-open) .sidebar-item:has(:is(.sidebar-count, #jobNotificationsCount):not([hidden])) .sidebar-dot { opacity: 1; }
+html.sidebar-rail:not(.sidebar-narrow) .sidebar-toggle-icon,
+html.sidebar-narrow:not(.sidebar-overlay-open) .sidebar-toggle-icon { transform: scaleX(-1); }
+
+/* 细栏悬停提示（sidebar.js 复用一个浮动元素；侧栏 overflow:hidden 裁不到它） */
+.sidebar-tip {
+  position: fixed;
+  z-index: 80;
+  padding: 5px 9px;
+  border-radius: 7px;
+  background: var(--surface-raised);
+  color: var(--text-strong);
+  font-size: var(--text-xs);
+  white-space: nowrap;
+  box-shadow: var(--shadow-toast);
+  pointer-events: none;
+  opacity: 0;
+  transform: translateX(-4px);
+  transition: opacity 0.12s ease, transform 0.12s ease;
+}
+.sidebar-tip.is-on { opacity: 1; transform: none; }
+.sidebar-tip kbd { margin-left: 8px; font-family: var(--font-mono); font-size: 10.5px; color: var(--muted); }
+
+/* ===== 告警横幅（#alertBanner / #signalBanner / #updateBanner，三者都在 .console-header 内）=====
+   #alertBanner 的 className 由 checklist.js renderAlertBanner 整体覆写为
+   "alert-banner state-<health> [is-compact]"，不能依赖额外的静态类名。
+   底色与左边框不随健康态变化：历史上的 .alert-banner.state-* 底色 / 边框规则与下面的
+   .console-header .alert-banner 同权重且更早声明，从未生效，已删除；健康态只给标题上色。
+   需要状态底色时要用比 .console-header .alert-banner 更高的权重来写。 */
+.alert-banner {
+  overflow: hidden;
+  transition: background-color 0.3s ease, border-color 0.3s ease;
+}
+/* 横幅族外框：三条横幅 / 注意力条目 / 修复 runbook（dialogs.css）共用细边框 + 3px 左色条 */
+.console-header .alert-banner,
+.attention-item,
+.repair-runbook {
+  display: flex;
+  border: 1px solid var(--hud-border);
+  border-left-width: 3px;
+  border-radius: var(--radius-md);
+  background: var(--panel);
+}
+.console-header .alert-banner,
+.attention-item {
+  align-items: center;
+  gap: var(--space-3);
+}
+.console-header .alert-banner {
+  min-width: 0;
+  padding: 10px 14px;
+}
+.console-header #alertBanner:not(.is-compact) {
+  min-height: 80px;
+}
+
+.alert-message {
+  flex: 1;
+  min-width: 0;
+}
+
+/* 横幅正文：标题 + 灰字说明（信号红条 / 热更新横幅只改标题色与间距） */
+.alert-message h3,
+.signal-banner .alert-text h3,
+.update-banner .alert-text h3 {
+  font-size: var(--text-base);
+  font-weight: 600;
+  margin-bottom: 1px;
+}
+
+.alert-message p,
+.signal-banner .alert-text p,
+.update-banner .alert-text p {
+  font-size: var(--text-sm);
+  color: var(--muted);
+}
+
+.alert-action-btn {
+  flex-shrink: 0;
+}
+
+/* 「立即探测」（探测已放慢时出现在正文下方）：.text-btn 的小号变体 */
+.alert-probe-btn { margin-top: 4px; padding: 0; font-size: var(--text-xs); color: var(--cyan); }
+.alert-probe-btn:disabled { color: var(--muted); }
+
+.alert-banner.state-ready h3,
+.alert-banner.state-stopped h3,
+.alert-banner.state-waiting h3 { color: var(--text); }
+.alert-banner.state-degraded h3 { color: var(--yellow); }
+.alert-banner.state-down h3 { color: var(--red); }
+
+/* 收起态：全绿时一行细条（绿色左边框），异常时展开正文 */
+.alert-banner.state-ready.is-compact {
+  padding: 7px 14px;
+  border-left-color: var(--green);
+}
+.alert-banner.state-ready.is-compact .alert-message h3 { font-size: var(--text-sm); margin: 0; font-weight: 500; color: var(--text-soft); }
+.alert-banner.state-ready.is-compact .alert-message p { display: none; }
+
+/* ===== 注意力队列 (attention.js)：通道条 + 指标越线 / Doctor 告警统一排序 ===== */
+.attention-queue { display: flex; flex-direction: column; gap: var(--space-2); }
+.attention-items { display: flex; flex-direction: column; gap: 6px; }
+.attention-item {
+  padding: 7px 14px;
+  color: var(--text);
+  font-size: var(--text-sm);
+}
+.attention-item .attention-text { flex: 1; min-width: 0; }
+.attention-item .attention-action { flex-shrink: 0; }
+.attention-item.severity-critical {
+  border-left-color: var(--red);
+}
+.attention-item.severity-warn {
+  border-left-color: var(--yellow);
+}
+/* 「还有 N 项 / 收起」：.text-btn 的小号变体 */
+.attention-more { align-self: flex-start; font-size: var(--text-xs); padding: 0 2px; }
+
+/* ===== v2.10 卡顿信号红条（signal-banner.js）：比 #alertBanner 更紧凑的次级横幅 =====
+   .alert-banner 的健康态取值不含 "error"（信号严重度独有），这里只作用于 .signal-banner，
+   须在 .console-header .alert-banner 之后（同权重靠顺序覆写底色与边框）。 */
+.signal-banner { margin-top: 8px; }
+.signal-banner.state-error {
+  background: color-mix(in srgb, var(--red) 8%, var(--panel));
+  border-color: color-mix(in srgb, var(--red) 26%, var(--hud-border));
+  border-left-color: var(--red);
+}
+.signal-banner .alert-text h3 { margin-bottom: 2px; color: var(--red); }
+
+/* v2.17 根因分诊行（signal-banner.js 惰性创建的 <p>）。字号与颜色随上面的
+   .signal-banner .alert-text p（权重更高）：与现象正文同为灰字，靠左侧红线区分。 */
+.alert-banner .signal-root-cause {
+  margin: var(--space-1) 0 0;
+  padding-left: var(--space-2);
+  border-left: 2px solid var(--red);
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+/* ===== 热更新横幅（update-banner.js）：信息级，强调色系，与健康态 / 信号红条区分 ===== */
+.update-banner { margin-top: 8px; flex-wrap: wrap; }
+/* 更新日志弹窗「版本详情」里的「检查更新」：跟在一句话后面的小按钮 */
+#selfUpdateCheckBtn { margin-left: 8px; padding: 2px 10px; font-size: 12px; vertical-align: baseline; }
+.console-header .update-banner {
+  background: color-mix(in srgb, var(--cyan) 6%, var(--panel));
+  border-color: color-mix(in srgb, var(--cyan) 26%, var(--hud-border));
+  border-left-color: var(--cyan);
+}
+.update-banner .alert-text { flex: 1; min-width: 200px; }
+.update-banner .alert-text h3 { color: var(--text-strong); }
+.update-banner-actions { display: flex; gap: var(--space-2); flex-wrap: wrap; }
+.update-banner-actions .btn { padding: 5px 12px; }

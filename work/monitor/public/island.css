@@ -1,0 +1,388 @@
+/* 托盘悬浮面板（island.html）。与主控制台同一套外观：中性灰底、颜色只表达状态、
+   不做发光与渐变。独立窗口拿不到主窗口的外观偏好，按系统深浅色自动切换。
+   类名契约（island.js 写入）：.status-dot.state-* / .node-item.state-* / .res-bar.color-*；
+   集群区的节点格与 GPU 卡位用 data-tone / data-busy（与主控制台 cluster.css 同一语义）。
+   窗口高度跟内容走：面板 height:auto，island.js 量出高度报给主进程（island-resize）。 */
+:root {
+  color-scheme: dark;
+  --bg: transparent;
+  --panel: rgba(23, 24, 27, 0.96);
+  --border: rgba(255, 255, 255, 0.09);
+  --surface: rgba(255, 255, 255, 0.05);
+  --surface-hover: rgba(255, 255, 255, 0.09);
+  --text: #e4e4e7;
+  --text-strong: #f4f4f5;
+  --muted: #8b8b94;
+  --green: #4fb67e;
+  --yellow: #d4a246;
+  --red: #e8685d;
+  --gray: #6c6c75;
+  /* 「在干活」不是告警：节点占用、GPU 已分配用强调色（与主控制台 --cyan 同值） */
+  --busy: #86aaf5;
+  --shadow: 0 12px 32px rgba(0, 0, 0, 0.5);
+  --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", "Segoe UI", sans-serif;
+}
+
+@media (prefers-color-scheme: light) {
+  :root {
+    color-scheme: light;
+    --panel: rgba(255, 255, 255, 0.97);
+    --border: rgba(20, 20, 24, 0.1);
+    --surface: rgba(20, 20, 24, 0.04);
+    --surface-hover: rgba(20, 20, 24, 0.08);
+    --text: #1d1d1f;
+    --text-strong: #111113;
+    --muted: #6e6e76;
+    --green: #1d8048;
+    --yellow: #9a6400;
+    --red: #c9372c;
+    --gray: #74747c;
+    --busy: #2f6bd0;
+    --shadow: 0 12px 32px rgba(20, 20, 24, 0.16);
+  }
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  user-select: none;
+}
+
+body {
+  background: var(--bg);
+  font-family: var(--font-sans);
+  overflow: hidden;
+  width: 100vw;
+  -webkit-font-smoothing: antialiased;
+}
+
+.island-container {
+  width: 100%;
+  height: auto;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: var(--shadow);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  color: var(--text);
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 12px 14px;
+}
+
+/* 头部 */
+.island-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.status-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.status-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-strong);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* 状态点：正常为绿（不再用强调色表示"正常"），颜色过渡而非发光 */
+.status-dot {
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background-color: var(--gray);
+  transition: background-color 0.3s ease;
+}
+.status-dot.state-ready { background-color: var(--green); }
+.status-dot.state-degraded,
+.status-dot.state-waiting { background-color: var(--yellow); }
+.status-dot.state-down { background-color: var(--red); }
+
+.header-actions {
+  display: flex;
+  gap: 2px;
+  align-items: center;
+}
+
+/* 钉在桌面：头部是拖动把手，按钮仍可点 */
+body[data-pinned] .island-header { -webkit-app-region: drag; }
+body[data-pinned] .island-header button { -webkit-app-region: no-drag; }
+
+.pin-btn,
+.open-console-btn,
+.quit-app-btn {
+  background: transparent;
+  border: none;
+  border-radius: 6px;
+  width: 26px;
+  height: 26px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--muted);
+  cursor: pointer;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+.pin-btn:hover,
+.open-console-btn:hover { background: var(--surface-hover); color: var(--text-strong); }
+.pin-btn[aria-pressed="true"] { color: var(--busy); }
+.quit-app-btn:hover { background: color-mix(in srgb, var(--red) 14%, transparent); color: var(--red); }
+
+/* 链路节点 */
+.nodes-grid {
+  display: flex;
+  justify-content: space-between;
+  background: var(--surface);
+  border-radius: 8px;
+  padding: 7px 12px;
+  margin: 8px 0;
+}
+
+.node-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.node-item .node-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background-color: var(--gray);
+  transition: background-color 0.3s ease;
+}
+.node-item.state-ok .node-dot { background-color: var(--green); }
+.node-item.state-bad .node-dot { background-color: var(--red); }
+.node-item.state-waiting .node-dot { background-color: var(--yellow); }
+
+.node-name {
+  font-size: 11px;
+  color: var(--muted);
+  transition: color 0.3s ease;
+}
+.node-item.state-ok .node-name { color: var(--text); }
+.node-item.state-bad .node-name { color: var(--red); }
+
+/* 资源占用 */
+.resources-section {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  margin-bottom: 8px;
+}
+
+.res-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 11px;
+}
+
+.res-label {
+  flex: none;
+  width: 36px;
+  color: var(--muted);
+}
+
+.res-bar-container {
+  flex: 1;
+  height: 4px;
+  background: var(--surface-hover);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.res-bar {
+  height: 100%;
+  width: 100%;
+  border-radius: 2px;
+  background: var(--gray);
+  /* 进度由 island.js 写 transform: scaleX，过渡只走合成层（不再逐帧重排） */
+  transform: scaleX(0);
+  transform-origin: left center;
+  transition: transform 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.res-bar.color-green { background: var(--green); }
+.res-bar.color-yellow { background: var(--yellow); }
+.res-bar.color-red { background: var(--red); }
+.res-bar.color-busy { background: var(--busy); }
+
+.res-val {
+  flex: none;
+  width: 42px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+}
+
+/* 小节标题（查看中的服务器 / 集群） */
+.section-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 11px;
+}
+.section-title {
+  font-weight: 600;
+  color: var(--text-strong);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.section-meta {
+  color: var(--muted);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.section-meta[data-level="warn"] { color: var(--yellow); }
+.section-meta[data-level="error"] { color: var(--red); }
+
+/* 多台服务器：每台一个隧道状态点 */
+.servers-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  margin-bottom: 8px;
+  font-size: 11px;
+}
+.server-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--muted);
+}
+.server-chip[data-active] { color: var(--text-strong); font-weight: 600; }
+.server-chip .chip-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--gray);
+}
+.server-chip[data-link="ok"] .chip-dot { background: var(--green); }
+.server-chip[data-link="warn"] .chip-dot,
+.server-chip[data-link="waiting"] .chip-dot { background: var(--yellow); }
+.server-chip[data-link="down"] .chip-dot { background: var(--red); }
+
+/* 集群（Slurm） */
+.cluster-section {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  padding-top: 8px;
+  margin-bottom: 8px;
+  border-top: 1px solid var(--border);
+}
+
+.slot-groups,
+.node-cells {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+}
+.slot-groups { gap: 3px 7px; }
+.node-cells { gap: 3px; }
+
+.slot-group { display: inline-flex; gap: 2px; }
+.slot {
+  position: relative;
+  width: 6px;
+  height: 11px;
+  border-radius: 1.5px;
+  background: var(--surface-hover);
+  overflow: hidden;
+}
+.slot[data-busy="true"] { box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--busy) 70%, transparent); }
+.slot-fill {
+  position: absolute;
+  inset: 0;
+  background: var(--busy);
+  transform: scaleY(0);
+  transform-origin: bottom center;
+  transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.node-cell {
+  width: 9px;
+  height: 9px;
+  border-radius: 2px;
+  background: var(--surface-hover);
+  box-shadow: inset 0 0 0 1px var(--border);
+}
+.node-cell[data-tone="busy"] { background: var(--busy); box-shadow: none; }
+.node-cell[data-tone="warn"] { background: var(--yellow); box-shadow: none; }
+.node-cell[data-tone="critical"] { background: var(--red); box-shadow: none; }
+
+.cluster-jobs {
+  font-size: 11px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.cluster-jobs b { color: var(--text); font-weight: 600; }
+.cluster-jobs[data-level="error"] { color: var(--red); }
+
+/* 底部操作按钮 */
+.actions-footer {
+  display: flex;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.action-btn {
+  flex: 1;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 5px 0;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text);
+  cursor: pointer;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+.action-btn:hover { background: var(--surface-hover); color: var(--text-strong); }
+.action-btn:focus-visible { outline: 2px solid color-mix(in srgb, var(--text) 45%, transparent); outline-offset: 1px; }
+.action-btn.danger { color: var(--red); }
+.action-btn.danger:hover {
+  background: color-mix(in srgb, var(--red) 12%, transparent);
+  border-color: color-mix(in srgb, var(--red) 35%, transparent);
+}
+
+/* 钉在桌面：常驻小组件只看不动，收起底部操作按钮（动作在托盘弹出与右键菜单里）；
+   按钮收起后最后一节不再留底部间距（没有集群区时是服务器负载那一节）。放在基础规则之后才覆写得到。 */
+body[data-pinned] .actions-footer { display: none; }
+body[data-pinned] .cluster-section,
+body[data-pinned] .resources-section:not(:has(+ .cluster-section:not([hidden]))) { margin-bottom: 0; }
+
+/* ---- 等待态呼吸动画（perf）----
+   只动 opacity（合成器完成），节奏放缓到 2s，仅 waiting 态且用户未要求减弱动画时播放。
+   悬浮岛收起（弹出卡片失焦即收起；钉住时看是否隐藏）时 island.js 给 body 打 data-island-idle，暂停动画。
+   放在文件末尾：选择器特异性高于上面的状态规则，且暂停规则须在 animation 简写之后生效。 */
+@keyframes dotBreathe {
+  to { opacity: 0.4; }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .status-dot.state-waiting,
+  .node-item.state-waiting .node-dot {
+    animation: dotBreathe 2s ease-in-out infinite alternate;
+  }
+  body[data-island-idle] .status-dot.state-waiting,
+  body[data-island-idle] .node-item.state-waiting .node-dot {
+    animation-play-state: paused;
+  }
+}

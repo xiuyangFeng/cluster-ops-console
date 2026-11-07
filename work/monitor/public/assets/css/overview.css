@@ -1,0 +1,1089 @@
+/* overview.css —— 概览视图：数据链路「请求之路」+ 节点详情、Agent 状态带（页头）、服务器简报卡。
+   归属：render/chain.js（模型在 chain-model.js）/ render/overview.js（renderAgentOverview、
+   renderServerBriefs）/ render/server-card-model.js。 */
+
+/* ==========================================================================
+   数据链路「请求之路」(panel-chain，v2.65)：集群 ══SSH 隧道══ 本机代理 ── 出网 → 去向
+   版式：上面一条路径（三个节点 + 两段连线，隧道是双线管子 + 锁）；中间是分叉区（曲线画在 .road-fan 层，
+         链路不畅通时换成一句断点原因）；下面最多 4 张去向卡；底行端到端往返 / 去向统计 / 近一分钟流量。
+         其余建了隧道的服务器在路径下方一行小标签。
+   形态：畅通 = 节点光晕错峰慢呼吸，有流量时光点沿路跑（密度 = 流量档位，隧道段速度 = 探针延迟档位）；
+         降级 = 琥珀慢呼吸；中断 = 红涟漪 + 红虚线 + ×，曲线降到 32% 并改点线；检测中 = 节点依次点亮外圈；
+         已断开 = 全静止灰。探针返回时的回声与到站亮圈由 chain.js 用 WAAPI 一次性播放。
+   性能约束：动画只改 transform / opacity（合成线程完成，不重排不重绘）；发光用静态渐变和阴影，
+   不对 filter / box-shadow 做动画；全部包在 reduced-motion 守卫内，窗口隐藏时被 styles.css 的省电闸整体暂停。
+   ========================================================================== */
+.chain-scroller {
+  position: relative; /* .road-fan 曲线层的定位基准 */
+  overflow-x: auto; /* 窄窗口整条链横向滚动，不溢出页面 */
+  overflow-y: hidden; /* 只许横向滚：光晕的 scale 动画会让纵向溢出 2–4px，偶发冒出竖向滚动条 */
+  min-height: 0; /* flex 滚动容器压缩坑 */
+  padding: var(--space-5) var(--space-4) var(--space-3);
+}
+.chain-track {
+  --orb: 46px; /* 节点圆直径 */
+  --node-w: 100px; /* 节点列宽：圆 + 名称 + 副标题 */
+  position: relative;
+  z-index: 1; /* 压在曲线层上面：去向卡盖住曲线的末端 */
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-width: 980px;
+  min-width: 480px; /* 路径网格最窄 3×100 + 116 + 52；再窄由 .chain-scroller 横向滚动 */
+  margin: 0 auto;
+}
+
+/* ---- 路径：节点 / 管子 / 节点 / 连线 / 节点 ---- */
+.road-path {
+  display: grid;
+  grid-template-columns: var(--node-w) minmax(116px, 1.75fr) var(--node-w) minmax(52px, 1fr) var(--node-w);
+  align-items: start;
+}
+.road-node {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  width: var(--node-w);
+  padding: 0 0 2px;
+  background: none;
+  border: 0;
+  border-radius: var(--radius-hud);
+  color: var(--text);
+  font-family: var(--font-sans);
+  cursor: pointer;
+}
+.road-orb-wrap {
+  position: relative;
+  isolation: isolate; /* 光晕 z-index 只在本节点内排序，压在圆的下面 */
+  display: block;
+  width: var(--orb);
+  height: var(--orb);
+  margin-bottom: 6px;
+}
+.road-orb {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  border: 1.5px solid color-mix(in srgb, var(--tone, var(--gray)) 72%, var(--hud-border));
+  background: radial-gradient(circle at 50% 28%, color-mix(in srgb, var(--tone, var(--gray)) 16%, var(--card-bg)), var(--card-bg) 72%);
+  box-shadow: 0 0 0 5px color-mix(in srgb, var(--tone, var(--gray)) 6%, transparent);
+  color: color-mix(in srgb, var(--tone, var(--gray)) 70%, var(--text));
+  transition: border-color 0.3s ease, color 0.3s ease, box-shadow 0.2s ease, transform 0.15s ease;
+}
+.road-orb-icon { width: calc(var(--orb) * 0.44); height: calc(var(--orb) * 0.44); }
+/* 光晕：静态径向渐变，只对 opacity / transform 做动画 */
+.road-aura {
+  position: absolute;
+  z-index: 0;
+  inset: -12px;
+  border-radius: 50%;
+  pointer-events: none;
+  background: radial-gradient(closest-side, color-mix(in srgb, var(--tone, var(--gray)) 30%, transparent) 60%, transparent);
+  opacity: 0;
+}
+/* 探针到站的亮圈（chain.js 用 WAAPI 一次性播放） */
+.road-blip {
+  position: absolute;
+  z-index: 0;
+  inset: -3px;
+  border-radius: 50%;
+  border: 1.5px solid var(--tone, var(--green));
+  opacity: 0;
+  pointer-events: none;
+}
+/* 守护进程没有在运行：代理圆右上角的黄角标（原因行另写一句） */
+.road-badge {
+  position: absolute;
+  z-index: 2;
+  top: -3px;
+  right: -3px;
+  display: grid;
+  place-items: center;
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  background: var(--yellow);
+  color: var(--panel);
+  font-size: 10px;
+  font-weight: 700;
+  box-shadow: 0 0 0 2px var(--panel);
+}
+.road-name {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--text-base);
+  font-weight: 600;
+  line-height: 1.3;
+  color: var(--text-strong);
+}
+.road-sub {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  line-height: 16px;
+  color: var(--muted);
+}
+.road-node:hover .road-orb { border-color: color-mix(in srgb, var(--tone, var(--gray)) 90%, var(--text)); }
+.road-node:active .road-orb { transform: scale(0.97); }
+.road-node.selected .road-orb { box-shadow: 0 0 0 3px var(--panel), 0 0 0 4.5px var(--cyan); }
+.road-node.selected .road-name { color: var(--cyan); }
+
+/* 节点形态（颜色取 state-* 的 --tone，见 styles.css「状态语气」） */
+.road-node.state-ok .road-aura { opacity: 0.35; } /* 减弱动画时保留一圈静态微光 */
+.road-node.state-error .road-aura { inset: -2px; background: none; border: 1.5px solid var(--red); } /* 涟漪环 */
+.road-node.state-unknown .road-orb { /* 被上游挡住 / 检测中：虚线空心圆 */
+  border-style: dashed;
+  border-color: color-mix(in srgb, var(--gray) 70%, var(--hud-border));
+  background: var(--card-bg);
+  box-shadow: none;
+  color: var(--muted);
+}
+.road-node.state-unknown .road-name { color: var(--muted-strong); }
+.road-node:is(.state-stopped, .state-setup) .road-orb { /* 手动断开 / 没领端口：静止灰环 */
+  border-color: var(--hud-border-strong);
+  background: var(--card-bg);
+  box-shadow: none;
+  color: var(--label-dim);
+}
+.road-node:is(.state-stopped, .state-setup) .road-name { color: var(--muted); font-weight: 500; }
+
+/* ---- 连线：贴到两侧圆边（负外边距伸进节点列的留白），标注在上、说明在下 ---- */
+.road-link {
+  position: relative;
+  min-width: 0;
+  height: var(--orb); /* 与圆等高，线落在圆心高度 */
+  display: flex;
+  align-items: center;
+  margin: 0 calc((var(--orb) - var(--node-w)) / 2 + 7px);
+  pointer-events: none; /* 伸进节点列的部分不挡节点点击 */
+}
+.road-line { position: relative; flex: 1; height: 14px; overflow: hidden; }
+.road-line::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  height: 2px;
+  margin-top: -1px;
+  border-radius: 1px;
+  background: color-mix(in srgb, var(--tone, var(--gray)) 45%, transparent);
+}
+.road-link-top,
+.road-link-note {
+  position: absolute;
+  left: 0;
+  right: 0;
+  display: flex;
+  justify-content: center;
+  font-size: var(--text-xs);
+  line-height: 15px;
+  white-space: nowrap;
+  color: var(--muted);
+}
+.road-link-top { bottom: calc(50% + 10px); }
+.road-link-note { top: calc(50% + 10px); color: var(--label-dim); }
+.road-ms { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+.road-ms:empty { display: none; }
+.road-link.state-stopped .road-ms { visibility: hidden; } /* 已断开时只剩上次的旧值，不显示 */
+/* 管子上方的「SSH 隧道 · 延迟」是选中隧道详情的按钮（整条连线不接点击） */
+.road-pipe-label {
+  display: inline-flex;
+  gap: 6px;
+  padding: 0 4px;
+  border: 0;
+  border-radius: 4px;
+  background: none;
+  color: inherit;
+  font: inherit;
+  pointer-events: auto;
+  cursor: pointer;
+}
+.road-pipe-name { font-weight: 500; color: var(--text-softer); }
+.road-pipe-label:hover .road-pipe-name { color: var(--text-strong); }
+.road-pipe-label.selected .road-pipe-name { color: var(--cyan); }
+
+/* 隧道 = 一根管子：上下两道细边 + 淡底（加密通道），中间一把锁；光点在管子里跑 */
+.road-pipe .road-line { height: 10px; }
+.road-pipe .road-line::before {
+  height: 8px;
+  margin-top: -4px;
+  border-radius: 4px;
+  border: 1.5px solid color-mix(in srgb, var(--tone, var(--gray)) 50%, transparent);
+  background: color-mix(in srgb, var(--tone, var(--gray)) 7%, transparent);
+}
+.road-lock {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  z-index: 2;
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  margin: -10px 0 0 -10px;
+  border-radius: 50%;
+  border: 1px solid color-mix(in srgb, var(--tone, var(--gray)) 45%, var(--hud-border));
+  background: var(--panel);
+  color: color-mix(in srgb, var(--tone, var(--gray)) 75%, var(--text));
+}
+.road-lock-icon { width: 11px; height: 11px; }
+
+/* 光点：整条宽度的透明层平移（translateX 的 100% = 线宽），::before 是点、::after 是拖尾 */
+.road-flow { position: absolute; inset: 0; display: none; }
+.road-pk { position: absolute; inset: 0; opacity: 0; }
+.road-pk::before {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: -5px;
+  width: 5px;
+  height: 5px;
+  margin-top: -2.5px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--tone) 40%, #fff);
+  box-shadow: 0 0 6px 1px color-mix(in srgb, var(--tone) 50%, transparent);
+}
+.road-pk::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: -40px;
+  width: 36px;
+  height: 2px;
+  margin-top: -1px;
+  border-radius: 1px;
+  background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--tone) 75%, transparent));
+}
+body[data-theme="light"] .road-pk::before { background: var(--tone); }
+/* 探针回声：从本机往集群（右 → 左）走一趟（chain.js 用 WAAPI 播放） */
+.road-ping {
+  position: absolute;
+  top: 50%;
+  right: 0;
+  width: 14px;
+  height: 4px;
+  margin-top: -2px;
+  border-radius: 2px;
+  background: linear-gradient(270deg, transparent, color-mix(in srgb, var(--cyan) 85%, transparent));
+  opacity: 0;
+}
+
+/* 中断：红色断开虚线 + 中间 × 标记 */
+.road-link.state-error .road-line::before {
+  height: 2px;
+  margin-top: -1px;
+  border: 0;
+  background: repeating-linear-gradient(90deg, color-mix(in srgb, var(--red) 75%, transparent) 0 5px, transparent 5px 10px);
+}
+.road-link.state-error .road-lock { display: none; }
+.road-link.state-error :is(.road-link-top, .road-link-note, .road-pipe-name) { color: var(--red); }
+.road-break {
+  display: none;
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 18px;
+  height: 18px;
+  margin: -9px 0 0 -9px;
+  border-radius: 50%;
+  border: 1.5px solid var(--red);
+  background: var(--panel);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--red) 12%, transparent);
+}
+.road-break::before,
+.road-break::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 8px;
+  height: 1.5px;
+  margin: -0.75px 0 0 -4px;
+  border-radius: 1px;
+  background: var(--red);
+  transform: rotate(45deg);
+}
+.road-break::after { transform: rotate(-45deg); }
+.road-link.state-error .road-break { display: block; }
+/* 被上游挡住 / 检测中：灰色点线；手动断开：极淡实线 */
+.road-link.state-unknown .road-line::before {
+  height: 2px;
+  margin-top: -1px;
+  border: 0;
+  background: repeating-linear-gradient(90deg, color-mix(in srgb, var(--gray) 60%, transparent) 0 2px, transparent 2px 7px);
+}
+.road-link.state-stopped .road-line::before {
+  border-color: color-mix(in srgb, var(--gray) 25%, transparent);
+  background: color-mix(in srgb, var(--gray) 12%, transparent);
+}
+
+/* ---- 其余隧道：路径下方一行小标签（点开在详情里看，可「切到这台查看」） ---- */
+.road-others {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-top: var(--space-3);
+  font-size: var(--text-xs);
+  color: var(--label-dim);
+}
+.road-others[hidden] { display: none; }
+.road-others-label { margin-right: 2px; }
+.road-other {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 8px;
+  border: 1px solid var(--hud-border);
+  border-radius: 999px;
+  background: var(--card-bg);
+  color: var(--text-soft);
+  font: inherit;
+  cursor: pointer;
+}
+.road-other-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--tone, var(--gray)); }
+.road-other-state { color: var(--muted); }
+.road-other.state-error .road-other-state { color: var(--red); }
+.road-other.selected { border-color: color-mix(in srgb, var(--cyan) 60%, var(--hud-border)); color: var(--cyan); }
+
+/* ---- 分叉区：曲线画在 .road-fan（不随每轮重绘），这里留出高度；不畅通时写一句原因 ---- */
+.road-mid {
+  flex: 1;
+  min-height: 60px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.road-cause {
+  max-width: 92%;
+  margin: 0;
+  padding: 5px 10px;
+  border-radius: var(--radius-sm);
+  font-size: var(--text-sm);
+  line-height: 1.45;
+  text-align: center;
+  color: var(--text-softer);
+}
+.road-cause:empty { display: none; }
+.road-cause[data-tone="critical"] {
+  color: var(--red-soft);
+  background: color-mix(in srgb, var(--red) 9%, var(--panel));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--red) 28%, transparent);
+}
+.road-cause[data-tone="warn"] { color: var(--yellow); background: color-mix(in srgb, var(--yellow) 8%, var(--panel)); }
+.road-cause[data-tone="neutral"] { color: var(--muted); background: var(--well-bg); }
+
+.road-fan {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  transition: opacity 0.4s ease;
+}
+.road-fan-svg { position: absolute; left: 0; top: 0; overflow: visible; }
+.road-fan-path { fill: none; stroke: color-mix(in srgb, var(--green) 26%, var(--hud-border-strong)); stroke-linecap: round; }
+.road-fan-path.is-active { stroke: color-mix(in srgb, var(--green) 50%, var(--hud-border-strong)); }
+body[data-theme="light"] .road-fan-path { stroke: color-mix(in srgb, var(--green) 18%, var(--hud-border-strong)); }
+body[data-theme="light"] .road-fan-path.is-active { stroke: color-mix(in srgb, var(--green) 34%, var(--hud-border-strong)); }
+.road-fan:not([data-phase="live"]) { opacity: 0.32; }
+.road-fan[data-phase="stopped"] { opacity: 0.22; }
+.road-fan:not([data-phase="live"]) .road-fan-path { stroke: var(--hud-border-strong); stroke-dasharray: 2 5; }
+.road-fp { position: absolute; width: 0; height: 0; opacity: 0; }
+.road-fp-dot {
+  position: absolute;
+  left: -2.5px;
+  top: -2.5px;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--green) 40%, #fff);
+  box-shadow: 0 0 6px 1px color-mix(in srgb, var(--green) 45%, transparent);
+}
+body[data-theme="light"] .road-fp-dot { background: var(--green); }
+
+/* ---- 去向卡：名称 / 次数与流量 / 占比细条；近一分钟有流量时点变绿 ---- */
+.road-dests {
+  display: grid;
+  grid-template-columns: repeat(var(--fan, 4), minmax(0, 1fr));
+  gap: var(--space-2);
+}
+.road-dest {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+  padding: 8px 10px 9px;
+  border: 1px solid var(--hud-border);
+  border-radius: var(--radius-md);
+  background: var(--card-bg);
+  color: var(--text);
+  font-family: var(--font-sans);
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.2s ease, background-color 0.2s ease;
+}
+.road-dest:hover { border-color: var(--hud-border-strong); }
+.road-dest.selected { border-color: color-mix(in srgb, var(--cyan) 60%, var(--hud-border)); background: var(--card-bg-selected); }
+.road-dest-name {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--text-strong);
+}
+.road-dest-dot { flex: none; width: 6px; height: 6px; border-radius: 50%; background: var(--hud-border-strong); }
+.road-dest.is-active .road-dest-dot { background: var(--green); }
+.road-dest-num {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--text-xs);
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+}
+.road-dest-count { font-weight: 600; color: var(--text-soft); }
+.road-dest-bar { position: relative; height: 3px; margin-top: 3px; overflow: hidden; border-radius: 2px; background: var(--well-bg); }
+.road-dest-fill {
+  position: absolute;
+  inset: 0;
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--text-softer) 45%, transparent);
+  transform-origin: left center;
+  transition: transform 0.6s cubic-bezier(0.22, 0.8, 0.24, 1);
+}
+.road-dests-empty { grid-column: 1 / -1; margin: 0; font-size: var(--text-sm); color: var(--muted); text-align: center; }
+.road-dests-open { grid-column: 1 / -1; justify-self: center; }
+
+/* ---- 底行：端到端往返（大数字 + 近 24 小时走势）| 去向统计 | 近一分钟流量 ---- */
+.road-foot {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin-top: var(--space-3);
+  font-size: var(--text-xs);
+  color: var(--label-dim);
+}
+.road-trip { display: inline-flex; align-items: center; gap: 8px; min-width: 0; }
+.road-trip-label { white-space: nowrap; }
+.road-trip-ms { font-family: var(--font-mono); font-size: var(--text-base); font-weight: 600; font-variant-numeric: tabular-nums; color: var(--text-strong); }
+.road-trip-unit { margin-left: 1px; font-size: var(--text-xs); font-weight: 400; color: var(--muted); }
+.road-trip-spark { flex: none; width: 110px; height: 20px; }
+.road-trip-spark .l { fill: none; stroke: var(--cyan); stroke-width: 1.2; vector-effect: non-scaling-stroke; opacity: 0.85; }
+.road-trip-spark .a { fill: color-mix(in srgb, var(--cyan) 12%, transparent); stroke: none; }
+.road-since { margin-left: auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.road-live { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; font-variant-numeric: tabular-nums; color: var(--muted); }
+.road-live-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--hud-border-strong); }
+.road-live:not([data-traffic="idle"]) { color: var(--text-soft); }
+.road-live:not([data-traffic="idle"]) .road-live-dot { background: var(--green); }
+
+/* ---- 动效（全部在 reduced-motion 守卫内；只动 transform / opacity） ---- */
+@media (prefers-reduced-motion: no-preference) {
+  /* 光点：有流量 1 个，繁忙 3 个；空闲 / 不畅通时不跑（Kiali：密度 = 流量，速度 = 这段多快） */
+  .chain-track[data-phase="live"]:not([data-traffic="idle"]) .road-link.state-ok .road-flow { display: block; }
+  .road-link.state-ok .road-pk { animation: roadRun var(--dur, 1.9s) cubic-bezier(0.4, 0, 0.6, 1) calc(var(--k, 0) * var(--dur, 1.9s) / -3) infinite; }
+  .road-pk:nth-child(2) { --k: 1; }
+  .road-pk:nth-child(3) { --k: 2; }
+  .chain-track[data-traffic="low"] .road-pk:not(:first-child) { display: none; }
+  /* 分叉光点：外层竖直匀速 + 内层横向缓动 = 沿 S 形曲线走 */
+  .road-fan[data-phase="live"]:not([data-traffic="idle"]) .road-fp { animation: roadFanY 2.1s linear calc((var(--k) / var(--n) + var(--i) * 0.17) * -2.1s) infinite; }
+  .road-fan[data-phase="live"]:not([data-traffic="idle"]) .road-fp-dot { animation: roadFanX 2.1s cubic-bezier(0.5, 0, 0.5, 1) calc((var(--k) / var(--n) + var(--i) * 0.17) * -2.1s) infinite; }
+  /* 节点：降级琥珀慢呼吸，中断红涟漪，畅通时光晕错峰慢呼吸；断点 × 闪烁 */
+  .road-node.state-warn .road-aura { animation: roadBreathe 6s ease-in-out infinite; }
+  .road-node.state-error .road-aura { animation: roadRipple 1.8s cubic-bezier(0.2, 0.6, 0.3, 1) infinite; }
+  .chain-track[data-phase="live"] .road-node.state-ok .road-aura { animation: roadBreathe 5.4s ease-in-out infinite; }
+  .chain-track[data-phase="live"] .road-node[data-node="proxy"] .road-aura { animation-delay: -1.8s; }
+  .chain-track[data-phase="live"] .road-node[data-node="egress"] .road-aura { animation-delay: -3.6s; }
+  .road-link.state-error .road-break { animation: roadPulse 1.6s ease-in-out infinite; }
+  /* 检测中：参照 Cloudflare 逐段推进——三个节点依次点亮外圈，不转圈 */
+  .chain-track[data-phase="probing"] .road-node.state-unknown .road-aura {
+    inset: -4px;
+    background: none;
+    border: 1.5px solid var(--cyan);
+    animation: roadStep 2.4s ease-in-out infinite;
+  }
+  .chain-track[data-phase="probing"] .road-node[data-node="remote"] .road-aura { animation-delay: 0.6s; }
+  .chain-track[data-phase="probing"] .road-node[data-node="egress"] .road-aura { animation-delay: 1.2s; }
+}
+@keyframes roadRun {
+  0% { opacity: 0; transform: translateX(0); }
+  12%, 88% { opacity: 1; }
+  100% { opacity: 0; transform: translateX(calc(100% + 40px)); }
+}
+@keyframes roadFanY {
+  0% { opacity: 0; transform: translateY(0); }
+  10%, 90% { opacity: 1; }
+  100% { opacity: 0; transform: translateY(var(--dy)); }
+}
+@keyframes roadFanX {
+  0% { transform: translateX(0); }
+  100% { transform: translateX(var(--dx)); }
+}
+@keyframes roadBreathe {
+  0%, 100% { opacity: 0.22; transform: scale(0.92); }
+  50% { opacity: 0.6; transform: scale(1.03); }
+}
+@keyframes roadRipple {
+  0% { opacity: 0.75; transform: scale(1); }
+  100% { opacity: 0; transform: scale(1.6); }
+}
+@keyframes roadPulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.45; }
+}
+@keyframes roadStep {
+  0%, 100% { opacity: 0; transform: scale(0.94); }
+  20% { opacity: 0.95; transform: scale(1); }
+  45% { opacity: 0; transform: scale(1.08); }
+}
+
+/* 详情行首的状态点 / 标题 / 一句话（chk-*：原健康清单的样式体系，现在只有链路详情在用） */
+.chk-status {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
+  flex-shrink: 0;
+  position: relative;
+  transition: background-color 0.3s ease, border-color 0.3s ease;
+  /* 着色胶囊：变体只设 --c */
+  color: var(--c);
+  background-color: color-mix(in srgb, var(--c) 14%, transparent);
+}
+
+.chk-status-ok { --c: var(--green); }
+.chk-status-ok::after { content: "✓"; }
+.chk-status-bad { --c: var(--red); }
+.chk-status-bad::after { content: "✗"; }
+.chk-status-waiting { --c: var(--yellow); }
+.chk-status-stopped { --c: var(--gray); }
+/* 等待 = 圆点、停止 = 方点 */
+.chk-status-waiting::after,
+.chk-status-stopped::after {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+}
+.chk-status-stopped::after { border-radius: 1px; }
+
+.chk-title {
+  font-size: var(--text-base);
+  font-weight: 600;
+  color: var(--text-strong);
+}
+
+.chk-desc {
+  font-size: var(--text-sm);
+  color: var(--muted);
+}
+
+/* ---- 节点详情：一行结论（状态点 + 标题 + 一句话 + 跳转）+ 事实数据格 + 异常时的整链诊断 ---- */
+.chain-detail {
+  border-top: 1px solid var(--hud-border);
+  padding: var(--space-3) var(--space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+.chain-detail-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px var(--space-2);
+  min-width: 0;
+}
+.chain-detail-head .chk-title { white-space: nowrap; }
+.chain-detail-head .chk-desc { flex: 1 1 220px; min-width: 0; }
+.chain-detail-actions { display: flex; flex-wrap: wrap; gap: 0 var(--space-3); margin-left: auto; }
+/* 事实格：1px 间隙透出容器底色当发丝线（与 Agent 状态带、集群 KPI 同一手法）。
+   flex 而不是 grid：末行不满时各项拉伸铺满，不露出容器底色 */
+.chain-facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1px;
+  margin: 0;
+  overflow: hidden;
+  background: var(--hud-border);
+  border: 1px solid var(--hud-border);
+  border-radius: var(--radius-md);
+}
+.chain-fact {
+  flex: 1 1 210px;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+  padding: 8px 12px;
+  background: var(--well-bg);
+}
+.chain-fact dt { color: var(--label-dim); font-size: var(--text-xs); }
+.chain-fact dd {
+  margin: 0;
+  color: var(--text-soft);
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+.chain-fact dd b { color: var(--text-strong); font-weight: 600; }
+.chain-fact[data-tone="warn"] dd b { color: var(--yellow); }
+.chain-fact[data-tone="critical"] dd b { color: var(--red); }
+/* 环境校验逐项（远端节点详情）：一项一枚，失败项置顶、标红并附报错输出 */
+.chain-checks { display: flex; flex-wrap: wrap; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.chain-check {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 6px;
+  max-width: 100%;
+  padding: 4px 10px;
+  border: 1px solid var(--hud-border);
+  border-radius: var(--radius-md);
+  background: var(--well-bg);
+  font-size: var(--text-xs);
+}
+.chain-check-icon { color: var(--green); font-weight: 600; }
+.chain-check-key { color: var(--text-soft); font-family: var(--font-mono); }
+.chain-check-ms { color: var(--muted); font-variant-numeric: tabular-nums; }
+.chain-check[data-ok="false"] { flex-basis: 100%; border-color: color-mix(in srgb, var(--red) 40%, var(--hud-border)); background: var(--tint-crit); }
+.chain-check[data-ok="false"] .chain-check-icon,
+.chain-check[data-ok="false"] .chain-check-key { color: var(--red); }
+/* 跳过项（如未领取端口时的经隧道出网测试）：灰色「–」，不算通过也不算失败 */
+.chain-check[data-ok="skip"] .chain-check-icon { color: var(--muted); }
+.chain-check-output { flex-basis: 100%; margin: 4px 0 0; max-height: 9em; overflow: auto; font-size: 11px; color: var(--text-soft); white-space: pre-wrap; word-break: break-word; }
+.chain-check .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.chain-detail-diag {
+  font-size: var(--text-sm);
+  color: var(--muted);
+  background: var(--well-bg);
+  border: 1px solid var(--hud-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-3) var(--space-4);
+}
+.chain-detail-diag strong { color: var(--text); display: block; margin-bottom: 2px; }
+.chain-detail-diag p { margin: 0; }
+
+/* ==========================================================================
+   Agent 状态带（页头 #agentOverviewGrid；render/overview.js renderAgentOverview）
+   一条分栏带（栏间 1px 发丝线 = 容器底色透过 1px 间隙，与集群 KPI / 简报四格同一手法）：
+   每个 Agent 一栏 = 状态点 + 名称 + 一句话结论 + 2 个主 chips + 端点延迟 +「详情」开关。
+   高度固定——状态抖动只换颜色和文字，不再把整页顶上顶下。详情展开在状态带下方通栏
+  （#agentStripDrawer，一次只开一个）。
+   ========================================================================== */
+.agent-strip {
+  display: flex;
+  flex-wrap: wrap; /* flex 而不是 grid：折行后末行各栏拉伸铺满，不露出容器底色 */
+  gap: 1px;
+  overflow: hidden;
+  background: var(--hud-border);
+  border: 1px solid var(--hud-border);
+  border-radius: var(--radius-hud);
+}
+
+.agent-pill {
+  flex: 1 1 290px; /* 一栏至少 290px：再窄「名称 + 结论 + 延迟 + 详情」就放不下了，改为折行 */
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 9px 14px;
+  background: var(--panel);
+  color: var(--text);
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+.agent-pill:hover { background: var(--panel-hover); }
+.agent-pill.selected {
+  background: var(--card-bg-selected);
+  box-shadow: inset 0 2px 0 color-mix(in srgb, var(--cyan) 70%, transparent);
+}
+/* 异常：左侧状态色条（与注意力队列、事件同一语言），结论文字同色；须在 .selected 之后（同权重靠顺序） */
+.agent-pill:is(.state-degraded, .state-waiting, .state-warn, .state-auth-required),
+.agent-pill:is(.state-down, .state-error, .state-missing, .state-revoked, .state-banned) {
+  box-shadow: inset 3px 0 0 var(--tone);
+}
+
+.agent-health-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  /* 取栏上 state-<health> 的 --tone（styles.css「状态语气」：revoked / banned / missing 为故障红） */
+  background: var(--tone, var(--gray));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--tone, var(--gray)) 18%, transparent);
+}
+
+.agent-pill-name {
+  flex: none;
+  color: var(--text-strong);
+  font-weight: 600;
+  font-size: var(--text-base);
+  white-space: nowrap;
+}
+
+/* 一句话结论，语气色随 tone；放不下时省略（完整内容在整栏的悬停提示与详情里） */
+.agent-pill-headline {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--text-sm);
+  font-weight: 500;
+  color: var(--text);
+}
+.agent-pill-headline.agent-tone-warn { color: var(--yellow); }
+.agent-pill-headline.agent-tone-error { color: var(--red); }
+.agent-pill-headline.agent-tone-idle { color: var(--muted); }
+
+/* 端点延迟（整栏唯一一处） */
+.agent-card-metric {
+  flex: none;
+  margin-left: auto;
+  font-family: var(--font-mono);
+  font-size: 13.5px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-strong);
+}
+.agent-card-metric-unit {
+  margin-left: 2px;
+  font-size: var(--text-xs);
+  font-weight: 500;
+  color: var(--muted);
+}
+.agent-card-metric.is-empty { font-weight: 500; color: var(--label-dim); }
+
+/* 元信息是一行纯文本（中点分隔），不逐项套底色胶囊（状态带的 chips 与详情里的桥接稳定性共用）。
+   span 规则用 :where 降到零类权重，语义 chip（styles.css .chip-*）的颜色自然盖过这里的 --muted。 */
+.agent-card-meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0 8px;
+  margin-top: 6px;
+}
+:where(.agent-card-meta) span {
+  color: var(--muted);
+  font-size: var(--text-xs);
+  font-variant-numeric: tabular-nums;
+}
+.agent-card-meta span + span::before,
+.agent-card-meta span + .chip-action::before {
+  content: "·";
+  margin-right: 8px;
+  color: var(--label-dim);
+}
+/* 可点 chip 的分隔点不跟着下划线 */
+.agent-card-meta span + .chip-action::before { display: inline-block; text-decoration: none; }
+
+/* 状态带里的 chips：只占一行，放不下的整项不显示——不出现被裁掉半个字的 chip。
+   做法：容器定高 18px + 允许折行，折到第二行的项落在可见区外。零宽的首项是必需的：flex 的每一行
+   至少留一项，没有它时放不下的第一枚 chip 仍会留在第一行被裁成半个字；它还必须有高度，
+   否则第一行是 0 高，折下去的 chip 仍落在可见区里。 */
+.agent-pill .agent-card-meta {
+  flex: 1 1 0;
+  align-content: flex-start;
+  height: 18px;
+  margin-top: 0;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  line-height: 18px;
+}
+.agent-pill .agent-card-meta::before { content: ""; width: 0; height: 18px; }
+.agent-pill .agent-card-meta > span { flex: none; line-height: 18px; }
+
+/* 「详情」开关（.text-btn 变体）：整栏本体是 [role=button]，这里必须是真 <button> 才能
+   独立获得焦点并 stopPropagation，避免误触 agent 切换。line-height: normal 保持原按钮行高 */
+.agent-drawer-toggle {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-left: 2px;
+  padding: 0;
+  font-size: var(--text-xs);
+  line-height: normal;
+}
+.agent-drawer-toggle:hover { color: var(--text); }
+.agent-drawer-toggle .drawer-arrow {
+  display: inline-block;
+  font-size: 7px;
+  transition: transform 0.15s ease;
+}
+.agent-drawer-toggle[aria-expanded="true"] .drawer-arrow { transform: rotate(90deg); }
+
+/* 详情：状态带下方通栏，承接诊断摘要 / 版本 / 登录 / Doctor / 桥接稳定性等全部次要信息 */
+.agent-strip-drawer {
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--hud-border);
+  border-radius: var(--radius-hud);
+  background: var(--panel);
+}
+.agent-strip-drawer h3 {
+  margin-bottom: 6px;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--text-strong);
+}
+
+.agent-drawer-row {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  padding: 3px 0;
+  font-size: var(--text-xs);
+}
+.agent-drawer-label {
+  flex: none;
+  min-width: 84px;
+  color: var(--muted);
+}
+.agent-drawer-value {
+  color: var(--text-soft);
+  word-break: break-all;
+}
+/* v2.85：Codex 客户端守护进程那一行——端口漂移时转黄（正常时不额外染色） */
+.agent-drawer-row[data-level="warn"] .agent-drawer-value { color: var(--yellow); }
+
+/* 详情里的桥接稳定性沿用 .agent-card-meta 芯片流，仅收紧上边距 */
+.agent-strip-drawer .bridge-stability { margin-top: var(--space-1); }
+
+/* ==========================================================================
+   服务器简报卡（概览 #serverBriefsContainer；render/overview.js renderServerBriefs +
+   server-card-model.js 的徽标 / 隧道胶囊 / GPU 行）
+   ========================================================================== */
+/* 外边距而非内边距：卡片须贴齐容器边界（browser-smoke 按容器盒量卡片是否铺满） */
+.server-briefs-container {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr));
+  gap: var(--space-3);
+  margin: var(--space-4);
+}
+
+/* 没有服务器卡时的空状态（empty-state.js，样式在 styles.css「空状态」）：占满整行 */
+.server-briefs-empty {
+  grid-column: 1 / -1;
+}
+
+/* 简报卡：首行 名称 + 团队/个人 + 隧道 + 查看；其下一条指标带（CPU / 内存 / GPU 并排、等宽，
+   每栏 标签 / 大字 / 细条）。所有卡同一高度，没有 GPU 的机器少一栏而不是多一片空白。 */
+.server-brief-card {
+  min-width: 0;
+  background:
+    linear-gradient(180deg, rgba(var(--surface-rgb), 0.025), transparent 55%),
+    var(--card-bg);
+  border: 1px solid var(--hud-border);
+  border-radius: var(--radius-hud);
+  padding: 13px 16px 15px;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background-color 0.15s ease;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.server-brief-card:hover { border-color: var(--hud-border-strong); }
+
+.server-brief-card.active {
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--cyan) 6%, transparent), transparent 60%),
+    var(--card-bg-selected);
+  border-color: color-mix(in srgb, var(--cyan) 55%, var(--hud-border));
+}
+
+.server-brief-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.server-brief-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--text-base);
+  font-weight: 600;
+  color: var(--text-strong);
+}
+
+/* 状态点保持静止实心（perf 与观感都更安静：不做光晕 / 呼吸） */
+.brief-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: var(--gray);
+  box-shadow: 0 0 0 3px rgba(var(--surface-rgb), 0.06);
+}
+
+.brief-dot.online {
+  background: var(--green);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--green) 18%, transparent);
+}
+
+/* 徽标 + 胶囊紧跟名称 */
+.server-brief-tags {
+  display: inline-flex;
+  flex: none;
+  gap: 5px;
+}
+
+.server-source-badge,
+.tunnel-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 0 7px;
+  border-radius: 99px;
+  font-size: 11px;
+  line-height: 1.7;
+  white-space: nowrap;
+}
+
+/* 团队=中性，个人=强调色（个人服务器是"只有我看得到"的那批，需要一眼分辨） */
+.server-source-badge.source-team { color: var(--muted); background: rgba(var(--surface-rgb), 0.06); }
+.server-source-badge.source-personal { color: var(--cyan); background: color-mix(in srgb, var(--cyan) 13%, transparent); }
+
+/* 隧道胶囊四态：在线绿 / 断开红 / 仅监控灰 / 等待中性描边 */
+.tunnel-pill-ok { color: var(--green); background: color-mix(in srgb, var(--green) 13%, transparent); }
+.tunnel-pill-error { color: var(--red); background: color-mix(in srgb, var(--red) 13%, transparent); }
+.tunnel-pill-muted { color: var(--muted); background: rgba(var(--surface-rgb), 0.04); }
+.tunnel-pill-waiting { color: var(--muted); border: 1px solid var(--hud-border-strong); }
+
+/* 指标带：栏间发丝线分隔 */
+.server-brief-metrics {
+  display: grid;
+  grid-auto-columns: minmax(0, 1fr);
+  grid-auto-flow: column;
+}
+
+.brief-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+  padding: 0 14px;
+}
+.brief-stat:first-child { padding-left: 0; }
+.brief-stat:last-child { padding-right: 0; }
+.brief-stat + .brief-stat { border-left: 1px solid rgba(var(--surface-rgb), 0.07); }
+
+.brief-metric-label {
+  font-size: var(--text-xs);
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.brief-metric-value {
+  font-size: 22px;
+  font-weight: 600;
+  line-height: 1.15;
+  letter-spacing: -0.02em;
+  color: var(--text-strong);
+  font-variant-numeric: tabular-nums;
+}
+.brief-metric-value small {
+  margin-left: 1px;
+  font-size: var(--text-xs);
+  font-weight: 500;
+  letter-spacing: 0;
+  color: var(--muted);
+}
+.brief-stat[data-color="yellow"] .brief-metric-value { color: var(--yellow); }
+.brief-stat[data-color="red"] .brief-metric-value { color: var(--red); }
+
+/* 细条轨道；条本体是 .bar-progress.color-* */
+.brief-metric-bar-container {
+  display: block;
+  height: 4px;
+  margin-top: 4px;
+  border-radius: 2px;
+  background: rgba(var(--surface-rgb), 0.08);
+  overflow: hidden;
+}
+
+/* 常态条用强调色（与服务器页一致），黄 / 红只在越线时出现 */
+.server-brief-card .bar-progress.color-green { background: var(--cyan); }
+
+/* GPU 栏：平均利用率与每卡竖柱同一行（柱高 = 利用率，柱色 = 显存压力） */
+.server-gpu-figure {
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+  min-width: 0;
+}
+.server-gpu-bars {
+  display: flex;
+  align-items: flex-end;
+  gap: 3px;
+  height: 22px;
+  padding-bottom: 3px;
+}
+.server-gpu-bar {
+  position: relative;
+  flex: none;
+  width: 7px; /* 显式宽度：空内容的柱子按 flex-basis 算不出固有宽度，会被压成 0 */
+  height: 100%;
+  border-radius: 2px;
+  background: rgba(var(--surface-rgb), 0.08);
+  overflow: hidden;
+}
+/* 直连节点（node04）的卡排在本机之后：两组柱子之间多留一道间隔 */
+.server-gpu-bar.is-group-start { margin-left: 5px; }
+.server-gpu-bar .bar-progress {
+  position: absolute;
+  inset: 0;
+  height: auto;
+  border-radius: 0;
+  transform-origin: bottom center;
+}
+
+/* 「查看」按钮（.text-btn 变体；当前卡片 disabled 显示「查看中」）：替代旧的"切换"语义——
+   所有隧道常驻，这里只换查看视角。 */
+.server-view-btn {
+  flex: none;
+  margin-left: auto;
+  padding: 0;
+  font-size: var(--text-xs);
+  line-height: normal;
+}
+/* 「查看中」是状态标签而非不可用动作：保留 .text-btn:disabled 的去悬停与光标，但不变暗、改强调色 */
+.server-view-btn:disabled { opacity: 1; color: var(--cyan); }
+
+/* ===== 内容区窄于 932px：链路节点收窄；再窄靠 .chain-scroller 横向滚动 ===== */
+@container content (max-width: 931px) {
+  .chain-scroller { padding: var(--space-5) var(--space-3) var(--space-3); }
+  .chain-track { --orb: 44px; } /* 列宽不收：127.0.0.1:8888 这类副标题在 100px 里刚好放得下 */
+}
+/* 很窄（整页上下堆叠且窗口也窄）：去向卡两列 */
+@container content (max-width: 519px) {
+  .road-dests { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}

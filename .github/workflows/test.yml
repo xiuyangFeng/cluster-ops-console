@@ -1,0 +1,108 @@
+name: test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      # 不再跑 os × node 的完整笛卡尔积（3×2 = 6 个 job，其中 4 个是重复覆盖）。
+      # Linux 跑 engines 的两个端点与推荐版本（22.12 = 下界，24 = 推荐，26 = 上界内最新，Homebrew 的 node）；
+      # macOS / Windows 各跑一个版本——它们要覆盖的是平台分支（ps 区域设置、
+      # 路径分隔符、win32 无进程信号、大小写敏感），不是 node 版本。6 → 4。
+      #
+      # 每个 job 再带一个不同的机器时区（tz → 「Run tests」那一步的 TZ）：历史日文件、用量、简报、
+      # Slurm 的时刻都按北京时间，开发机又都在 UTC+8——代码或测试用了本机时区的话本机全绿，
+      # 只在别的时区才错（2026-10 就这样红了一周没人发现）。runner 默认都是 UTC，所以分开取：
+      # 洛杉矶（UTC+8 以西、有夏令时）、加尔各答（+5:30，专拦「本机整点 = UTC 整点」的假设）、
+      # 东京（UTC+8 以东一小时，最容易把北京时间没过完的一天判成已过完）、
+      # 奥克兰（UTC+8 以东、与北京隔着日界、有夏令时）；Windows 留在 UTC。
+      # 本机对应的入口是 `npm run test:tz`。scripts/test-tz.test.mjs 守着这张表不被删空。
+      matrix:
+        include:
+          - os: ubuntu-latest
+            node-version: '22.12'
+            tz: America/Los_Angeles
+          - os: ubuntu-latest
+            node-version: '24'
+            tz: Asia/Kolkata
+          - os: ubuntu-latest
+            node-version: '26'
+            tz: Asia/Tokyo
+          - os: macos-latest
+            node-version: '24'
+            tz: Pacific/Auckland
+          - os: windows-latest
+            node-version: '24'
+            tz: UTC
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: npm
+
+      # 整个 npm test 套件只用 node: 内置模块，不 import 任何第三方包。
+      # --ignore-scripts 跳过 electron 的 postinstall（会下载上百 MB 的 Chromium），
+      # 只有 `npm run test:browser` 才真正需要 Electron 二进制，那条在下方 browser-smoke job 单独跑。
+      - name: Install dependencies
+        run: npm ci --ignore-scripts
+
+      - name: Run tests
+        env:
+          TZ: ${{ matrix.tz }}
+        run: npm test
+
+  lint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '24'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --ignore-scripts
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Schema and secret scan
+        run: node scripts/release-scan.mjs
+
+  browser-smoke:
+    runs-on: macos-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '24'
+          cache: npm
+      - name: Install dependencies
+        run: npm ci --ignore-scripts
+      - name: Install Electron runtime
+        run: node scripts/install-electron-runtime.mjs
+      - name: Verify native runtime is present
+        run: test -x "node_modules/electron/dist/Electron.app/Contents/MacOS/Electron"
+      - name: Browser smoke (real Electron + fixture monitor-server)
+        # 原生冒烟只在这里显式运行：默认 npm test 只跑 scripts/browser-smoke-wiring.test.mjs
+        # （静态接线检查，无需 Electron），不会在开发机上弹出真实 GUI 窗口。
+        run: npm run test:browser

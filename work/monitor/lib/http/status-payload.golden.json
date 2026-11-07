@@ -1,0 +1,930 @@
+{
+  "status": {
+    "updatedAt": "2026-09-01T00:00:00.000Z",
+    "health": "down",
+    "summary": {
+      "schemaVersion": 1,
+      "transport": {
+        "state": "disconnected",
+        "freshness": "fresh",
+        "reasonCode": "REMOTE_PORT_CLOSED",
+        "checkedAt": 1788220800000,
+        "nextCheckAt": 1788220805000,
+        "graceMs": 15000
+      },
+      "agentCounts": {
+        "available": 0,
+        "attention": 0,
+        "unknown": 2
+      },
+      "incidentCount": 0,
+      "otherServersAttention": 0,
+      "headline": "连接中断",
+      "context": {
+        "serverId": "server-01",
+        "generatedAt": 1788220800000,
+        "configRevision": "b0fcb82b5d61afeb"
+      }
+    },
+    "readiness": {
+      "schemaVersion": 1,
+      "context": {
+        "serverId": "server-01",
+        "generation": 0,
+        "configRevision": "b0fcb82b5d61afeb"
+      },
+      "agents": {
+        "codex": {
+          "network": {
+            "state": "unknown",
+            "freshness": "unknown",
+            "checkedAt": null,
+            "reasonCode": "NO_EVIDENCE",
+            "evidenceIds": []
+          },
+          "identity": {
+            "state": "unknown",
+            "freshness": "unknown",
+            "checkedAt": null,
+            "reasonCode": "NO_EVIDENCE",
+            "evidenceIds": []
+          },
+          "runtime": {
+            "state": "unknown",
+            "freshness": "unknown",
+            "checkedAt": null,
+            "reasonCode": "NO_EVIDENCE",
+            "evidenceIds": []
+          },
+          "lastWork": {
+            "state": "unknown",
+            "freshness": "unknown",
+            "checkedAt": null,
+            "reasonCode": "NO_EVIDENCE",
+            "evidenceIds": []
+          },
+          "displaySummary": "等待 Codex Doctor 诊断"
+        },
+        "claude-codewing": {
+          "network": {
+            "state": "unknown",
+            "freshness": "unknown",
+            "checkedAt": null,
+            "reasonCode": "NO_EVIDENCE",
+            "evidenceIds": []
+          },
+          "identity": {
+            "state": "unknown",
+            "freshness": "unknown",
+            "checkedAt": null,
+            "reasonCode": "NO_EVIDENCE",
+            "evidenceIds": []
+          },
+          "runtime": {
+            "state": "unknown",
+            "freshness": "unknown",
+            "checkedAt": null,
+            "reasonCode": "NO_EVIDENCE",
+            "evidenceIds": []
+          },
+          "lastWork": {
+            "state": "unknown",
+            "freshness": "unknown",
+            "checkedAt": null,
+            "reasonCode": "NO_EVIDENCE",
+            "evidenceIds": []
+          },
+          "displaySummary": "等待 ReClaude 诊断"
+        }
+      }
+    },
+    "shouldBeRunning": true,
+    "supervisorUp": true,
+    "localProxyUp": true,
+    "tunnelUp": true,
+    "remotePortOpen": false,
+    "processes": {
+      "localProxy": [
+        {
+          "pid": "11",
+          "command": "node work/local_http_connect_proxy.mjs"
+        }
+      ],
+      "reverseTunnel": [
+        {
+          "pid": "12",
+          "command": "ssh -N -R 127.0.0.1:7891:127.0.0.1:8888 myserver"
+        }
+      ],
+      "supervisor": [
+        {
+          "pid": "13",
+          "command": "node work/monitor/channel-supervisor.mjs"
+        }
+      ]
+    },
+    "remotePort": {
+      "ok": false,
+      "output": "检测中..."
+    },
+    "doctor": {
+      "ok": false,
+      "summary": {
+        "ok": 0,
+        "fail": 0,
+        "warn": 0,
+        "notes": 0,
+        "raw": ""
+      },
+      "output": "检测中..."
+    },
+    "endpoint": {
+      "ok": false,
+      "output": "检测中..."
+    },
+    "claudeEndpoint": {
+      "ok": null,
+      "output": "检测中..."
+    },
+    "remoteLoad": {
+      "ok": true,
+      "output": "load"
+    },
+    "activeServerId": "server-01",
+    "activeAgentId": "codex",
+    "activeServer": {
+      "id": "server-01",
+      "name": "主集群服务器",
+      "host": "myserver",
+      "remotePort": 7891,
+      "localPort": 8888
+    },
+    "agents": [
+      {
+        "id": "codex",
+        "name": "Codex",
+        "kind": "codex",
+        "command": "codex"
+      },
+      {
+        "id": "claude-codewing",
+        "name": "Claude CodeWing",
+        "kind": "reclaude",
+        "command": "reclaude"
+      }
+    ],
+    "agentCatalog": [
+      {
+        "id": "codex",
+        "name": "Codex",
+        "kind": "codex",
+        "command": "codex"
+      },
+      {
+        "id": "claude-codewing",
+        "name": "Claude CodeWing",
+        "kind": "reclaude",
+        "command": "reclaude"
+      }
+    ],
+    "modules": {},
+    "hiddenPanels": [],
+    "agentsStatus": {
+      "codex": {
+        "ok": false,
+        "health": "waiting",
+        "output": "检测中..."
+      },
+      "claude-codewing": {
+        "ok": false,
+        "health": "waiting",
+        "output": "检测中..."
+      }
+    },
+    "agentsOverview": [
+      {
+        "id": "codex",
+        "name": "Codex",
+        "kind": "codex",
+        "health": "waiting",
+        "selected": true,
+        "tag": "检测中",
+        "summary": "等待 Codex Doctor 诊断"
+      },
+      {
+        "id": "claude-codewing",
+        "name": "Claude CodeWing",
+        "kind": "reclaude",
+        "health": "waiting",
+        "selected": false,
+        "tag": "检测中",
+        "summary": "等待 ReClaude 诊断"
+      }
+    ],
+    "networkChannel": {
+      "shouldBeRunning": true,
+      "localProxyUp": true,
+      "tunnelUp": true,
+      "remotePortOpen": false,
+      "host": "myserver",
+      "localProxyUrl": "http://127.0.0.1:8888",
+      "remoteProxyUrl": "http://127.0.0.1:7891",
+      "topology": "HTTP_CONNECT_REVERSE_TUNNEL"
+    },
+    "bridgeStages": {
+      "local-proxy": {
+        "stage": "local-proxy",
+        "ok": false,
+        "durationMs": 0,
+        "consecutiveFailures": 0,
+        "lastSuccessAt": null
+      },
+      "ssh-tunnel": {
+        "stage": "ssh-tunnel",
+        "ok": false,
+        "durationMs": 0,
+        "consecutiveFailures": 0,
+        "lastSuccessAt": null
+      },
+      "remote-port": {
+        "stage": "remote-port",
+        "ok": false,
+        "durationMs": 0,
+        "consecutiveFailures": 0,
+        "lastSuccessAt": null
+      },
+      "agent-endpoint": {
+        "stage": "agent-endpoint",
+        "ok": false,
+        "durationMs": 0,
+        "consecutiveFailures": 0,
+        "lastSuccessAt": null
+      }
+    },
+    "serversBrief": {
+      "server-01": {
+        "name": "myserver",
+        "displayName": "主集群服务器",
+        "ok": true,
+        "cpu": 42,
+        "ram": 31,
+        "disk": 89,
+        "output": "load"
+      },
+      "server-02": {
+        "name": "backup",
+        "displayName": "备用服务器",
+        "ok": false,
+        "cpu": 0,
+        "ram": 0,
+        "disk": 0,
+        "output": ""
+      }
+    },
+    "log": [],
+    "layers": {
+      "channel": {
+        "level": "error",
+        "reason": "远端端口未开放",
+        "checkedAt": 1788220800000,
+        "nextCheckAt": 1788220805000,
+        "detail": {
+          "supervisorUp": true,
+          "localProxyUp": true,
+          "tunnelUp": true,
+          "remotePortOpen": false,
+          "host": "myserver",
+          "localPort": 8888,
+          "remotePort": 7891,
+          "downSinceMs": 1788220800000
+        }
+      },
+      "tunnels": {
+        "server-01": {
+          "level": "error",
+          "reason": "远端端口未开放",
+          "tunnelUp": true,
+          "remotePortOpen": false,
+          "checkedAt": 1788220800000,
+          "source": "team",
+          "tunnel": true
+        },
+        "server-02": {
+          "level": "waiting",
+          "reason": "等待首次探测",
+          "tunnelUp": null,
+          "remotePortOpen": null,
+          "checkedAt": null,
+          "source": "team",
+          "tunnel": true
+        }
+      },
+      "agents": {
+        "codex": {
+          "level": "waiting",
+          "reason": "waiting",
+          "checkedAt": null,
+          "health": "waiting",
+          "summary": "等待 Codex Doctor 诊断",
+          "output": "检测中...",
+          "expiry": null
+        },
+        "claude-codewing": {
+          "level": "waiting",
+          "reason": "waiting",
+          "checkedAt": null,
+          "health": "waiting",
+          "summary": "等待 ReClaude 诊断",
+          "output": "检测中...",
+          "expiry": null
+        }
+      },
+      "resources": {
+        "server-01": {
+          "level": "ok",
+          "reason": "负载已更新",
+          "checkedAt": 1788220800000,
+          "cpu": 42,
+          "ram": 31,
+          "disk": 89,
+          "output": "load",
+          "gpu": [],
+          "agentsInstalled": null,
+          "usage": null,
+          "slurm": null,
+          "procTop": null,
+          "tunnelEgress": null
+        },
+        "server-02": {
+          "level": "waiting",
+          "reason": "等待首次探测",
+          "checkedAt": null,
+          "cpu": 0,
+          "ram": 0,
+          "disk": 0,
+          "output": "",
+          "gpu": [],
+          "agentsInstalled": null,
+          "usage": null,
+          "slurm": null,
+          "procTop": null,
+          "tunnelEgress": null
+        }
+      },
+      "validation": {},
+      "signals": {
+        "level": "waiting",
+        "reason": "等待首次探测",
+        "checkedAt": null,
+        "active": [],
+        "lastActivityAt": null
+      }
+    },
+    "version": "9.9.9-golden",
+    "connectionTargets": {
+      "schemaVersion": 1,
+      "source": "config-only",
+      "targets": [
+        {
+          "serverId": "server-01",
+          "localPort": 8888
+        }
+      ]
+    },
+    "autoRepairExhausted": false,
+    "tunnelPortForeign": [],
+    "onboarding": "ready",
+    "storage": {
+      "usedBytes": 1024,
+      "budgetBytes": 4096,
+      "lastSweepAt": null,
+      "evicted": 0
+    }
+  },
+  "statusLite": {
+    "updatedAt": "2026-09-01T00:00:00.000Z",
+    "health": "down",
+    "summary": {
+      "schemaVersion": 1,
+      "transport": {
+        "state": "disconnected",
+        "freshness": "fresh",
+        "reasonCode": "REMOTE_PORT_CLOSED",
+        "checkedAt": 1788220800000,
+        "nextCheckAt": 1788220805000,
+        "graceMs": 15000
+      },
+      "agentCounts": {
+        "available": 0,
+        "attention": 0,
+        "unknown": 2
+      },
+      "incidentCount": 0,
+      "otherServersAttention": 0,
+      "headline": "连接中断",
+      "context": {
+        "serverId": "server-01",
+        "generatedAt": 1788220800000,
+        "configRevision": "b0fcb82b5d61afeb"
+      }
+    },
+    "shouldBeRunning": true,
+    "supervisorUp": true,
+    "localProxyUp": true,
+    "tunnelUp": true,
+    "remotePortOpen": false,
+    "remoteLoad": {
+      "ok": true,
+      "output": "load"
+    },
+    "activeServerId": "server-01",
+    "activeAgentId": "codex",
+    "recentTransitions": [
+      {
+        "ts": 1788220800000,
+        "layer": "channel",
+        "key": "channel",
+        "from": "waiting",
+        "to": "error",
+        "reason": "远端端口未开放"
+      },
+      {
+        "ts": 1788220800000,
+        "layer": "resources",
+        "key": "res:server-01",
+        "from": "waiting",
+        "to": "ok",
+        "reason": "负载已更新"
+      }
+    ],
+    "activeServerLoad": {
+      "cpu": 42,
+      "ram": 31,
+      "disk": 89
+    },
+    "activeSignals": [],
+    "bridgeStages": {
+      "local-proxy": {
+        "stage": "local-proxy",
+        "ok": false,
+        "durationMs": 0,
+        "consecutiveFailures": 0,
+        "lastSuccessAt": null
+      },
+      "ssh-tunnel": {
+        "stage": "ssh-tunnel",
+        "ok": false,
+        "durationMs": 0,
+        "consecutiveFailures": 0,
+        "lastSuccessAt": null
+      },
+      "remote-port": {
+        "stage": "remote-port",
+        "ok": false,
+        "durationMs": 0,
+        "consecutiveFailures": 0,
+        "lastSuccessAt": null
+      },
+      "agent-endpoint": {
+        "stage": "agent-endpoint",
+        "ok": false,
+        "durationMs": 0,
+        "consecutiveFailures": 0,
+        "lastSuccessAt": null
+      }
+    }
+  },
+  "sseInitial": [
+    {
+      "event": "status",
+      "data": {
+        "lite": {
+          "updatedAt": "2026-09-01T00:00:00.000Z",
+          "health": "down",
+          "summary": {
+            "schemaVersion": 1,
+            "transport": {
+              "state": "disconnected",
+              "freshness": "fresh",
+              "reasonCode": "REMOTE_PORT_CLOSED",
+              "checkedAt": 1788220800000,
+              "nextCheckAt": 1788220805000,
+              "graceMs": 15000
+            },
+            "agentCounts": {
+              "available": 0,
+              "attention": 0,
+              "unknown": 2
+            },
+            "incidentCount": 0,
+            "otherServersAttention": 0,
+            "headline": "连接中断",
+            "context": {
+              "serverId": "server-01",
+              "generatedAt": 1788220800000,
+              "configRevision": "b0fcb82b5d61afeb"
+            }
+          },
+          "shouldBeRunning": true,
+          "supervisorUp": true,
+          "localProxyUp": true,
+          "tunnelUp": true,
+          "remotePortOpen": false,
+          "remoteLoad": {
+            "ok": true,
+            "output": "load"
+          },
+          "activeServerId": "server-01",
+          "activeAgentId": "codex",
+          "recentTransitions": [
+            {
+              "ts": 1788220800000,
+              "layer": "channel",
+              "key": "channel",
+              "from": "waiting",
+              "to": "error",
+              "reason": "远端端口未开放"
+            },
+            {
+              "ts": 1788220800000,
+              "layer": "resources",
+              "key": "res:server-01",
+              "from": "waiting",
+              "to": "ok",
+              "reason": "负载已更新"
+            }
+          ],
+          "activeServerLoad": {
+            "cpu": 42,
+            "ram": 31,
+            "disk": 89
+          },
+          "activeSignals": [],
+          "bridgeStages": {
+            "local-proxy": {
+              "stage": "local-proxy",
+              "ok": false,
+              "durationMs": 0,
+              "consecutiveFailures": 0,
+              "lastSuccessAt": null
+            },
+            "ssh-tunnel": {
+              "stage": "ssh-tunnel",
+              "ok": false,
+              "durationMs": 0,
+              "consecutiveFailures": 0,
+              "lastSuccessAt": null
+            },
+            "remote-port": {
+              "stage": "remote-port",
+              "ok": false,
+              "durationMs": 0,
+              "consecutiveFailures": 0,
+              "lastSuccessAt": null
+            },
+            "agent-endpoint": {
+              "stage": "agent-endpoint",
+              "ok": false,
+              "durationMs": 0,
+              "consecutiveFailures": 0,
+              "lastSuccessAt": null
+            }
+          },
+          "autoRepairExhausted": false,
+          "tunnelPortForeign": [],
+          "onboarding": "ready",
+          "storage": {
+            "usedBytes": 1024,
+            "budgetBytes": 4096,
+            "lastSweepAt": null,
+            "evicted": 0
+          }
+        },
+        "layers": {
+          "channel": {
+            "level": "error",
+            "reason": "远端端口未开放",
+            "checkedAt": 1788220800000,
+            "nextCheckAt": 1788220805000,
+            "detail": {
+              "supervisorUp": true,
+              "localProxyUp": true,
+              "tunnelUp": true,
+              "remotePortOpen": false,
+              "host": "myserver",
+              "localPort": 8888,
+              "remotePort": 7891,
+              "downSinceMs": 1788220800000
+            }
+          },
+          "tunnels": {
+            "server-01": {
+              "level": "error",
+              "reason": "远端端口未开放",
+              "tunnelUp": true,
+              "remotePortOpen": false,
+              "checkedAt": 1788220800000,
+              "source": "team",
+              "tunnel": true
+            },
+            "server-02": {
+              "level": "waiting",
+              "reason": "等待首次探测",
+              "tunnelUp": null,
+              "remotePortOpen": null,
+              "checkedAt": null,
+              "source": "team",
+              "tunnel": true
+            }
+          },
+          "agents": {
+            "codex": {
+              "level": "waiting",
+              "reason": "waiting",
+              "checkedAt": null,
+              "health": "waiting",
+              "summary": "等待 Codex Doctor 诊断",
+              "output": "检测中...",
+              "expiry": null
+            },
+            "claude-codewing": {
+              "level": "waiting",
+              "reason": "waiting",
+              "checkedAt": null,
+              "health": "waiting",
+              "summary": "等待 ReClaude 诊断",
+              "output": "检测中...",
+              "expiry": null
+            }
+          },
+          "resources": {
+            "server-01": {
+              "level": "ok",
+              "reason": "负载已更新",
+              "checkedAt": 1788220800000,
+              "cpu": 42,
+              "ram": 31,
+              "disk": 89,
+              "output": "load",
+              "gpu": [],
+              "agentsInstalled": null,
+              "usage": null,
+              "slurm": null,
+              "procTop": null,
+              "tunnelEgress": null
+            },
+            "server-02": {
+              "level": "waiting",
+              "reason": "等待首次探测",
+              "checkedAt": null,
+              "cpu": 0,
+              "ram": 0,
+              "disk": 0,
+              "output": "",
+              "gpu": [],
+              "agentsInstalled": null,
+              "usage": null,
+              "slurm": null,
+              "procTop": null,
+              "tunnelEgress": null
+            }
+          },
+          "validation": {},
+          "signals": {
+            "level": "waiting",
+            "reason": "等待首次探测",
+            "checkedAt": null,
+            "active": [],
+            "lastActivityAt": null
+          }
+        }
+      }
+    }
+  ],
+  "sseAfterProbe": [
+    {
+      "event": "status",
+      "data": {
+        "lite": {
+          "updatedAt": "2026-09-01T00:00:00.000Z",
+          "health": "degraded",
+          "summary": {
+            "schemaVersion": 1,
+            "transport": {
+              "state": "connected",
+              "freshness": "fresh",
+              "reasonCode": "TRANSPORT_DATA_PATH_OK",
+              "checkedAt": 1788220800000,
+              "nextCheckAt": 1788220805000,
+              "graceMs": 15000
+            },
+            "agentCounts": {
+              "available": 0,
+              "attention": 0,
+              "unknown": 2
+            },
+            "incidentCount": 0,
+            "otherServersAttention": 0,
+            "headline": "连接已建立",
+            "context": {
+              "serverId": "server-01",
+              "generatedAt": 1788220800000,
+              "configRevision": "b0fcb82b5d61afeb"
+            }
+          },
+          "shouldBeRunning": true,
+          "supervisorUp": true,
+          "localProxyUp": true,
+          "tunnelUp": true,
+          "remotePortOpen": true,
+          "remoteLoad": {
+            "ok": true,
+            "output": "load"
+          },
+          "activeServerId": "server-01",
+          "activeAgentId": "codex",
+          "recentTransitions": [
+            {
+              "ts": 1788220800000,
+              "layer": "channel",
+              "key": "channel",
+              "from": "waiting",
+              "to": "error",
+              "reason": "远端端口未开放"
+            },
+            {
+              "ts": 1788220800000,
+              "layer": "resources",
+              "key": "res:server-01",
+              "from": "waiting",
+              "to": "ok",
+              "reason": "负载已更新"
+            },
+            {
+              "ts": 1788220800000,
+              "layer": "channel",
+              "key": "channel",
+              "from": "error",
+              "to": "ok",
+              "reason": "通道全链路正常"
+            }
+          ],
+          "activeServerLoad": {
+            "cpu": 42,
+            "ram": 31,
+            "disk": 89
+          },
+          "activeSignals": [],
+          "bridgeStages": {
+            "local-proxy": {
+              "stage": "local-proxy",
+              "ok": false,
+              "durationMs": 0,
+              "consecutiveFailures": 0,
+              "lastSuccessAt": null
+            },
+            "ssh-tunnel": {
+              "stage": "ssh-tunnel",
+              "ok": false,
+              "durationMs": 0,
+              "consecutiveFailures": 0,
+              "lastSuccessAt": null
+            },
+            "remote-port": {
+              "stage": "remote-port",
+              "ok": true,
+              "durationMs": 3,
+              "consecutiveFailures": 0,
+              "lastSuccessAt": 1788220800000,
+              "serverId": "server-01"
+            },
+            "agent-endpoint": {
+              "stage": "agent-endpoint",
+              "ok": false,
+              "durationMs": 0,
+              "consecutiveFailures": 0,
+              "lastSuccessAt": null
+            }
+          },
+          "autoRepairExhausted": false,
+          "tunnelPortForeign": [],
+          "onboarding": "ready",
+          "storage": {
+            "usedBytes": 1024,
+            "budgetBytes": 4096,
+            "lastSweepAt": null,
+            "evicted": 0
+          }
+        },
+        "layers": {
+          "channel": {
+            "level": "ok",
+            "reason": "通道全链路正常",
+            "checkedAt": 1788220800000,
+            "nextCheckAt": 1788220805000,
+            "detail": {
+              "supervisorUp": true,
+              "localProxyUp": true,
+              "tunnelUp": true,
+              "remotePortOpen": true,
+              "host": "myserver",
+              "localPort": 8888,
+              "remotePort": 7891,
+              "downSinceMs": null
+            }
+          },
+          "tunnels": {
+            "server-01": {
+              "level": "ok",
+              "reason": "通道全链路正常",
+              "tunnelUp": true,
+              "remotePortOpen": true,
+              "checkedAt": 1788220800000,
+              "source": "team",
+              "tunnel": true
+            },
+            "server-02": {
+              "level": "waiting",
+              "reason": "等待首次探测",
+              "tunnelUp": null,
+              "remotePortOpen": null,
+              "checkedAt": null,
+              "source": "team",
+              "tunnel": true
+            }
+          },
+          "agents": {
+            "codex": {
+              "level": "waiting",
+              "reason": "waiting",
+              "checkedAt": null,
+              "health": "waiting",
+              "summary": "等待 Codex Doctor 诊断",
+              "output": "检测中...",
+              "expiry": null
+            },
+            "claude-codewing": {
+              "level": "waiting",
+              "reason": "waiting",
+              "checkedAt": null,
+              "health": "waiting",
+              "summary": "等待 ReClaude 诊断",
+              "output": "检测中...",
+              "expiry": null
+            }
+          },
+          "resources": {
+            "server-01": {
+              "level": "ok",
+              "reason": "负载已更新",
+              "checkedAt": 1788220800000,
+              "cpu": 42,
+              "ram": 31,
+              "disk": 89,
+              "output": "load",
+              "gpu": [],
+              "agentsInstalled": null,
+              "usage": null,
+              "slurm": null,
+              "procTop": null,
+              "tunnelEgress": null
+            },
+            "server-02": {
+              "level": "waiting",
+              "reason": "等待首次探测",
+              "checkedAt": null,
+              "cpu": 0,
+              "ram": 0,
+              "disk": 0,
+              "output": "",
+              "gpu": [],
+              "agentsInstalled": null,
+              "usage": null,
+              "slurm": null,
+              "procTop": null,
+              "tunnelEgress": null
+            }
+          },
+          "validation": {},
+          "signals": {
+            "level": "ok",
+            "reason": "",
+            "checkedAt": 1788220800000,
+            "active": [],
+            "lastActivityAt": null
+          }
+        }
+      }
+    },
+    {
+      "event": "probe",
+      "data": {
+        "id": "log-signals",
+        "layer": "agents",
+        "level": "ok",
+        "reason": "",
+        "checkedAt": 1788220800000
+      }
+    }
+  ]
+}

@@ -1,0 +1,222 @@
+name: release
+
+# tag 触发的发布流水线：先复用 test/lint/scan 门禁（quality，含源码树 release-scan），再构建两个平台的安装包：
+#   release          macOS：.app → 冒烟 → .zip + .dmg，建 Release（新建时先是草稿）并上传
+#   release-windows  Windows：安装目录 → 冒烟 → Setup.exe + 便携 .zip，上传到同一个 Release，最后转为正式发布
+# 两个平台都成功才对外可见：Windows 那一步失败时 Release 留在草稿，重跑 workflow 即可（上传是 --clobber，幂等）。
+# Linux 同事仍走源码网页模式（见 docs/release.md）。
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  quality:
+    uses: ./.github/workflows/test.yml
+
+  release:
+    needs: quality
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+    runs-on: macos-latest
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '24'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --ignore-scripts
+
+      - name: Verify tag matches package.json version
+        run: |
+          TAG_VERSION="${GITHUB_REF_NAME#v}"
+          PKG_VERSION="$(node -p "require('./package.json').version")"
+          if [ "$TAG_VERSION" != "$PKG_VERSION" ]; then
+            echo "::error::tag ${GITHUB_REF_NAME} 与 package.json version ${PKG_VERSION} 不一致；先 bump version + CHANGELOG 再打 tag。"
+            exit 1
+          fi
+          echo "VERSION=$PKG_VERSION" >> "$GITHUB_ENV"
+
+      - name: Cache Electron download
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/Library/Caches/electron
+          key: electron-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+
+      - name: Install Electron runtime
+        run: |
+          node scripts/install-electron-runtime.mjs
+          if [ ! -d "node_modules/electron/dist/Electron.app" ]; then
+            echo "::error::Electron 运行时安装失败（node_modules/electron/dist/Electron.app 不存在）。"
+            exit 1
+          fi
+
+      # 构建脚本验签失败即非 0 退出（不会带着坏签名走到下一步）。
+      - name: Build macOS app
+        run: bash scripts/build-macos-app.sh
+
+      # 用最终产物里的二进制真正起一次服务：与 npm run app:update 的 staged 冒烟同一实现
+      # （scripts/hot-update/smoke.mjs：fixture 模式、临时端口 / 数据目录 / 个人层，
+      # /api/session + /api/status-lite 均 200 才通过）。只在 macOS runner 上有意义。
+      - name: Verify signature and smoke-test the packaged app (isolated)
+        if: runner.os == 'macOS'
+        run: |
+          codesign --verify --deep --strict "Codex Operations Console.app"
+          node scripts/hot-update/smoke.mjs "Codex Operations Console.app" --timeout-ms 90000
+
+      - name: Scan packaged application payload
+        run: node scripts/release-scan.mjs --artifact-dir "Codex Operations Console.app/Contents/Resources/app"
+
+      - name: Package zip + SHA-256
+        run: |
+          ZIP_NAME="CodexOperationsConsole-${VERSION}-macos.zip"
+          ditto -c -k --keepParent "Codex Operations Console.app" "$ZIP_NAME"
+          shasum -a 256 "$ZIP_NAME" | tee "${ZIP_NAME}.sha256"
+          echo "ZIP_NAME=$ZIP_NAME" >> "$GITHUB_ENV"
+
+      # 磁盘映像：打开后把 .app 拖到旁边的「应用程序」即装好。
+      - name: Package dmg + SHA-256
+        run: |
+          DMG_NAME="CodexOperationsConsole-${VERSION}-macos.dmg"
+          DMG_STAGE="$RUNNER_TEMP/dmg"
+          mkdir -p "$DMG_STAGE"
+          ditto "Codex Operations Console.app" "$DMG_STAGE/Codex Operations Console.app"
+          ln -s /Applications "$DMG_STAGE/Applications"
+          hdiutil create -volname "Codex Operations Console" -srcfolder "$DMG_STAGE" -ov -format UDZO "$DMG_NAME"
+          shasum -a 256 "$DMG_NAME" | tee "${DMG_NAME}.sha256"
+          echo "DMG_NAME=$DMG_NAME" >> "$GITHUB_ENV"
+
+      - name: Attest release assets
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: |
+            ${{ env.ZIP_NAME }}
+            ${{ env.ZIP_NAME }}.sha256
+            ${{ env.DMG_NAME }}
+            ${{ env.DMG_NAME }}.sha256
+
+      - name: Compose release notes
+        run: |
+          NOTES="$RUNNER_TEMP/release-notes.md"
+          awk -v tag="$GITHUB_REF_NAME" '
+            index($0, "### " tag " ") == 1 || $0 == "### " tag { found = 1; next }
+            found && index($0, "### v") == 1 { exit }
+            found { print }
+          ' CHANGELOG.md > "$NOTES"
+          if ! grep -q '[^[:space:]]' "$NOTES"; then
+            printf '%s\n' "Release ${GITHUB_REF_NAME}。CHANGELOG.md 中未找到本版小节，详情见仓库 CHANGELOG.md。" > "$NOTES"
+          fi
+          {
+            echo
+            echo '---'
+            echo '**产物 SHA-256**'
+            echo '```'
+            cat "${ZIP_NAME}.sha256" "${DMG_NAME}.sha256"
+            echo '```'
+            echo "GitHub artifact attestation / Sigstore provenance 附在本 workflow run。安装与校验步骤见 [docs/release.md](https://github.com/${GITHUB_REPOSITORY}/blob/main/docs/release.md)。"
+          } >> "$NOTES"
+          echo "NOTES_FILE=$NOTES" >> "$GITHUB_ENV"
+
+      # 新建时是草稿：Windows 包上传完、release-windows 最后一步才转为正式发布。
+      - name: Create or update GitHub Release (macOS assets)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          ASSETS=("$ZIP_NAME" "${ZIP_NAME}.sha256" "$DMG_NAME" "${DMG_NAME}.sha256" "dist/checksums-${VERSION}.txt")
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            echo "Release ${GITHUB_REF_NAME} 已存在：覆盖资产并更新 notes。"
+            gh release upload "$GITHUB_REF_NAME" --clobber "${ASSETS[@]}"
+            gh release edit "$GITHUB_REF_NAME" --notes-file "$NOTES_FILE"
+          else
+            gh release create "$GITHUB_REF_NAME" \
+              --draft \
+              --verify-tag \
+              --title "$GITHUB_REF_NAME" \
+              --notes-file "$NOTES_FILE" \
+              "${ASSETS[@]}"
+          fi
+
+  release-windows:
+    needs: release
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+    runs-on: windows-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '24'
+          cache: npm
+
+      # 只要 node_modules/electron 的下载器与校验值：Windows 版 Electron 由构建脚本按 checksums.json 下载校验。
+      - name: Install dependencies
+        run: npm ci --ignore-scripts
+
+      - name: Read version
+        run: echo "VERSION=$(node -p "require('./package.json').version")" >> "$GITHUB_ENV"
+
+      - name: Cache Electron download
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~\AppData\Local\electron\Cache
+          key: electron-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+
+      # 安装器脚本与随附的简体中文语言文件按 Inno Setup 6.5+ 写；runner 自带的版本可能更旧，统一升到最新。
+      - name: Install Inno Setup
+        shell: pwsh
+        run: choco upgrade innosetup -y --no-progress
+
+      # 组装 → 白名单 / 体积 / 语法 / 包内容扫描 → 用包里的 exe 起一次隔离的监控服务 → 便携 zip → Setup.exe（各附 .sha256）。
+      - name: Build, smoke-test and package the Windows app
+        run: node scripts/build-windows-app.mjs --smoke --zip --installer
+
+      - name: Attest release assets
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: |
+            dist/windows/CodexOperationsConsole-${{ env.VERSION }}-windows-x64-setup.exe
+            dist/windows/CodexOperationsConsole-${{ env.VERSION }}-windows-x64-setup.exe.sha256
+            dist/windows/CodexOperationsConsole-${{ env.VERSION }}-windows-x64.zip
+            dist/windows/CodexOperationsConsole-${{ env.VERSION }}-windows-x64.zip.sha256
+
+      - name: Upload Windows assets and publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          BASE="dist/windows/CodexOperationsConsole-${VERSION}-windows-x64"
+          ASSETS=("${BASE}-setup.exe" "${BASE}-setup.exe.sha256" "${BASE}.zip" "${BASE}.zip.sha256")
+          gh release upload "$GITHUB_REF_NAME" --clobber "${ASSETS[@]}"
+          # notes 里补上 Windows 产物的 SHA-256（重跑时先去掉上一次补的那段，不重复）。
+          NOTES="$RUNNER_TEMP/release-notes.md"
+          gh release view "$GITHUB_REF_NAME" --json body -q .body | awk '/^\*\*Windows 产物 SHA-256\*\*/ { skip = 1 } !skip { print }' > "$NOTES"
+          {
+            echo
+            echo '**Windows 产物 SHA-256**'
+            echo '```'
+            cat "${BASE}-setup.exe.sha256" "${BASE}.zip.sha256"
+            echo '```'
+          } >> "$NOTES"
+          gh release edit "$GITHUB_REF_NAME" --notes-file "$NOTES" --draft=false

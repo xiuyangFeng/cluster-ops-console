@@ -1,0 +1,432 @@
+/* dialogs.css —— 浮层与临时层：诊断浮层骨架（.hud-dialog）、通道控制浮层内容、全局命令面板、
+   Toast、一键修复 runbook（注意力队列里的运行条目 + 预览确认层）与单隧道重启的操作确认层。
+   归属：app/dialogs.js / command-palette.js / toast.js / render/repair-runbook.js。
+   各浮层的具体内容样式在对应区块文件（diagnostics.css / settings.css）。 */
+
+/* ==========================================================================
+   诊断浮层骨架（原生 <dialog>，showModal 进顶层）
+   ========================================================================== */
+/* 两种原生 <dialog>（诊断浮层 / 命令面板）共用的外壳 */
+.hud-dialog,
+.cmd-palette-dialog {
+  background: var(--surface-raised);
+  border: none;
+  border-radius: 14px;
+  box-shadow: var(--shadow-dialog);
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+.hud-dialog:not([open]),
+.cmd-palette-dialog:not([open]) { display: none; }
+.hud-dialog {
+  color: var(--text);
+  /* 顶部通配 reset 会把 UA 的 margin:auto 清零导致浮层贴左上,这里显式恢复居中 */
+  margin: auto;
+  width: min(720px, 92vw);
+  max-height: 82vh;
+  /* 必须是 fixed（UA 给模态 <dialog> 的默认值）：relative 在顶层里会按绝对定位处理、
+     相对文档定位，弹窗开着时滚动背景页面，弹窗会跟着滚出可视区。fixed 同样是子元素的定位容器。 */
+  position: fixed;
+}
+.hud-dialog.dialog-wide { width: min(920px, 94vw); }
+.hud-dialog::backdrop { background: var(--backdrop-bg); }
+.dialog-header {
+  display: flex; align-items: center; gap: var(--space-2);
+  padding: var(--space-3) var(--space-4) var(--space-3) var(--space-5);
+  border-bottom: 1px solid var(--hud-border);
+}
+.dialog-header h2 { font-size: var(--text-base); font-weight: 600; color: var(--text-strong); flex: 1; }
+.dialog-close {
+  background: none; border: none; border-radius: var(--radius-md);
+  color: var(--muted); cursor: pointer; width: 28px; height: 28px; font-size: var(--text-sm);
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.dialog-close:hover { color: var(--text-strong); background: rgba(var(--surface-rgb), 0.07); }
+/* 浮层正文是固定上限高度的滚动容器：块级 + overflow，而不是 flex 列（否则子项会被压缩） */
+.dialog-body { padding: var(--space-4) var(--space-5); overflow-y: auto; min-height: 0; }
+
+/* ==========================================================================
+   通道控制浮层（#dlgControl）：启停按钮组 / 桌面端隐藏与退出 / 轮询 / 诊断视角
+   ========================================================================== */
+.controls-wrapper {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.btn-group {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+
+.desktop-controls-group {
+  display: flex;
+  gap: 8px;
+  width: 100%;
+}
+
+.btn-half {
+  flex: 1;
+}
+
+.control-extra {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-top: 1px solid var(--hud-border);
+  padding-top: 12px;
+}
+
+.agent-selector-panel {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 12px 14px;
+  border: 1px solid var(--hud-border);
+  border-radius: var(--radius-md);
+  background: var(--well-bg);
+}
+
+.agent-selector-label {
+  display: block;
+  color: var(--text-strong);
+  font-size: var(--text-base);
+  font-weight: 600;
+}
+
+.agent-selector-copy {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.refresh-setting {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--text-xs);
+  color: var(--muted);
+}
+
+.agent-select {
+  min-width: 180px;
+}
+
+/* ==========================================================================
+   全局命令面板（⌘K / Ctrl+K，顶部悬浮）
+   ========================================================================== */
+.cmd-palette-dialog {
+  width: min(580px, 90vw);
+  max-height: min(420px, 60vh);
+  position: fixed;
+  inset-block-start: 12vh;
+  inset-block-end: auto;
+  inset-inline: 0;
+  margin: 0 auto;
+  overflow: hidden;
+}
+.cmd-palette-dialog::backdrop {
+  background: var(--backdrop-bg-2);
+}
+.cmd-input-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px 10px 16px;
+  border-bottom: 1px solid var(--hud-border);
+}
+/* 放大镜图标：面板输入框与顶栏命令入口按钮（shell.css .cmd-trigger-btn）共用 */
+.cmd-search-icon {
+  display: inline-flex;
+  color: var(--muted);
+  flex-shrink: 0;
+}
+.cmd-input {
+  flex: 1;
+  background: none;
+  border: none;
+  outline: none;
+  font-family: var(--font-sans);
+  font-size: 14px;
+  color: var(--text-strong);
+}
+.cmd-input::placeholder {
+  color: var(--muted);
+}
+.cmd-shortcut-tag {
+  font-size: var(--text-xs);
+  color: var(--muted);
+  white-space: nowrap;
+}
+.cmd-list {
+  overflow-y: auto;
+  max-height: min(360px, calc(60vh - 56px));
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.cmd-category-header {
+  font-size: var(--text-xs);
+  font-weight: 500;
+  color: var(--muted);
+  padding: 8px 10px 4px;
+}
+.cmd-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 10px;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  color: var(--text);
+}
+.cmd-item:hover, .cmd-item.active {
+  background: rgba(var(--surface-rgb), 0.07);
+  color: var(--text-strong);
+}
+.cmd-item-info {
+  flex: 1;
+  font-size: var(--text-base);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.cmd-item-badge {
+  font-size: var(--text-xs);
+  color: var(--muted);
+  background: rgba(var(--surface-rgb), 0.07);
+  padding: 0 6px;
+  border-radius: 4px;
+}
+/* 没有匹配的命令（紧凑型空状态，command-palette.js renderNoMatchHtml） */
+.cmd-empty { padding: var(--space-2) 0; }
+
+/* ==========================================================================
+   Toast 通知（toast.js：className 为 "toast-item toast-<type>"）
+   ========================================================================== */
+.toast-container {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  z-index: 9999;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  pointer-events: none;
+}
+.toast-item {
+  pointer-events: auto;
+  min-width: 260px;
+  max-width: 380px;
+  background: var(--toast-bg);
+  border: 1px solid var(--hud-border);
+  border-left: 3px solid var(--gray);
+  box-shadow: var(--shadow-toast);
+  border-radius: var(--radius-md);
+  padding: 10px 12px 10px 14px;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  color: var(--text);
+  font-size: var(--text-sm);
+  animation: toast-in 0.2s ease-out;
+}
+/* 入场放完后摘掉动画（toast.js）；须写在 .toast-hiding 之前，退场动画才盖得过它 */
+.toast-item.toast-shown { animation: none; }
+.toast-item.toast-hiding {
+  animation: toast-out 0.2s ease forwards;
+}
+@keyframes toast-in {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes toast-out {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+.toast-success { border-left-color: var(--green); }
+.toast-warn { border-left-color: var(--yellow); }
+.toast-info { border-left-color: var(--cyan); }
+.toast-error { border-left-color: var(--red); }
+.toast-content { flex: 1; min-width: 0; }
+.toast-title { font-weight: 600; font-size: var(--text-sm); margin-bottom: 1px; color: var(--text-strong); }
+.toast-message { color: var(--text-soft); word-break: break-all; font-size: var(--text-sm); }
+.toast-close { background: none; border: none; color: var(--muted); cursor: pointer; font-size: 11px; padding: 2px 4px; }
+.toast-close:hover { color: var(--text-strong); }
+
+/* ==========================================================================
+   v2.15 一键修复 runbook：注意力队列里的运行条目 + 预览确认层（#dlgRepairPreview）
+   ========================================================================== */
+
+/* 运行条目：#attentionQueue(flex column) 内 order:-1 恒置顶；
+   renderAlertBanner 只覆写 #alertBanner 的 className，本元素独立不受影响。
+   外框（细边框 + 3px 左色条 + 面板底）与告警横幅同族，见 shell.css；运行中 = 强调色左条。 */
+.repair-runbook {
+  order: -1;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 14px;
+  border-left-color: var(--cyan);
+  transition: opacity 0.5s ease;
+}
+.repair-runbook.is-success {
+  border-left-color: var(--green);
+  background: color-mix(in srgb, var(--green) 6%, var(--panel));
+}
+.repair-runbook.is-failed {
+  border-left-color: var(--red);
+  background: color-mix(in srgb, var(--red) 6%, var(--panel));
+}
+.repair-runbook.fade-out { opacity: 0; }
+
+.runbook-head { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.runbook-state-icon { font-size: 14px; flex-shrink: 0; }
+.repair-runbook.is-running .runbook-state-icon { color: var(--cyan); }
+.repair-runbook.is-success .runbook-state-icon { color: var(--green); }
+.repair-runbook.is-failed .runbook-state-icon { color: var(--red); }
+.runbook-title { font-weight: 600; font-size: var(--text-base); color: var(--text); }
+.runbook-meta {
+  margin-left: auto;
+  color: var(--muted);
+  font-size: var(--text-xs);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.runbook-steps {
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+  padding: 0;
+  margin: 0;
+}
+.runbook-step {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--text-sm);
+  color: var(--muted);
+}
+.runbook-step-mark { font-family: var(--font-mono); width: 12px; text-align: center; flex-shrink: 0; }
+.runbook-step.state-done { color: var(--green); }
+.runbook-step.state-active { color: var(--text); font-weight: 600; }
+.runbook-step.state-active .runbook-step-mark { color: var(--cyan); }
+.runbook-step.state-error { color: var(--red); font-weight: 600; }
+
+.runbook-note { font-size: var(--text-xs); color: var(--muted); margin: 0; }
+.runbook-actions { display: flex; gap: 12px; }
+
+/* 动画统一包 reduced-motion 偏好守卫（全局 reduce 规则另有兜底；spin / chainPulse 在 styles.css） */
+@media (prefers-reduced-motion: no-preference) {
+  .repair-runbook.is-running .runbook-state-icon {
+    display: inline-block;
+    animation: spin 1.2s linear infinite;
+  }
+  .runbook-step.state-active .runbook-step-mark { animation: chainPulse 1.4s ease-in-out infinite; }
+}
+
+/* 预览确认层（复用 .hud-dialog 骨架，仅补充内容排版） */
+.runbook-preview-intro { font-size: var(--text-sm); color: var(--text); margin-bottom: 10px; }
+.runbook-preview-steps {
+  margin: 0 0 12px;
+  padding-left: 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.runbook-preview-steps li { font-size: var(--text-sm); color: var(--text); }
+.runbook-preview-steps .step-label { font-weight: 600; }
+.runbook-preview-steps .step-desc { display: block; color: var(--muted); font-size: var(--text-xs); margin-top: 1px; }
+.runbook-preview-note { font-size: var(--text-xs); color: var(--muted); margin-bottom: 14px; padding-left: 10px; border-left: 2px solid var(--yellow); }
+.runbook-preview-actions { display: flex; gap: 10px; justify-content: flex-end; }
+
+/* ==========================================================================
+   操作确认层（#dlgActionPreview，单隧道重启）：复用 .runbook-preview-* 的排版骨架。
+   ========================================================================== */
+.action-preview-target { font-size: var(--text-sm); color: var(--muted); margin: 0 0 10px; }
+.action-preview-section-title {
+  margin: 0 0 4px;
+  font-size: var(--text-xs);
+  color: var(--muted);
+}
+
+/* 影响范围块：逐字展示，长行横向滚动而不是折行 */
+.action-preview-commands {
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  background: var(--inset-bg);
+  border: 1px solid var(--hud-border);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  line-height: 1.6;
+  white-space: pre;
+  overflow-x: auto;
+}
+
+.action-preview-notes {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0 0 12px;
+  padding-left: 18px;
+  font-size: var(--text-xs);
+  color: var(--muted);
+}
+
+/* 过期倒计时：到点转红并禁用确认按钮（repair-runbook.js renderPreviewExpire） */
+.action-preview-expire {
+  margin: 0 0 10px;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--muted);
+}
+.action-preview-expire.is-expired { color: var(--red); }
+
+/* ==========================================================================
+   集群 CLI 登录（#dlgCliLogin，v2.57，app/cli-login-dialog.js）：安静取向——中性灰、细边框，
+   只有失败 / 明文提醒带一点颜色；方式是一列可选行，字段按方式显隐。
+   ========================================================================== */
+.cli-login-dialog { width: min(560px, 92vw); }
+.cl-form, .cl-progress { display: grid; gap: var(--space-3); }
+.cl-form > .us-segmented { justify-self: start; }
+.cl-methods { display: grid; border: 1px solid var(--hud-border); border-radius: var(--radius-md); background: var(--card-bg); overflow: hidden; }
+.cl-method { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; padding: 9px 12px; border: 0; background: transparent; font: inherit; text-align: left; color: var(--text); cursor: pointer; }
+.cl-method + .cl-method { border-top: 1px solid var(--hud-border); }
+.cl-method:hover { background: rgba(var(--surface-rgb), 0.04); }
+.cl-method[aria-checked="true"] { background: var(--surface-raised); box-shadow: inset 2px 0 0 var(--muted-strong); }
+.cl-method-label { font-size: var(--text-sm); font-weight: 550; color: var(--text-strong); }
+.cl-method-hint { font-size: var(--text-xs); color: var(--muted); }
+.cl-fields { display: grid; gap: var(--space-2); }
+.cl-field { display: grid; gap: 4px; font-size: var(--text-xs); color: var(--muted-strong); }
+.cl-field input { min-height: 32px; border: 1px solid var(--hud-border-strong); border-radius: var(--radius-md); background: var(--control-bg); color: var(--text-strong); font: 12px var(--font-mono); padding: 0 10px; }
+.cl-check { display: flex; align-items: center; gap: 8px; font-size: var(--text-xs); color: var(--muted-strong); }
+.cl-notes { margin: 0; display: grid; gap: 2px; }
+.cl-notes:empty { display: none; }
+.cl-note { font-size: var(--text-xs); color: var(--muted); }
+.cl-note.is-warn, .cl-lines .is-warn { color: var(--yellow); }
+.cl-hint { margin: 0; font-size: var(--text-xs); color: var(--muted); }
+.cl-hint:empty { display: none; }
+.cl-hint.is-fail { color: var(--red); }
+.cl-actions { display: flex; align-items: center; justify-content: flex-end; gap: var(--space-3); }
+.cl-foot { margin-right: auto; font-size: var(--text-xs); color: var(--label-dim); }
+.cl-phase { margin: 0; font-size: var(--text-sm); color: var(--text-strong); display: flex; align-items: center; gap: 8px; }
+.cl-phase::before { content: ""; flex: none; width: 6px; height: 6px; border-radius: 50%; background: var(--gray); }
+.cl-phase[data-state="succeeded"]::before { background: var(--green); }
+.cl-phase:is([data-state="failed"], [data-state="timeout"])::before { background: var(--red); }
+.cl-link { display: flex; align-items: center; gap: var(--space-3); flex-wrap: wrap; }
+.cl-link a.btn { text-decoration: none; }
+.cl-result:empty { display: none; }
+.cl-message { margin: 0; font-size: var(--text-sm); overflow-wrap: anywhere; }
+.cl-message.is-ok { color: var(--text-strong); }
+.cl-message.is-fail { color: var(--red); }
+.cl-lines { list-style: none; margin: 6px 0 0; padding: 0; display: grid; gap: 2px; font-size: var(--text-xs); color: var(--muted); overflow-wrap: anywhere; }
+/* Agent 详情里的「登录」入口 */
+.agent-drawer-actions { display: flex; justify-content: flex-end; margin-top: var(--space-1); }

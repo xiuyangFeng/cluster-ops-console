@@ -1,0 +1,224 @@
+/* onboarding.css —— 接入引导浮层（#dlgOnboarding）：表单、步骤清单、嵌在步骤里的提问 / 失败说明、完成页。
+   归属：app/onboarding-guide.js / render/onboarding-view.js。
+   外壳与 .hud-dialog 同款（同一套表面与阴影），但单独成类：引导不接受"点遮罩关闭"，也比诊断浮层高一些。
+   颜色一律走令牌；状态只用左侧的小圆标表达，不给整行铺底色。 */
+
+.onboarding-dialog {
+  background: var(--surface-raised);
+  color: var(--text);
+  border: none;
+  border-radius: 14px;
+  box-shadow: var(--shadow-dialog);
+  padding: 0;
+  margin: auto;
+  width: min(640px, 94vw);
+  max-height: 88vh;
+  position: fixed;
+  display: flex;
+  flex-direction: column;
+}
+.onboarding-dialog:not([open]) { display: none; }
+.onboarding-dialog::backdrop { background: var(--backdrop-bg); }
+
+.ob-header {
+  display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-4);
+  padding: var(--space-5) var(--space-6) var(--space-3);
+}
+.ob-heading { min-width: 0; }
+.ob-header h2 { font-size: var(--text-lg); font-weight: 600; color: var(--text-strong); }
+.ob-sub { margin-top: 2px; font-size: var(--text-xs); color: var(--muted); overflow-wrap: anywhere; }
+.ob-sub:empty { display: none; }
+.ob-header .text-btn { flex: none; padding-top: 3px; }
+
+.ob-body { padding: var(--space-2) var(--space-6) var(--space-5); overflow-y: auto; min-height: 0; }
+.ob-footer {
+  display: flex; justify-content: flex-end;
+  padding: var(--space-3) var(--space-6) var(--space-4);
+  border-top: 1px solid var(--hud-border);
+}
+
+.ob-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+
+/* ---- 表单 ---- */
+.ob-loading { min-height: 318px; display: flex; align-items: center; }
+.ob-form, .ob-prompt { display: grid; gap: var(--space-3); }
+.ob-lead { font-size: var(--text-base); color: var(--text-soft); line-height: 1.6; }
+.ob-field { display: grid; gap: 5px; font-size: var(--text-xs); color: var(--muted-strong); min-width: 0; }
+.ob-field input {
+  min-height: 34px; padding: 0 10px;
+  border: 1px solid var(--hud-border-strong); border-radius: var(--radius-md);
+  background: var(--control-bg); color: var(--text-strong);
+  font: var(--text-base) var(--font-sans);
+}
+.ob-field input[aria-invalid="true"] { border-color: var(--red); }
+.ob-field-row { display: grid; grid-template-columns: minmax(0, 1fr) 110px; gap: var(--space-3); }
+.ob-note { font-size: var(--text-xs); color: var(--muted); line-height: 1.55; }
+.ob-error { font-size: var(--text-sm); color: var(--red-soft); line-height: 1.5; }
+.ob-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3); }
+.ob-form > .ob-actions { margin-top: var(--space-1); }
+
+/* ---- 步骤清单：左侧一列圆标，用细线连起来 ---- */
+.ob-steps { list-style: none; display: grid; }
+.ob-step { display: grid; grid-template-columns: 18px minmax(0, 1fr); gap: var(--space-3); padding-bottom: var(--space-4); position: relative; }
+.ob-step:last-child { padding-bottom: 0; }
+.ob-step:not(:last-child)::before {
+  content: ""; position: absolute; left: 8px; top: 20px; bottom: 0; width: 1px; background: var(--hud-border-strong);
+}
+.ob-mark {
+  width: 18px; height: 18px; margin-top: 1px; border-radius: 50%;
+  border: 1.5px solid var(--hud-border-strong); background: var(--surface-raised);
+  display: grid; place-items: center; font-size: 11px; line-height: 1; color: var(--surface-raised);
+  position: relative; z-index: 1;
+}
+.ob-step.is-done .ob-mark { background: var(--green); border-color: var(--green); }
+.ob-step.is-done .ob-mark::after { content: "✓"; font-weight: 700; }
+.ob-step.is-skipped .ob-mark { border-style: dashed; }
+.ob-step.is-warn .ob-mark { background: var(--yellow); border-color: var(--yellow); }
+.ob-step.is-warn .ob-mark::after { content: "!"; font-weight: 700; }
+.ob-step.is-failed .ob-mark { background: var(--red); border-color: var(--red); }
+.ob-step.is-failed .ob-mark::after { content: "×"; font-weight: 700; }
+.ob-step.is-waiting .ob-mark { border-color: var(--cyan); box-shadow: inset 0 0 0 3px var(--surface-raised), inset 0 0 0 9px var(--cyan); }
+.ob-step.is-running .ob-mark { border-color: var(--hud-border-strong); border-top-color: var(--cyan); animation: spin 0.9s linear infinite; }
+@media (prefers-reduced-motion: reduce) {
+  .ob-step.is-running .ob-mark { animation: none; border-color: var(--cyan); }
+}
+
+.ob-step-main { min-width: 0; display: grid; gap: var(--space-2); }
+.ob-step-title { font-size: var(--text-base); font-weight: 550; color: var(--text-strong); }
+.ob-step.is-pending .ob-step-title, .ob-step.is-skipped .ob-step-title { color: var(--muted); font-weight: 500; }
+.ob-step-detail { font-size: var(--text-sm); color: var(--muted-strong); overflow-wrap: anywhere; }
+
+/* ---- 嵌在步骤里的提问 / 失败说明 ---- */
+.ob-prompt, .ob-fail, .ob-paused {
+  border: 1px solid var(--hud-border); border-radius: 10px; background: var(--card-bg);
+  padding: var(--space-3) var(--space-4);
+}
+.ob-prompt > p, .ob-fail > p { font-size: var(--text-sm); color: var(--text-soft); line-height: 1.55; }
+.ob-prompt > p.ob-note, .ob-fail > p.ob-note { font-size: var(--text-xs); color: var(--muted); }
+.ob-prompt > p.ob-error { color: var(--red-soft); }
+.ob-prompt code, .ob-fail code, .ob-done code { font-family: var(--font-mono); font-size: 12px; }
+.ob-fail { display: grid; gap: var(--space-2); }
+.ob-fail-msg { color: var(--text-strong); font-weight: 550; }
+.ob-paused { display: grid; gap: var(--space-3); margin-bottom: var(--space-4); font-size: var(--text-sm); color: var(--text-soft); }
+
+.ob-fp, .ob-list { list-style: none; display: grid; gap: 6px; }
+.ob-fp li { display: grid; grid-template-columns: 72px minmax(0, 1fr); gap: var(--space-3); align-items: baseline; }
+.ob-fp span { font-size: var(--text-xs); color: var(--muted); }
+.ob-fp code { color: var(--text-strong); overflow-wrap: anywhere; user-select: all; }
+.ob-list { font-size: var(--text-sm); color: var(--text-soft); }
+.ob-list-code li { display: grid; gap: 2px; }
+.ob-list-code span { font-size: var(--text-xs); color: var(--muted); }
+.ob-list-code code { overflow-wrap: anywhere; }
+
+.ob-code {
+  margin: 0; padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-md); background: var(--inset-bg);
+  font: 12px/1.55 var(--font-mono); color: var(--text-soft);
+  white-space: pre-wrap; overflow-wrap: anywhere; max-height: 180px; overflow-y: auto;
+}
+.ob-diff { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-3); }
+.ob-diff h4 { font-size: var(--text-xs); font-weight: 500; color: var(--muted); margin-bottom: 4px; }
+@media (max-width: 560px) { .ob-diff, .ob-field-row { grid-template-columns: minmax(0, 1fr); } }
+
+.ob-manual { display: grid; gap: var(--space-2); font-size: var(--text-sm); color: var(--text-soft); }
+/* 两处折叠（终端方式 / 完成页的接入过程）的标题行：先写共同部分，再写各自展开后的间距 */
+.ob-manual > summary, .ob-fold > summary { cursor: pointer; color: var(--muted); }
+.ob-manual > summary { font-size: var(--text-xs); }
+.ob-fold > summary { font-size: var(--text-sm); }
+.ob-manual > summary:hover, .ob-fold > summary:hover { color: var(--cyan); }
+.ob-manual[open] > summary { margin-bottom: var(--space-2); }
+.ob-fold[open] > summary { margin-bottom: var(--space-3); }
+.ob-manual > p { margin-bottom: var(--space-2); }
+.ob-manual > .ob-code { margin-bottom: var(--space-2); }
+
+/* ---- 完成页 ---- */
+.ob-done { display: grid; gap: 4px; padding-bottom: var(--space-4); }
+.ob-done-title { font-size: var(--text-lg); font-weight: 600; color: var(--text-strong); }
+.ob-done-facts { font-size: var(--text-sm); color: var(--muted-strong); }
+.ob-warnings { list-style: none; display: grid; gap: var(--space-2); margin-top: var(--space-2); font-size: var(--text-sm); color: var(--text-soft); }
+.ob-warnings li { padding-left: var(--space-3); border-left: 2px solid var(--yellow); display: grid; gap: var(--space-2); }
+
+.ob-again { margin-top: var(--space-3); display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-2); }
+.ob-again .text-btn { font-size: var(--text-xs); color: var(--cyan); }
+
+.ob-next { display: grid; gap: var(--space-3); margin-top: var(--space-5); padding-top: var(--space-4); border-top: 1px solid var(--hud-border); }
+.ob-next h3 { font-size: var(--text-base); font-weight: 600; color: var(--text-strong); display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-2); }
+.ob-next h3 small { font-size: var(--text-xs); font-weight: 400; color: var(--muted); }
+.ob-next h3:not(:first-child) { margin-top: var(--space-2); }
+/* 与配置浮层共用的 .settings-cli 在那边带左右内边距；嵌在引导里时贴齐正文。 */
+.ob-next .settings-cli { padding: 0; }
+.ob-login { display: flex; flex-wrap: wrap; gap: var(--space-3); }
+
+/* 接入后的准备清单：沿用工作台令牌，紧凑分步，不引入常驻动画。 */
+.ob-route { display: grid; gap: 10px; padding: 16px; border: 1px solid var(--hud-border); border-radius: 10px; background: var(--inset-bg); font-size: var(--text-sm); line-height: 1.6; }
+.ob-route dl { display: grid; grid-template-columns: 80px minmax(0, 1fr); gap: 8px 12px; }
+.ob-route dt { color: var(--muted); }
+.ob-route dd { margin: 0; overflow-wrap: anywhere; }
+.ob-route dd > small { display: block; color: var(--muted); }
+.ob-stage-number { display: inline-grid; place-items: center; width: 23px; height: 23px; border: 1px solid var(--hud-border-strong); border-radius: 50%; font-size: var(--text-xs); color: var(--cyan); }
+.ob-tool-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.ob-tool, .ob-start { min-width: 0; display: grid; gap: 10px; padding: 14px; border: 1px solid var(--hud-border); border-radius: 10px; }
+.ob-tool h4 { color: var(--text-strong); font-size: var(--text-base); }
+.ob-tool .ob-actions { align-items: stretch; flex-direction: column; gap: 7px; }
+.ob-check { display: grid; gap: 12px; min-width: 0; }
+.ob-check-results { list-style: none; display: grid; gap: 6px; padding: 12px; border-left: 2px solid var(--cyan); font-size: var(--text-sm); overflow-wrap: anywhere; }
+@media (max-width: 560px) { .ob-tool-grid { grid-template-columns: minmax(0, 1fr); } }
+
+/* ---- v2.89 下一步高亮：控制器按 setupFocus 给 #dlgOnboarding 打 data-ob-focus，这里只认令牌 ---- */
+/* 吸在滚动区顶部：往下翻到第 3、4 段时也看得见「下一步」。底色不透明，免得正文从下面透出来。 */
+.ob-hint {
+  position: sticky; top: 0; z-index: 2;
+  display: flex; gap: 8px; align-items: flex-start; margin-bottom: var(--space-3);
+  padding: 10px 14px; border: 1px solid color-mix(in srgb, var(--cyan) 45%, transparent); border-radius: 10px;
+  background: linear-gradient(color-mix(in srgb, var(--cyan) 9%, transparent), color-mix(in srgb, var(--cyan) 9%, transparent)), var(--surface-raised);
+  color: var(--text-strong); font-size: var(--text-sm); line-height: 1.6;
+}
+.ob-hint::before { content: "→"; color: var(--cyan); font-weight: 700; }
+.ob-hint:empty { display: none; }
+
+.ob-next h3[data-ob-stage] { opacity: 0.62; transition: opacity 0.2s ease; }
+.ob-next h3.is-active, .ob-next h3.is-done { opacity: 1; }
+.ob-next h3.is-active .ob-stage-number { background: var(--cyan); border-color: var(--cyan); color: var(--surface-raised); font-weight: 700; }
+.ob-next h3.is-done .ob-stage-number { font-size: 0; border-color: var(--cyan); }
+.ob-next h3.is-done .ob-stage-number::after { content: "✓"; font-size: var(--text-xs); color: var(--cyan); }
+
+/* 高亮的按钮：一圈描边 + 前几下脉冲（只闪 4 次，之后保留描边；减少动态时不闪）。禁用的按钮不高亮。 */
+.onboarding-dialog[data-ob-focus~="start"] [data-ob-form="start"] button[type="submit"]:not(:disabled),
+.onboarding-dialog[data-ob-focus~="prompt"] .ob-prompt .btn-primary:not(:disabled),
+.onboarding-dialog[data-ob-focus~="retry"] [data-ob-retry]:not(:disabled),
+.onboarding-dialog[data-ob-focus~="install"] #onboardingCliBody [data-cli-action="install"]:not(:disabled),
+.onboarding-dialog[data-ob-focus~="install"] #onboardingCliBody [data-cli-go][data-cli-mode="auto"]:not(:disabled),
+.onboarding-dialog[data-ob-focus~="login-codex"] [data-cli-login="codex"]:not(:disabled),
+.onboarding-dialog[data-ob-focus~="login-claude"] [data-cli-login="claude"]:not(:disabled),
+.onboarding-dialog[data-ob-focus~="smoke-codex"] [data-ob-smoke="codex"]:not(:disabled),
+.onboarding-dialog[data-ob-focus~="smoke-claude"] [data-ob-smoke="claude"]:not(:disabled),
+.onboarding-dialog[data-ob-focus~="finish"] #onboardingFinish {
+  box-shadow: 0 0 0 2px var(--cyan);
+  animation: var(--ob-focus-pulse, ob-focus-pulse 1.6s ease-out 4);
+}
+@keyframes ob-focus-pulse {
+  0% { box-shadow: 0 0 0 2px var(--cyan), 0 0 0 0 color-mix(in srgb, var(--cyan) 55%, transparent); }
+  70% { box-shadow: 0 0 0 2px var(--cyan), 0 0 0 10px transparent; }
+  100% { box-shadow: 0 0 0 2px var(--cyan), 0 0 0 0 transparent; }
+}
+/* 要填 Key 的那张工具卡、要测试的那张卡一起描边，告诉人「在这一块里选」。 */
+.onboarding-dialog[data-ob-focus~="login-codex"] .ob-tool:has([data-cli-login="codex"]),
+.onboarding-dialog[data-ob-focus~="login-claude"] .ob-tool:has([data-cli-login="claude"]),
+.onboarding-dialog[data-ob-focus~="smoke-codex"] .ob-tool:has([data-ob-smoke="codex"]),
+.onboarding-dialog[data-ob-focus~="smoke-claude"] .ob-tool:has([data-ob-smoke="claude"]) {
+  border-color: var(--cyan);
+  background: color-mix(in srgb, var(--cyan) 5%, transparent);
+}
+/* 没装的那一行（.cli-row 本身没有边框，用 outline）。 */
+.onboarding-dialog[data-ob-focus~="install"] #onboardingCliBody .cli-row:has([data-cli-action="install"]:not(:disabled)) {
+  outline: 1px solid var(--cyan); outline-offset: -1px; border-radius: 8px;
+  background: color-mix(in srgb, var(--cyan) 5%, transparent);
+}
+@media (prefers-reduced-motion: reduce) {
+  .onboarding-dialog { --ob-focus-pulse: none; }
+}
+
+.ob-note [data-ob-smoke-skip] { margin-left: 8px; }
+.ob-smoke-ok { color: var(--cyan); font-size: var(--text-sm); font-weight: 600; }
+.ob-smoke-fail { display: grid; gap: 6px; padding: 10px 12px; border-left: 2px solid var(--red); font-size: var(--text-sm); overflow-wrap: anywhere; }
+

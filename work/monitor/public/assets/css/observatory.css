@@ -1,0 +1,1474 @@
+/* observatory.css —— v2.80 星空版 / 纸面版的「星图」改版：
+   用量（星图总览 + 星轨趋势 + 星历日历 + 项目 / 会话）、时间线（星轨泳道 + 观测日志）、端点（结论读数头 + 星点图）。
+   只在 body[data-skin="starry"|"paper"] 下生效，简洁版不受影响（唯一例外：.us-peak 默认隐藏）。
+   原则：每个星点都对应真实数据；动效只动 transform / opacity 且尊重「减少动态效果」；不用 backdrop-filter。
+   参考：敦煌星图的黑 / 朱两色星点（纸面版日历）、长曝光星轨（时间线）、星点散布 + 银河中位带（端点）。
+   归属：render/usage-observatory.js、render/usage-view.js、render/timeline-swim.js、render/endpoint-starfield.js。 */
+
+/* ---------- 令牌 ---------- */
+body[data-skin="starry"] {
+  --ob-star: #fff7e8;
+  --ob-ink: #e8e5de;
+  --ob-dim: #9a9890;
+  --ob-faint: #6f6e68;
+  --ob-hair: rgba(190, 205, 255, 0.095);
+  --ob-hair-2: rgba(190, 205, 255, 0.17);
+  --ob-panel: #0b0d13;
+  --ob-well: #06080e;
+  --ob-flare: #ef8078;
+  --ob-amber: #e0a758;
+  --ob-trail: rgba(134, 201, 180, 0.5);
+  --ob-cal: #ecc98e;
+  --ob-cal-hot: #ffe3ad;
+  --ob-sky: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='560' height='300'%3E%3Ccircle cx='66.7' cy='150.8' r='0.42' fill='%23f2f4ff' fill-opacity='0.20'/%3E%3Ccircle cx='481.6' cy='30.8' r='0.31' fill='%23f2f4ff' fill-opacity='0.13'/%3E%3Ccircle cx='336.6' cy='167.0' r='0.67' fill='%23f2f4ff' fill-opacity='0.37'/%3E%3Ccircle cx='306.8' cy='219.2' r='0.65' fill='%23f2f4ff' fill-opacity='0.36'/%3E%3Ccircle cx='420.6' cy='176.0' r='0.32' fill='%23f2f4ff' fill-opacity='0.13'/%3E%3Ccircle cx='344.0' cy='33.2' r='0.71' fill='%23f2f4ff' fill-opacity='0.40'/%3E%3Ccircle cx='251.8' cy='244.4' r='0.56' fill='%23f2f4ff' fill-opacity='0.30'/%3E%3Ccircle cx='380.5' cy='63.1' r='0.32' fill='%23f2f4ff' fill-opacity='0.13'/%3E%3Ccircle cx='548.8' cy='278.8' r='0.70' fill='%23f2f4ff' fill-opacity='0.39'/%3E%3Ccircle cx='559.8' cy='154.1' r='0.30' fill='%23f2f4ff' fill-opacity='0.12'/%3E%3Ccircle cx='190.6' cy='167.2' r='0.33' fill='%23f2f4ff' fill-opacity='0.14'/%3E%3Ccircle cx='256.2' cy='262.9' r='0.58' fill='%23f2f4ff' fill-opacity='0.31'/%3E%3Ccircle cx='323.4' cy='7.4' r='0.59' fill='%23f2f4ff' fill-opacity='0.32'/%3E%3Ccircle cx='203.6' cy='126.7' r='0.36' fill='%23f2f4ff' fill-opacity='0.16'/%3E%3Ccircle cx='328.0' cy='149.5' r='0.30' fill='%23f2f4ff' fill-opacity='0.12'/%3E%3Ccircle cx='283.6' cy='225.0' r='0.49' fill='%23f2f4ff' fill-opacity='0.25'/%3E%3Ccircle cx='275.0' cy='275.0' r='0.32' fill='%23f2f4ff' fill-opacity='0.13'/%3E%3Ccircle cx='235.2' cy='277.9' r='0.40' fill='%23f2f4ff' fill-opacity='0.19'/%3E%3Ccircle cx='290.1' cy='7.6' r='0.31' fill='%23f2f4ff' fill-opacity='0.13'/%3E%3Ccircle cx='72.2' cy='14.7' r='0.58' fill='%23f2f4ff' fill-opacity='0.31'/%3E%3Ccircle cx='496.6' cy='30.8' r='0.50' fill='%23f2f4ff' fill-opacity='0.26'/%3E%3Ccircle cx='263.2' cy='144.6' r='0.32' fill='%23f2f4ff' fill-opacity='0.13'/%3E%3Ccircle cx='496.1' cy='188.0' r='0.39' fill='%23f2f4ff' fill-opacity='0.18'/%3E%3Ccircle cx='262.9' cy='278.8' r='0.98' fill='%23f2f4ff' fill-opacity='0.58'/%3E%3Ccircle cx='305.6' cy='167.9' r='0.55' fill='%23f2f4ff' fill-opacity='0.29'/%3E%3Ccircle cx='172.3' cy='239.9' r='0.42' fill='%23f2f4ff' fill-opacity='0.20'/%3E%3Ccircle cx='268.2' cy='265.3' r='0.38' fill='%23f2f4ff' fill-opacity='0.17'/%3E%3Ccircle cx='164.8' cy='80.7' r='0.30' fill='%23f2f4ff' fill-opacity='0.12'/%3E%3Ccircle cx='367.2' cy='179.2' r='0.39' fill='%23f2f4ff' fill-opacity='0.18'/%3E%3Ccircle cx='292.8' cy='146.9' r='0.87' fill='%23f2f4ff' fill-opacity='0.51'/%3E%3Ccircle cx='145.7' cy='145.7' r='0.42' fill='%23f2f4ff' fill-opacity='0.20'/%3E%3Ccircle cx='462.7' cy='242.4' r='0.45' fill='%23f2f4ff' fill-opacity='0.23'/%3E%3Ccircle cx='508.1' cy='249.4' r='0.34' fill='%23f2f4ff' fill-opacity='0.14'/%3E%3Ccircle cx='513.4' cy='29.5' r='0.57' fill='%23f2f4ff' fill-opacity='0.30'/%3E%3Ccircle cx='439.6' cy='154.6' r='0.39' fill='%23f2f4ff' fill-opacity='0.18'/%3E%3Ccircle cx='540.6' cy='290.2' r='0.75' fill='%23f2f4ff' fill-opacity='0.43'/%3E%3Ccircle cx='268.3' cy='19.3' r='0.32' fill='%23f2f4ff' fill-opacity='0.14'/%3E%3Ccircle cx='279.1' cy='29.0' r='0.63' fill='%23f2f4ff' fill-opacity='0.35'/%3E%3Ccircle cx='230.3' cy='134.8' r='0.30' fill='%23f2f4ff' fill-opacity='0.12'/%3E%3Ccircle cx='0.1' cy='174.2' r='0.88' fill='%23f2f4ff' fill-opacity='0.52'/%3E%3Ccircle cx='46.5' cy='238.1' r='0.32' fill='%23f2f4ff' fill-opacity='0.13'/%3E%3Ccircle cx='347.8' cy='225.6' r='0.92' fill='%23f2f4ff' fill-opacity='0.55'/%3E%3Ccircle cx='374.3' cy='190.6' r='0.31' fill='%23f2f4ff' fill-opacity='0.12'/%3E%3Ccircle cx='175.5' cy='174.9' r='0.65' fill='%23f2f4ff' fill-opacity='0.36'/%3E%3Ccircle cx='532.0' cy='147.6' r='0.60' fill='%23f2f4ff' fill-opacity='0.32'/%3E%3Ccircle cx='75.5' cy='66.9' r='0.48' fill='%23f2f4ff' fill-opacity='0.24'/%3E%3Ccircle cx='536.6' cy='262.8' r='0.42' fill='%23f2f4ff' fill-opacity='0.20'/%3E%3Ccircle cx='47.3' cy='200.6' r='0.89' fill='%23f2f4ff' fill-opacity='0.52'/%3E%3Ccircle cx='438.7' cy='274.5' r='0.33' fill='%23f2f4ff' fill-opacity='0.14'/%3E%3Ccircle cx='230.7' cy='242.4' r='0.43' fill='%23f2f4ff' fill-opacity='0.21'/%3E%3Ccircle cx='110.2' cy='4.2' r='0.30' fill='%23f2f4ff' fill-opacity='0.12'/%3E%3Ccircle cx='497.2' cy='15.4' r='0.34' fill='%23f2f4ff' fill-opacity='0.15'/%3E%3Ccircle cx='197.9' cy='230.9' r='0.30' fill='%23f2f4ff' fill-opacity='0.12'/%3E%3Ccircle cx='285.8' cy='98.3' r='0.33' fill='%23f2f4ff' fill-opacity='0.14'/%3E%3Ccircle cx='182.6' cy='36.4' r='0.91' fill='%23f2f4ff' fill-opacity='0.54'/%3E%3Ccircle cx='320.1' cy='241.5' r='0.31' fill='%23f2f4ff' fill-opacity='0.12'/%3E%3C/svg%3E");
+  /* 星空版的系列色降一点饱和，向恒星色温靠：蓝白 / 琥珀 / 紫晶 / 青绿 */
+  --series-codex: #8fb0f5;
+  --series-claude: #e8a06b;
+  --series-antigravity: #b6a1ff;
+  --series-gemini: #74cdbd;
+  --series-zcode: #e3c27d;
+  --series-opencode: #93cf9f;
+  --series-cursor: #ee9fbd;
+  --series-custom: #a8b2c4;
+}
+
+body[data-skin="paper"] {
+  --ob-star: #2a2117;
+  --ob-ink: #1f1a12;
+  --ob-dim: #5d5546;
+  --ob-faint: #857b68;
+  --ob-hair: rgba(72, 56, 28, 0.13);
+  --ob-hair-2: rgba(72, 56, 28, 0.24);
+  --ob-panel: #fbf8f0;
+  --ob-well: #fbf8f0;
+  --ob-flare: #b8432e;
+  --ob-amber: #a8650f;
+  --ob-trail: rgba(44, 115, 97, 0.55);
+  --ob-cal: #2a2117;
+  --ob-cal-hot: #b8432e;
+  --ob-sky: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='560' height='300'%3E%3Ccircle cx='66.7' cy='150.8' r='0.41' fill='%233a2e1c' fill-opacity='0.16'/%3E%3Ccircle cx='481.6' cy='30.8' r='0.31' fill='%233a2e1c' fill-opacity='0.12'/%3E%3Ccircle cx='336.6' cy='167.0' r='0.62' fill='%233a2e1c' fill-opacity='0.23'/%3E%3Ccircle cx='306.8' cy='219.2' r='0.60' fill='%233a2e1c' fill-opacity='0.22'/%3E%3Ccircle cx='420.6' cy='176.0' r='0.31' fill='%233a2e1c' fill-opacity='0.12'/%3E%3Ccircle cx='344.0' cy='33.2' r='0.65' fill='%233a2e1c' fill-opacity='0.24'/%3E%3Ccircle cx='251.8' cy='244.4' r='0.52' fill='%233a2e1c' fill-opacity='0.19'/%3E%3Ccircle cx='380.5' cy='63.1' r='0.32' fill='%233a2e1c' fill-opacity='0.13'/%3E%3Ccircle cx='548.8' cy='278.8' r='0.64' fill='%233a2e1c' fill-opacity='0.23'/%3E%3Ccircle cx='559.8' cy='154.1' r='0.30' fill='%233a2e1c' fill-opacity='0.12'/%3E%3Ccircle cx='190.6' cy='167.2' r='0.32' fill='%233a2e1c' fill-opacity='0.13'/%3E%3Ccircle cx='256.2' cy='262.9' r='0.54' fill='%233a2e1c' fill-opacity='0.20'/%3E%3Ccircle cx='323.4' cy='7.4' r='0.55' fill='%233a2e1c' fill-opacity='0.20'/%3E%3Ccircle cx='203.6' cy='126.7' r='0.35' fill='%233a2e1c' fill-opacity='0.14'/%3E%3Ccircle cx='328.0' cy='149.5' r='0.30' fill='%233a2e1c' fill-opacity='0.12'/%3E%3Ccircle cx='283.6' cy='225.0' r='0.46' fill='%233a2e1c' fill-opacity='0.17'/%3E%3Ccircle cx='275.0' cy='275.0' r='0.32' fill='%233a2e1c' fill-opacity='0.13'/%3E%3Ccircle cx='235.2' cy='277.9' r='0.39' fill='%233a2e1c' fill-opacity='0.15'/%3E%3Ccircle cx='290.1' cy='7.6' r='0.31' fill='%233a2e1c' fill-opacity='0.12'/%3E%3Ccircle cx='72.2' cy='14.7' r='0.54' fill='%233a2e1c' fill-opacity='0.20'/%3E%3Ccircle cx='496.6' cy='30.8' r='0.47' fill='%233a2e1c' fill-opacity='0.18'/%3E%3Ccircle cx='263.2' cy='144.6' r='0.31' fill='%233a2e1c' fill-opacity='0.12'/%3E%3Ccircle cx='496.1' cy='188.0' r='0.38' fill='%233a2e1c' fill-opacity='0.15'/%3E%3Ccircle cx='262.9' cy='278.8' r='0.88' fill='%233a2e1c' fill-opacity='0.31'/%3E%3Ccircle cx='305.6' cy='167.9' r='0.51' fill='%233a2e1c' fill-opacity='0.19'/%3E%3Ccircle cx='172.3' cy='239.9' r='0.40' fill='%233a2e1c' fill-opacity='0.15'/%3E%3Ccircle cx='268.2' cy='265.3' r='0.37' fill='%233a2e1c' fill-opacity='0.14'/%3E%3Ccircle cx='164.8' cy='80.7' r='0.30' fill='%233a2e1c' fill-opacity='0.12'/%3E%3Ccircle cx='367.2' cy='179.2' r='0.38' fill='%233a2e1c' fill-opacity='0.15'/%3E%3Ccircle cx='292.8' cy='146.9' r='0.79' fill='%233a2e1c' fill-opacity='0.28'/%3E%3Ccircle cx='145.7' cy='145.7' r='0.40' fill='%233a2e1c' fill-opacity='0.15'/%3E%3Ccircle cx='462.7' cy='242.4' r='0.43' fill='%233a2e1c' fill-opacity='0.16'/%3E%3Ccircle cx='508.1' cy='249.4' r='0.33' fill='%233a2e1c' fill-opacity='0.13'/%3E%3Ccircle cx='513.4' cy='29.5' r='0.53' fill='%233a2e1c' fill-opacity='0.20'/%3E%3Ccircle cx='439.6' cy='154.6' r='0.38' fill='%233a2e1c' fill-opacity='0.15'/%3E%3Ccircle cx='540.6' cy='290.2' r='0.68' fill='%233a2e1c' fill-opacity='0.25'/%3E%3Ccircle cx='268.3' cy='19.3' r='0.32' fill='%233a2e1c' fill-opacity='0.13'/%3E%3Ccircle cx='279.1' cy='29.0' r='0.58' fill='%233a2e1c' fill-opacity='0.21'/%3E%3Ccircle cx='230.3' cy='134.8' r='0.30' fill='%233a2e1c' fill-opacity='0.12'/%3E%3Ccircle cx='0.1' cy='174.2' r='0.80' fill='%233a2e1c' fill-opacity='0.29'/%3E%3Ccircle cx='46.5' cy='238.1' r='0.32' fill='%233a2e1c' fill-opacity='0.13'/%3E%3Ccircle cx='347.8' cy='225.6' r='0.83' fill='%233a2e1c' fill-opacity='0.30'/%3E%3Ccircle cx='374.3' cy='190.6' r='0.30' fill='%233a2e1c' fill-opacity='0.12'/%3E%3Ccircle cx='175.5' cy='174.9' r='0.60' fill='%233a2e1c' fill-opacity='0.22'/%3E%3Ccircle cx='532.0' cy='147.6' r='0.56' fill='%233a2e1c' fill-opacity='0.21'/%3E%3Ccircle cx='75.5' cy='66.9' r='0.45' fill='%233a2e1c' fill-opacity='0.17'/%3E%3Ccircle cx='536.6' cy='262.8' r='0.40' fill='%233a2e1c' fill-opacity='0.15'/%3E%3Ccircle cx='47.3' cy='200.6' r='0.80' fill='%233a2e1c' fill-opacity='0.29'/%3E%3Ccircle cx='438.7' cy='274.5' r='0.33' fill='%233a2e1c' fill-opacity='0.13'/%3E%3Ccircle cx='230.7' cy='242.4' r='0.41' fill='%233a2e1c' fill-opacity='0.16'/%3E%3Ccircle cx='110.2' cy='4.2' r='0.30' fill='%233a2e1c' fill-opacity='0.12'/%3E%3Ccircle cx='497.2' cy='15.4' r='0.34' fill='%233a2e1c' fill-opacity='0.13'/%3E%3Ccircle cx='197.9' cy='230.9' r='0.30' fill='%233a2e1c' fill-opacity='0.12'/%3E%3Ccircle cx='285.8' cy='98.3' r='0.33' fill='%233a2e1c' fill-opacity='0.13'/%3E%3Ccircle cx='182.6' cy='36.4' r='0.82' fill='%233a2e1c' fill-opacity='0.29'/%3E%3Ccircle cx='320.1' cy='241.5' r='0.30' fill='%233a2e1c' fill-opacity='0.12'/%3E%3C/svg%3E");
+  /* 纸面版：墨色系列，像星图上的套色 */
+  --series-codex: #2e4d8f;
+  --series-claude: #a8451c;
+  --series-antigravity: #5b3ea8;
+  --series-gemini: #1f6b5a;
+  --series-zcode: #8a6414;
+  --series-opencode: #2f6b3a;
+  --series-cursor: #9d2b5b;
+  --series-custom: #5d5546;
+}
+
+/* 数字统一用细体系统字（SF Pro），等宽数字，读数不跳 */
+:is(body[data-skin="starry"], body[data-skin="paper"]) :is(.ob-total-num, .ob-total-unit, .ob-readout-value, .ob-comet-total, .ep-stat-value) {
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Helvetica Neue", "PingFang SC", sans-serif;
+  font-variant-numeric: tabular-nums lining-nums;
+}
+
+/* ==========================================================================
+   用量 · 星图总览（#usageGalaxyStage > .ob-hero）
+   ========================================================================== */
+.ob-hero {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid var(--ob-hair);
+  border-radius: 18px;
+  background:
+    radial-gradient(70% 95% at 96% -12%, rgba(143, 167, 222, 0.14), transparent 62%),
+    radial-gradient(55% 80% at -6% 112%, rgba(198, 169, 122, 0.09), transparent 62%),
+    linear-gradient(116deg, transparent 36%, rgba(176, 186, 235, 0.05) 49%, transparent 64%),
+    var(--ob-sky) 0 0 / 560px 300px,
+    var(--ob-panel);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.035), 0 30px 60px -44px rgba(0, 0, 0, 0.9);
+}
+
+body[data-skin="paper"] .ob-hero {
+  background:
+    radial-gradient(70% 95% at 96% -12%, rgba(218, 196, 152, 0.32), transparent 62%),
+    radial-gradient(55% 80% at -6% 112%, rgba(184, 67, 46, 0.05), transparent 62%),
+    var(--ob-sky) 0 0 / 560px 300px,
+    var(--ob-panel);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.6), 0 2px 10px rgba(40, 30, 10, 0.06);
+}
+
+.ob-hero-main {
+  display: grid;
+  grid-template-columns: minmax(300px, 0.95fr) minmax(0, 1.4fr);
+  min-height: 220px;
+}
+
+.ob-hero-left {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  padding: 16px 24px 12px;
+  border-right: 1px solid var(--ob-hair);
+}
+
+.ob-hero-right {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  padding: 14px 22px 10px;
+}
+
+.ob-heading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 12px;
+}
+
+.ob-title {
+  margin: 0;
+  color: var(--ink-strong);
+  font: 600 17px/1.3 var(--gx-serif);
+  letter-spacing: 0.08em;
+}
+
+body[data-skin="paper"] .ob-title::before {
+  content: "";
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin: 0 9px 2px 0;
+  border-radius: 50%;
+  background: var(--ob-flare);
+  vertical-align: middle;
+}
+
+.ob-eyebrow {
+  color: var(--ob-dim);
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+}
+
+.ob-total {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px;
+  margin-top: 8px;
+}
+
+.ob-total-num {
+  color: var(--ink-strong);
+  font-size: 44px;
+  font-weight: 200;
+  line-height: 0.95;
+  letter-spacing: -0.035em;
+}
+
+body[data-skin="starry"] .ob-total-num {
+  text-shadow: 0 0 30px rgba(255, 236, 200, 0.16);
+}
+
+.ob-total-unit {
+  color: var(--ink-strong);
+  font-size: 22px;
+  font-weight: 300;
+  line-height: 1;
+  opacity: 0.88;
+}
+
+.ob-total-label {
+  margin-left: 10px;
+  color: var(--ob-dim);
+  font-size: 12px;
+  letter-spacing: 0.08em;
+}
+
+.ob-total-sub {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  margin: 6px 0 0;
+  color: var(--ob-dim);
+  font-size: 12px;
+}
+
+.ob-total-sub b {
+  margin-left: 4px;
+  color: var(--text-soft);
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+
+.ob-sep {
+  display: inline-block;
+  width: 3px;
+  height: 3px;
+  margin: 0 10px;
+  border-radius: 50%;
+  background: var(--ob-faint);
+}
+
+.ob-readouts {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin-top: auto;
+  padding-top: 10px;
+}
+
+.ob-readout {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+  padding: 6px 12px 4px 0;
+  border-top: 1px solid var(--ob-hair);
+}
+
+.ob-readout:nth-child(even) {
+  padding-left: 16px;
+  border-left: 1px solid var(--ob-hair);
+}
+
+.ob-readout-label {
+  color: var(--ob-dim);
+  font-size: 11px;
+  letter-spacing: 0.05em;
+}
+
+.ob-readout-value {
+  color: var(--ink-strong);
+  font-size: 19px;
+  font-weight: 300;
+  line-height: 1.15;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+}
+
+.ob-readout-value small {
+  margin-left: 4px;
+  color: var(--ob-dim);
+  font-size: 12px;
+  font-weight: 400;
+  letter-spacing: 0;
+}
+
+.ob-readout-sub {
+  overflow: hidden;
+  color: var(--ob-faint);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ob-readout-sub b {
+  color: var(--text-soft);
+  font-weight: 500;
+}
+
+.ob-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  max-width: 100%;
+  padding: 0;
+  overflow: hidden;
+  border: 0;
+  background: none;
+  color: var(--ob-flare);
+  font: inherit;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.ob-link:hover {
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.ob-link b {
+  color: inherit;
+}
+
+.ob-flare {
+  flex: none;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--ob-flare);
+}
+
+body[data-skin="starry"] .ob-flare {
+  box-shadow: 0 0 7px var(--ob-flare);
+}
+
+/* ---- 模型星等：彗星条 ---- */
+.ob-models-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 12px;
+  margin-bottom: 2px;
+}
+
+.ob-models-head h3 {
+  margin: 0;
+  color: var(--ink-strong);
+  font: 600 14px/1.3 var(--gx-serif);
+  letter-spacing: 0.1em;
+}
+
+.ob-models-head span {
+  color: var(--ob-faint);
+  font-size: 11px;
+}
+
+.ob-comets {
+  display: flex;
+  flex-direction: column;
+}
+
+.ob-comet {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 156px;
+  grid-template-rows: auto auto;
+  gap: 3px 22px;
+  margin: 0 -10px;
+  padding: 6px 10px 7px;
+  border: 0;
+  border-top: 1px solid var(--ob-hair);
+  border-radius: 10px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color 0.18s ease;
+}
+
+.ob-comet:first-child {
+  border-top-color: transparent;
+}
+
+.ob-comet:hover {
+  background: rgba(190, 205, 255, 0.045);
+}
+
+body[data-skin="paper"] .ob-comet:hover {
+  background: rgba(72, 56, 28, 0.045);
+}
+
+.ob-comet:focus-visible {
+  outline: 1px solid var(--brass);
+  outline-offset: -1px;
+}
+
+.ob-comet.is-selected {
+  background: rgba(198, 169, 122, 0.08);
+  box-shadow: inset 2px 0 0 var(--brass);
+}
+
+.ob-comet-name {
+  display: flex;
+  grid-row: 1;
+  grid-column: 1;
+  align-items: baseline;
+  gap: 9px;
+  min-width: 0;
+}
+
+.ob-comet-model {
+  overflow: hidden;
+  color: var(--ink-strong);
+  font: 500 13px/1.3 var(--font-mono);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ob-comet-agent {
+  flex: none;
+  color: var(--agent-color);
+  font-size: 10.5px;
+  letter-spacing: 0.05em;
+}
+
+.ob-comet-live {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 4px;
+  color: var(--ok);
+  font-size: 10px;
+}
+
+.ob-comet-live::before {
+  content: "";
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.ob-comet-track {
+  position: relative;
+  grid-row: 2;
+  grid-column: 1;
+  align-self: center;
+  height: 9px;
+}
+
+/* 轨道：每 6px 一个刻度点（星轨刻度），彗尾长度 = 用量 / 最大用量 */
+.ob-comet-track::before {
+  content: "";
+  position: absolute;
+  top: 4px;
+  right: 0;
+  left: 0;
+  height: 1px;
+  background: repeating-linear-gradient(90deg, var(--ob-hair-2) 0 1px, transparent 1px 6px);
+}
+
+.ob-comet-tail {
+  position: absolute;
+  top: 3px;
+  left: 0;
+  height: 3px;
+  border-radius: 3px;
+  background: linear-gradient(90deg, transparent 0%, color-mix(in srgb, var(--agent-color) 20%, transparent) 32%, color-mix(in srgb, var(--agent-color) 78%, transparent) 84%, var(--agent-color) 97%);
+}
+
+.ob-comet-tail::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  right: -5px;
+  width: 10px;
+  height: 10px;
+  margin-top: -5px;
+  border-radius: 50%;
+  background: radial-gradient(circle, var(--ob-star) 0 26%, var(--agent-color) 50%, transparent 72%);
+}
+
+body[data-skin="starry"] .ob-comet-tail::after {
+  box-shadow: 0 0 12px 1px color-mix(in srgb, var(--agent-color) 60%, transparent);
+}
+
+body[data-skin="paper"] .ob-comet-tail {
+  background: linear-gradient(90deg, transparent 0%, color-mix(in srgb, var(--agent-color) 14%, transparent) 30%, color-mix(in srgb, var(--agent-color) 62%, transparent) 86%, var(--agent-color) 98%);
+}
+
+body[data-skin="paper"] .ob-comet-tail::after {
+  width: 8px;
+  height: 8px;
+  margin-top: -4px;
+  right: -4px;
+  background: var(--agent-color);
+  box-shadow: 0 0 0 2px var(--ob-panel), 0 0 0 3px color-mix(in srgb, var(--agent-color) 35%, transparent);
+}
+
+.ob-comet-figs {
+  display: grid;
+  grid-row: 1 / span 2;
+  grid-column: 2;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-content: center;
+  gap: 3px 10px;
+  text-align: right;
+}
+
+.ob-comet-total {
+  color: var(--ink-strong);
+  font-size: 17px;
+  font-weight: 300;
+  line-height: 1.1;
+}
+
+.ob-comet-share {
+  align-self: center;
+  color: var(--ob-dim);
+  font: 11px var(--font-mono);
+}
+
+.ob-comet-hit,
+.ob-comet-cost {
+  color: var(--ob-faint);
+  font-size: 10.5px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.ob-rest,
+.ob-empty {
+  margin: 8px 0 0;
+  color: var(--ob-faint);
+  font-size: 11px;
+}
+
+.ob-empty {
+  padding: 24px 0;
+  text-align: center;
+}
+
+.ob-hero.is-empty .ob-hero-main {
+  min-height: 220px;
+}
+
+/* 活跃模型的彗头只在指针悬停 / 键盘聚焦这一条时闪烁：空闲不跑常驻动画（v2.78 起的常驻开销约定，
+   空闲态有「活跃」字样标注），动画在绝对定位的伪元素上、只动 transform / opacity */
+@media (prefers-reduced-motion: no-preference) {
+  .ob-comet.is-live:hover .ob-comet-tail::after,
+  .ob-comet.is-live:focus-visible .ob-comet-tail::after {
+    animation: obTwinkle 2.8s ease-in-out infinite;
+    will-change: transform, opacity;
+  }
+}
+
+@keyframes obTwinkle {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.72; transform: scale(1.35); }
+}
+
+@container content (max-width: 900px) {
+  .ob-hero-main { grid-template-columns: minmax(0, 1fr); }
+  .ob-hero-left { border-right: 0; border-bottom: 1px solid var(--ob-hair); }
+  .ob-readouts { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .ob-readout:nth-child(n + 2) { padding-left: 14px; border-left: 1px solid var(--ob-hair); }
+}
+
+@container content (max-width: 620px) {
+  .ob-readouts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .ob-readout:nth-child(odd) { padding-left: 0; border-left: 0; }
+  .ob-comet { grid-template-columns: minmax(0, 1fr) 112px; gap: 8px 12px; }
+  .ob-comet-figs { grid-template-columns: minmax(0, 1fr); }
+  .ob-comet-share, .ob-comet-cost { display: none; }
+  .ob-total-num { font-size: 48px; }
+}
+
+/* ==========================================================================
+   用量 · 星轨趋势 / 星历日历 / 项目 / 会话（沿用原组件，只换画法）
+   ========================================================================== */
+:is(body[data-skin="starry"], body[data-skin="paper"]) #view-usage .panel-header h2 {
+  font-family: var(--gx-serif);
+  font-weight: 600;
+  letter-spacing: 0.08em;
+}
+
+/* 趋势：点状坐标网（星图的赤经赤纬线），细线 + 柔光 */
+:is(body[data-skin="starry"], body[data-skin="paper"]) .us-grid {
+  stroke: var(--ob-hair-2);
+  stroke-dasharray: 1 5;
+}
+
+:is(body[data-skin="starry"], body[data-skin="paper"]) .us-grid.is-base {
+  stroke-dasharray: none;
+}
+
+:is(body[data-skin="starry"], body[data-skin="paper"]) .us-axis {
+  fill: var(--ob-faint);
+}
+
+:is(body[data-skin="starry"], body[data-skin="paper"]) .us-series {
+  stroke-width: 1.6;
+}
+
+body[data-skin="starry"] .us-glow {
+  stroke-width: 9;
+  opacity: 0.1;
+}
+
+body[data-skin="paper"] .us-glow {
+  opacity: 0;
+}
+
+body[data-skin="starry"] .us-stop-top {
+  stop-opacity: 0.2;
+}
+
+body[data-skin="paper"] .us-stop-top {
+  stop-opacity: 0.12;
+}
+
+/* 峰值星：简洁版不画（峰值写在图下那一行） */
+.us-peak {
+  display: none;
+}
+
+:is(body[data-skin="starry"], body[data-skin="paper"]) .us-peak {
+  display: inline;
+  pointer-events: none;
+}
+
+.us-peak-star {
+  fill: var(--ob-star);
+}
+
+body[data-skin="starry"] .us-peak-star {
+  filter: drop-shadow(0 0 3px rgba(255, 236, 200, 0.9));
+}
+
+body[data-skin="paper"] .us-peak-star {
+  fill: var(--ob-flare);
+}
+
+.us-peak-label {
+  fill: var(--brass);
+  font: 500 10.5px var(--font-mono);
+  paint-order: stroke;
+  stroke: var(--panel);
+  stroke-width: 3px;
+  stroke-linejoin: round;
+}
+
+/* 星历：每天一颗星，星越大越亮用量越多（data-heat 0–4）；未来是空心虚圈，未采集不画星 */
+:is(body[data-skin="starry"], body[data-skin="paper"]) .us-days {
+  gap: 4px;
+}
+
+:is(body[data-skin="starry"], body[data-skin="paper"]) .us-weekdays {
+  color: var(--ob-faint);
+}
+
+:is(body[data-skin="starry"], body[data-skin="paper"]) .us-day,
+:is(body[data-skin="starry"], body[data-skin="paper"]) .us-day[data-heat] {
+  position: relative;
+  align-items: flex-start;
+  justify-content: flex-start;
+  height: 40px;
+  padding: 4px 6px;
+  border: 1px solid transparent;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--ob-faint);
+  font: 10px/1.2 var(--font-mono);
+}
+
+:is(body[data-skin="starry"], body[data-skin="paper"]) .us-day::before {
+  content: "";
+  position: absolute;
+  top: 56%;
+  left: 50%;
+  width: var(--star, 2px);
+  height: var(--star, 2px);
+  border-radius: 50%;
+  background: radial-gradient(circle, var(--ob-star) 0 30%, var(--star-color, var(--ob-cal)) 56%, transparent 74%);
+  opacity: var(--star-alpha, 0.4);
+  transform: translate(-50%, -50%);
+}
+
+:is(body[data-skin="starry"], body[data-skin="paper"]) .us-day[data-heat="1"] { --star: 5px; --star-alpha: 0.7; }
+:is(body[data-skin="starry"], body[data-skin="paper"]) .us-day[data-heat="2"] { --star: 8px; --star-alpha: 0.85; }
+:is(body[data-skin="starry"], body[data-skin="paper"]) .us-day[data-heat="3"] { --star: 11px; --star-alpha: 1; }
+:is(body[data-skin="starry"], body[data-skin="paper"]) .us-day[data-heat="4"] { --star: 15px; --star-alpha: 1; --star-color: var(--ob-cal-hot); color: var(--text-soft); }
+
+body[data-skin="starry"] .us-day[data-heat="3"]::before {
+  box-shadow: 0 0 8px 1px rgba(236, 201, 142, 0.35);
+}
+
+body[data-skin="starry"] .us-day[data-heat="4"]::before {
+  box-shadow: 0 0 14px 3px rgba(255, 227, 173, 0.4);
+}
+
+/* 最亮的那几天加一道十字星芒 */
+:is(body[data-skin="starry"], body[data-skin="paper"]) .us-day::after,
+:is(body[data-skin="starry"], body[data-skin="paper"]) .us-day.is-today::after {
+  content: none;
+}
+
+body[data-skin="starry"] .us-day[data-heat="4"]::after {
+  content: "";
+  position: absolute;
+  top: 56%;
+  left: 50%;
+  bottom: auto;
+  width: 30px;
+  height: 30px;
+  border-radius: 0;
+  background:
+    linear-gradient(90deg, transparent, rgba(255, 240, 214, 0.55), transparent) center / 100% 1px no-repeat,
+    linear-gradient(0deg, transparent, rgba(255, 240, 214, 0.45), transparent) center / 1px 100% no-repeat;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+
+/* 纸面版：敦煌星图的套色——寻常日子墨点，最亮的日子朱点 */
+body[data-skin="paper"] .us-day::before {
+  background: var(--star-color, var(--ob-cal));
+}
+
+body[data-skin="paper"] .us-day[data-heat="3"] { --star: 10px; --star-color: var(--ob-cal); }
+body[data-skin="paper"] .us-day[data-heat="4"] { --star: 13px; }
+
+:is(body[data-skin="starry"], body[data-skin="paper"]) .us-day:hover {
+  border-color: var(--ob-hair-2);
+}
+
+:is(body[data-skin="starry"], body[data-skin="paper"]) .us-day.is-in-range {
+  background: rgba(190, 205, 255, 0.035);
+  box-shadow: none;
+}
+
+body[data-skin="paper"] .us-day.is-in-range {
+  background: rgba(72, 56, 28, 0.04);
+}
+
+:is(body[data-skin="starry"], body[data-skin="paper"]) .us-day.is-selected {
+  outline: 0;
+  border-color: var(--brass);
+  background: rgba(198, 169, 122, 0.07);
+  font-weight: 400;
+}
+
+:is(body[data-skin="starry"], body[data-skin="paper"]) .us-day.is-today {
+  color: var(--brass);
+  font-weight: 600;
+}
+
+:is(body[data-skin="starry"], body[data-skin="paper"]) .us-day.is-future {
+  border-style: solid;
+  border-color: transparent;
+  background: transparent;
+}
+
+:is(body[data-skin="starry"], body[data-skin="paper"]) .us-day.is-future::before {
+  --star: 7px;
+  --star-alpha: 0.7;
+  background: transparent;
+  border: 1px dashed var(--ob-hair-2);
+}
+
+:is(body[data-skin="starry"], body[data-skin="paper"]) .us-day.is-uncollected {
+  background: transparent;
+}
+
+:is(body[data-skin="starry"], body[data-skin="paper"]) .us-day.is-uncollected::before {
+  content: none;
+}
+
+:is(body[data-skin="starry"], body[data-skin="paper"]) .us-day small {
+  margin-left: 3px;
+  color: var(--brass);
+  font-size: 9px;
+}
+
+:is(body[data-skin="starry"], body[data-skin="paper"]) .us-calendar-legend i[data-heat] {
+  width: 14px;
+  height: 14px;
+  border: 0;
+  background: radial-gradient(circle, var(--ob-star) 0 calc(var(--r) * 0.4), var(--ob-cal) calc(var(--r) * 0.75), transparent calc(var(--r) + 0.5px));
+}
+
+body[data-skin="paper"] .us-calendar-legend i[data-heat] {
+  background: radial-gradient(circle, var(--ob-cal) 0 var(--r), transparent calc(var(--r) + 0.5px));
+}
+
+:is(body[data-skin="starry"], body[data-skin="paper"]) .us-calendar-legend i[data-heat="0"] { --r: 1px; opacity: 0.5; }
+:is(body[data-skin="starry"], body[data-skin="paper"]) .us-calendar-legend i[data-heat="1"] { --r: 2px; }
+:is(body[data-skin="starry"], body[data-skin="paper"]) .us-calendar-legend i[data-heat="2"] { --r: 3px; }
+:is(body[data-skin="starry"], body[data-skin="paper"]) .us-calendar-legend i[data-heat="3"] { --r: 4.5px; }
+:is(body[data-skin="starry"], body[data-skin="paper"]) .us-calendar-legend i[data-heat="4"] { --r: 6px; }
+body[data-skin="paper"] .us-calendar-legend i[data-heat="4"] { background: radial-gradient(circle, var(--ob-cal-hot) 0 var(--r), transparent calc(var(--r) + 0.5px)); }
+
+/* 项目：一根细星轨，按 Agent 分段发光 */
+:is(body[data-skin="starry"], body[data-skin="paper"]) .us-project {
+  border-color: var(--ob-hair);
+}
+
+:is(body[data-skin="starry"], body[data-skin="paper"]) .us-project-top strong {
+  font-family: var(--gx-serif);
+  letter-spacing: 0.04em;
+}
+
+:is(body[data-skin="starry"], body[data-skin="paper"]) .us-project-top span {
+  font: 300 15px -apple-system, BlinkMacSystemFont, "SF Pro Display", sans-serif;
+  font-variant-numeric: tabular-nums;
+}
+
+:is(body[data-skin="starry"], body[data-skin="paper"]) .us-bar {
+  gap: 0;
+  height: 3px;
+  border-radius: 3px;
+  background: repeating-linear-gradient(90deg, var(--ob-hair-2) 0 1px, transparent 1px 6px) center / 100% 1px no-repeat;
+}
+
+:is(body[data-skin="starry"], body[data-skin="paper"]) .us-seg {
+  border-radius: 0;
+}
+
+:is(body[data-skin="starry"], body[data-skin="paper"]) .us-seg:last-child {
+  border-radius: 0 3px 3px 0;
+}
+
+body[data-skin="starry"] .us-seg {
+  box-shadow: 0 0 8px -1px color-mix(in srgb, var(--agent-color) 65%, transparent);
+}
+
+/* 会话表：Agent 色键换成星点 */
+:is(body[data-skin="starry"], body[data-skin="paper"]) .us-key {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+}
+
+body[data-skin="starry"] .us-key {
+  box-shadow: 0 0 6px color-mix(in srgb, var(--agent-color) 70%, transparent);
+}
+
+:is(body[data-skin="starry"], body[data-skin="paper"]) .us-table td {
+  border-bottom-color: var(--ob-hair);
+}
+
+body[data-skin="starry"] .us-table tbody tr:hover {
+  background: rgba(190, 205, 255, 0.035);
+}
+
+body[data-skin="paper"] .us-table tbody tr:hover {
+  background: rgba(72, 56, 28, 0.035);
+}
+
+/* ==========================================================================
+   时间线 · 星轨泳道（#timelineSwim）与观测日志（#timelineList）
+   ========================================================================== */
+:is(body[data-skin="starry"], body[data-skin="paper"]) :is(#dlgTimeline, #dlgEndpoint) .dialog-header h2 {
+  font-family: var(--gx-serif);
+  font-weight: 600;
+  letter-spacing: 0.08em;
+}
+
+body[data-skin="starry"] #dlgTimeline { --tl-bg: #070910; }
+body[data-skin="paper"] #dlgTimeline { --tl-bg: #f7f2e6; }
+
+:is(body[data-skin="starry"], body[data-skin="paper"]) .tl-swim {
+  gap: 9px;
+  padding: 16px 18px 12px;
+  border-color: var(--ob-hair);
+  border-radius: 14px;
+  background:
+    radial-gradient(60% 120% at 100% 0%, rgba(143, 167, 222, 0.08), transparent 70%),
+    var(--ob-sky) 0 0 / 560px 300px,
+    var(--tl-bg);
+}
+
+body[data-skin="paper"] .tl-swim {
+  background: var(--ob-sky) 0 0 / 560px 300px, var(--tl-bg);
+}
+
+:is(body[data-skin="starry"], body[data-skin="paper"]) .tl-head {
+  color: var(--ob-dim);
+}
+
+:is(body[data-skin="starry"], body[data-skin="paper"]) .tl-legend {
+  gap: 5px;
+}
+
+:is(body[data-skin="starry"], body[data-skin="paper"]) .tl-key {
+  width: 14px;
+  height: 7px;
+  margin-left: 8px;
+  border-radius: 0;
+  background: linear-gradient(var(--ob-trail), var(--ob-trail)) center / 100% 1px no-repeat;
+}
+
+:is(body[data-skin="starry"], body[data-skin="paper"]) .tl-key[data-tone="warn"] {
+  width: 10px;
+  background: linear-gradient(var(--ob-amber), var(--ob-amber)) center / 100% 3px no-repeat;
+}
+
+:is(body[data-skin="starry"], body[data-skin="paper"]) .tl-key[data-tone="error"] {
+  width: 10px;
+  background: linear-gradient(var(--ob-flare), var(--ob-flare)) center / 100% 5px no-repeat;
+}
+
+:is(body[data-skin="starry"], body[data-skin="paper"]) .tl-key[data-tone="none"] {
+  background: radial-gradient(circle, var(--ob-faint) 0 0.7px, transparent 1.1px) 0 50% / 4px 7px repeat-x;
+}
+
+:is(body[data-skin="starry"], body[data-skin="paper"]) .tl-rows {
+  gap: 9px 16px;
+}
+
+:is(body[data-skin="starry"], body[data-skin="paper"]) .tl-name {
+  color: var(--text-soft);
+  font-size: 12.5px;
+}
+
+/* 一条细光轨 = 正常；右端一道铜色刻线连成「现在」的子午线 */
+:is(body[data-skin="starry"], body[data-skin="paper"]) .tl-bar {
+  height: 14px;
+  border-radius: 0;
+  background: linear-gradient(var(--ob-trail), var(--ob-trail)) center / 100% 1px no-repeat;
+}
+
+body[data-skin="starry"] .tl-bar {
+  background:
+    linear-gradient(var(--ob-trail), var(--ob-trail)) center / 100% 1px no-repeat,
+    linear-gradient(transparent, rgba(134, 201, 180, 0.09), transparent) center / 100% 9px no-repeat;
+}
+
+:is(body[data-skin="starry"], body[data-skin="paper"]) .tl-bar::after {
+  content: "";
+  position: absolute;
+  top: -3px;
+  right: 0;
+  bottom: -3px;
+  width: 1px;
+  background: var(--brass);
+  opacity: 0.55;
+}
+
+:is(body[data-skin="starry"], body[data-skin="paper"]) .tl-seg {
+  top: 50%;
+  bottom: auto;
+  height: 4px;
+  margin-top: -2px;
+  border-radius: 4px;
+}
+
+:is(body[data-skin="starry"], body[data-skin="paper"]) .tl-seg[data-tone="warn"] {
+  background: var(--ob-amber);
+}
+
+:is(body[data-skin="starry"], body[data-skin="paper"]) .tl-seg[data-tone="error"] {
+  height: 6px;
+  margin-top: -3px;
+  background: var(--ob-flare);
+}
+
+body[data-skin="starry"] .tl-seg[data-tone="warn"] {
+  box-shadow: 0 0 8px 1px rgba(224, 167, 88, 0.45);
+}
+
+body[data-skin="starry"] .tl-seg[data-tone="error"] {
+  box-shadow: 0 0 10px 2px rgba(239, 128, 120, 0.5);
+}
+
+/* 无记录 = 虚点；跳过 / 停止 = 虚线（都先用底色盖住正常光轨） */
+:is(body[data-skin="starry"], body[data-skin="paper"]) .tl-seg[data-tone="none"],
+:is(body[data-skin="starry"], body[data-skin="paper"]) .tl-seg[data-tone="idle"] {
+  height: 14px;
+  margin-top: -7px;
+  border-radius: 0;
+}
+
+:is(body[data-skin="starry"], body[data-skin="paper"]) .tl-seg[data-tone="none"] {
+  background: radial-gradient(circle, var(--ob-faint) 0 0.7px, transparent 1.1px) 0 50% / 5px 14px repeat-x, var(--tl-bg);
+}
+
+:is(body[data-skin="starry"], body[data-skin="paper"]) .tl-seg[data-tone="idle"] {
+  background: repeating-linear-gradient(90deg, var(--ob-faint) 0 3px, transparent 3px 7px) center / 100% 1px no-repeat, var(--tl-bg);
+}
+
+:is(body[data-skin="starry"], body[data-skin="paper"]) .tl-seg:hover {
+  outline: 0;
+  filter: brightness(1.35);
+}
+
+:is(body[data-skin="starry"], body[data-skin="paper"]) .tl-stat {
+  color: var(--ob-faint);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+:is(body[data-skin="starry"], body[data-skin="paper"]) .tl-stat[data-tone="warn"] {
+  color: color-mix(in srgb, var(--ob-amber) 72%, var(--ob-dim));
+}
+
+:is(body[data-skin="starry"], body[data-skin="paper"]) .tl-axis {
+  height: 18px;
+  margin-top: 0;
+  padding-top: 5px;
+  border-top: 1px solid var(--ob-hair);
+  color: var(--ob-faint);
+  font: 10px var(--font-mono);
+}
+
+:is(body[data-skin="starry"], body[data-skin="paper"]) .tl-tick {
+  top: 5px;
+}
+
+:is(body[data-skin="starry"], body[data-skin="paper"]) .tl-tick::before {
+  content: "";
+  position: absolute;
+  top: -9px;
+  left: 50%;
+  width: 1px;
+  height: 4px;
+  background: var(--ob-hair-2);
+}
+
+:is(body[data-skin="starry"], body[data-skin="paper"]) .tl-tick.is-strong,
+:is(body[data-skin="starry"], body[data-skin="paper"]) .tl-now {
+  color: var(--brass);
+}
+
+:is(body[data-skin="starry"], body[data-skin="paper"]) .tl-now {
+  padding-top: 5px;
+  font: 10px var(--font-mono);
+}
+
+/* 观测日志：时刻在前，状态是一颗带光的星 */
+:is(body[data-skin="starry"], body[data-skin="paper"]) .timeline-summary {
+  border-color: var(--ob-hair);
+}
+
+:is(body[data-skin="starry"], body[data-skin="paper"]) .timeline-item {
+  gap: 12px;
+  padding: 9px 6px;
+  border-bottom-color: var(--ob-hair);
+  font-size: 12.5px;
+}
+
+body[data-skin="starry"] .timeline-item:hover {
+  background: rgba(190, 205, 255, 0.03);
+}
+
+body[data-skin="paper"] .timeline-item:hover {
+  background: rgba(72, 56, 28, 0.03);
+}
+
+:is(body[data-skin="starry"], body[data-skin="paper"]) .timeline-time {
+  order: -2;
+  flex: 0 0 68px;
+  margin-left: 0;
+  color: var(--ob-faint);
+  font: 11px var(--font-mono);
+}
+
+:is(body[data-skin="starry"], body[data-skin="paper"]) .timeline-dot {
+  order: -1;
+}
+
+body[data-skin="starry"] .timeline-dot {
+  box-shadow: 0 0 8px 1px color-mix(in srgb, var(--tone, var(--muted-strong)) 65%, transparent);
+}
+
+:is(body[data-skin="starry"], body[data-skin="paper"]) .timeline-layer {
+  color: var(--ob-faint);
+  font-size: 11.5px;
+}
+
+:is(body[data-skin="starry"], body[data-skin="paper"]) .timeline-key {
+  color: var(--ink-strong);
+  font-weight: 500;
+}
+
+:is(body[data-skin="starry"], body[data-skin="paper"]) .timeline-reason {
+  color: var(--ob-dim);
+}
+
+/* ==========================================================================
+   端点 · 读数头（先结论、后四个数）与近 24 小时星点图（#endpointChart.sf）
+   ========================================================================== */
+:is(body[data-skin="starry"], body[data-skin="paper"]) .ep-trend {
+  gap: 10px;
+}
+
+/* 读数头整块放进 #endpointStats：不再按五列栅格排 */
+:is(body[data-skin="starry"], body[data-skin="paper"]) .ep-stats:not([hidden]) {
+  display: block;
+}
+
+.ep-hero {
+  --ep-tone: var(--ok);
+  display: grid;
+  grid-template-columns: minmax(230px, 1fr) minmax(0, 1.6fr);
+  overflow: hidden;
+  border: 1px solid var(--ob-hair);
+  border-radius: 16px;
+  background:
+    radial-gradient(55% 140% at 0% 0%, color-mix(in srgb, var(--ep-tone) 11%, transparent), transparent 72%),
+    var(--ob-panel);
+}
+
+.ep-hero[data-tone="bad"] {
+  --ep-tone: var(--ob-flare);
+}
+
+.ep-hero[data-tone="idle"] {
+  --ep-tone: var(--ob-faint);
+}
+
+.ep-now {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  min-width: 0;
+  padding: 16px 18px 15px;
+}
+
+/* 结论星：颜色即结论，带一圈光晕 */
+.ep-now-star {
+  flex: none;
+  width: 9px;
+  height: 9px;
+  margin: 11px 2px 0;
+  border-radius: 50%;
+  background: var(--ep-tone);
+  box-shadow:
+    0 0 0 4px color-mix(in srgb, var(--ep-tone) 15%, transparent),
+    0 0 16px 3px color-mix(in srgb, var(--ep-tone) 50%, transparent);
+}
+
+body[data-skin="paper"] .ep-now-star {
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--ep-tone) 14%, transparent);
+}
+
+.ep-now-text {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.ep-now-word {
+  color: var(--ep-tone);
+  font-size: 27px;
+  font-weight: 300;
+  letter-spacing: 0.04em;
+  line-height: 1.2;
+}
+
+.ep-now-detail {
+  color: var(--ob-ink);
+  font-size: 12.5px;
+  line-height: 1.55;
+}
+
+.ep-now-last {
+  color: var(--ob-faint);
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+}
+
+.ep-readouts {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  border-left: 1px solid var(--ob-hair);
+}
+
+.ep-hero .ep-stat {
+  justify-content: center;
+  gap: 3px;
+  padding: 14px 16px 12px;
+  border-left: 1px solid var(--ob-hair);
+}
+
+.ep-hero .ep-stat:first-child {
+  border-left: 0;
+}
+
+:is(body[data-skin="starry"], body[data-skin="paper"]) .ep-stat-label {
+  color: var(--ob-dim);
+  font-size: 11px;
+  letter-spacing: 0.05em;
+}
+
+:is(body[data-skin="starry"], body[data-skin="paper"]) .ep-stat-value {
+  color: var(--ink-strong);
+  font-size: 24px;
+  font-weight: 300;
+  letter-spacing: -0.01em;
+}
+
+:is(body[data-skin="starry"], body[data-skin="paper"]) .ep-stat[data-tone="warn"] .ep-stat-value {
+  color: var(--ob-amber);
+}
+
+:is(body[data-skin="starry"], body[data-skin="paper"]) .ep-stat[data-tone="critical"] .ep-stat-value {
+  color: var(--ob-flare);
+}
+
+:is(body[data-skin="starry"], body[data-skin="paper"]) .ep-stat-hint {
+  color: var(--ob-faint);
+}
+
+@media (max-width: 760px) {
+  .ep-hero {
+    grid-template-columns: 1fr;
+  }
+
+  .ep-readouts {
+    border-top: 1px solid var(--ob-hair);
+    border-left: 0;
+  }
+}
+
+/* —— 星点图 —— */
+.ep-chart.sf {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid var(--ob-hair);
+  border-radius: 16px;
+  background:
+    radial-gradient(90% 80% at 50% 120%, rgba(143, 167, 222, 0.1), transparent 70%),
+    var(--ob-sky) 0 0 / 560px 300px,
+    var(--ob-well);
+}
+
+body[data-skin="paper"] .ep-chart.sf {
+  background: var(--ob-sky) 0 0 / 560px 300px, var(--ob-well);
+}
+
+.sf-svg {
+  display: block;
+  width: 100%;
+  overflow: visible;
+}
+
+.sf-grid {
+  stroke: var(--ob-hair-2);
+  stroke-dasharray: 1 4;
+}
+
+.sf-grid.is-v {
+  stroke: var(--ob-hair);
+}
+
+.sf-axis {
+  fill: var(--ob-faint);
+  font: 10px var(--font-mono);
+}
+
+.sf-axis.is-strong,
+.sf-axis.is-now {
+  fill: var(--brass);
+}
+
+.sf-now {
+  stroke: var(--brass);
+  stroke-dasharray: 2 3;
+  opacity: 0.5;
+}
+
+/* 失败一道：底色是「有检测」，朱砂刻痕是失败 */
+.sf-lane {
+  fill: color-mix(in srgb, var(--ob-trail) 32%, transparent);
+}
+
+.sf-gap {
+  fill: color-mix(in srgb, var(--ob-well) 72%, transparent);
+  stroke: var(--ob-hair-2);
+  stroke-dasharray: 2 4;
+}
+
+.sf-gap.is-narrow {
+  stroke: none;
+}
+
+.sf-gap-label {
+  fill: var(--ob-faint);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+}
+
+/* 银河：25–75 分位的光带 + 中位线 */
+.sf-band {
+  fill: rgba(170, 188, 255, 0.11);
+}
+
+.sf-median {
+  fill: none;
+  stroke: #eef1ff;
+  stroke-width: 1.4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  opacity: 0.8;
+  filter: drop-shadow(0 0 3px rgba(170, 190, 255, 0.6));
+}
+
+.sf-star {
+  fill: #dfe6ff;
+  opacity: 0.72;
+  filter: drop-shadow(0 0 1.5px rgba(170, 195, 255, 0.7));
+}
+
+.sf-star.is-slow {
+  fill: var(--ob-amber);
+  opacity: 0.95;
+  filter: drop-shadow(0 0 3px color-mix(in srgb, var(--ob-amber) 70%, transparent));
+}
+
+.sf-fail {
+  fill: var(--ob-flare);
+  opacity: 0.88;
+  filter: drop-shadow(0 0 2.5px color-mix(in srgb, var(--ob-flare) 55%, transparent));
+}
+
+.sf-latest {
+  fill: var(--ob-star);
+  filter: drop-shadow(0 0 4px rgba(255, 238, 205, 0.85));
+}
+
+.sf-latest.is-fail {
+  fill: var(--ob-flare);
+  filter: drop-shadow(0 0 4px color-mix(in srgb, var(--ob-flare) 80%, transparent));
+}
+
+.sf-ring {
+  fill: none;
+  stroke: var(--ob-amber);
+  opacity: 0.85;
+}
+
+/* 图上直接写的数：描一圈底色，压在星点上也读得清 */
+.sf-note {
+  fill: var(--ob-ink);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  paint-order: stroke;
+  stroke: var(--ob-well);
+  stroke-width: 3px;
+  stroke-linejoin: round;
+}
+
+.sf-note.is-latest {
+  fill: var(--ob-star);
+  font-weight: 600;
+}
+
+.sf-note.is-fail {
+  fill: var(--ob-flare);
+}
+
+.sf-cross {
+  stroke: var(--ob-hair-2);
+}
+
+.sf-dot {
+  fill: var(--ob-star);
+  stroke: var(--ob-well);
+  stroke-width: 1.5;
+  pointer-events: none;
+}
+
+.sf-dot.is-fail {
+  fill: var(--ob-flare);
+}
+
+.sf-hit {
+  fill: transparent;
+  cursor: crosshair;
+}
+
+/* 纸面版：墨点、墨线，不发光 */
+body[data-skin="paper"] :is(.sf-median, .sf-star, .sf-star.is-slow, .sf-fail, .sf-latest, .sf-latest.is-fail) {
+  filter: none;
+}
+
+body[data-skin="paper"] .sf-band {
+  fill: rgba(72, 56, 28, 0.08);
+}
+
+body[data-skin="paper"] .sf-median {
+  stroke: var(--ob-ink);
+  opacity: 0.75;
+}
+
+body[data-skin="paper"] .sf-star {
+  fill: var(--ob-ink);
+  opacity: 0.62;
+}
+
+body[data-skin="paper"] .sf-star.is-slow {
+  fill: var(--ob-amber);
+  opacity: 0.95;
+}
+
+/* 图注：一句说明 + 图例 */
+:is(body[data-skin="starry"], body[data-skin="paper"]) .ep-caption {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px 16px;
+  color: var(--ob-faint);
+}
+
+.sf-keys {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 14px;
+}
+
+.sf-key {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--ob-faint);
+  white-space: nowrap;
+}
+
+.sf-key i {
+  display: inline-block;
+  flex: none;
+}
+
+.sf-key-star {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: #dfe6ff;
+  box-shadow: 0 0 4px rgba(170, 195, 255, 0.8);
+}
+
+.sf-key-star.is-slow {
+  background: var(--ob-amber);
+  box-shadow: 0 0 4px color-mix(in srgb, var(--ob-amber) 80%, transparent);
+}
+
+.sf-key-band {
+  width: 18px;
+  height: 8px;
+  border-radius: 4px;
+  background: linear-gradient(transparent 3.3px, #eef1ff 3.3px, #eef1ff 4.7px, transparent 4.7px), rgba(170, 188, 255, 0.16);
+}
+
+.sf-key-fail {
+  width: 2px;
+  height: 9px;
+  border-radius: 1px;
+  background: var(--ob-flare);
+}
+
+body[data-skin="paper"] :is(.sf-key-star, .sf-key-star.is-slow) {
+  box-shadow: none;
+}
+
+body[data-skin="paper"] .sf-key-star {
+  background: var(--ob-ink);
+}
+
+body[data-skin="paper"] .sf-key-star.is-slow {
+  background: var(--ob-amber);
+}
+
+body[data-skin="paper"] .sf-key-band {
+  background: linear-gradient(transparent 3.3px, var(--ob-ink) 3.3px, var(--ob-ink) 4.7px, transparent 4.7px), rgba(72, 56, 28, 0.1);
+}
+
+/* 结论条：一行观测批注 */
+:is(body[data-skin="starry"], body[data-skin="paper"]) .endpoint-brief {
+  padding: 7px 12px;
+  border: 0;
+  border-left: 2px solid currentColor;
+  border-radius: 0 8px 8px 0;
+  font-weight: 450;
+}
+
+:is(body[data-skin="starry"], body[data-skin="paper"]) .endpoint-brief.state-ok {
+  background: color-mix(in srgb, var(--ok) 7%, transparent);
+  color: var(--ok);
+}
+
+:is(body[data-skin="starry"], body[data-skin="paper"]) .endpoint-brief.state-bad {
+  background: color-mix(in srgb, var(--ob-flare) 7%, transparent);
+  color: var(--ob-flare);
+}
+
+/* 结论已在读数头里：这两套皮肤下不再重复结论条（没有检测记录、读数头不出现时照常显示） */
+:is(body[data-skin="starry"], body[data-skin="paper"]) #endpointContent:has(#endpointStats:not([hidden]) .ep-hero) .endpoint-brief {
+  display: none;
+}
+
+/* 报文原文按内容伸缩（原来固定 200px，一行「检测中…」下面空一大片） */
+:is(body[data-skin="starry"], body[data-skin="paper"]) #dlgEndpoint .response-box {
+  height: auto;
+  min-height: 56px;
+  max-height: 200px;
+  border-color: var(--ob-hair);
+  background: var(--ob-well);
+}

@@ -1,0 +1,1540 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'none'" />
+    <title>集群运维工作台</title>
+    <!-- styles.css = 令牌 / 主题 / reset / 共用原语；其后按界面区块分文件（归属见各文件头注释），
+         区块文件在 styles.css 之后加载以便覆写原语，彼此之间的顺序也参与同权重覆写，勿随意调换 -->
+    <link rel="stylesheet" href="/styles.css" />
+    <link rel="stylesheet" href="/assets/css/shell.css" />
+    <link rel="stylesheet" href="/assets/css/overview.css" />
+    <link rel="stylesheet" href="/assets/css/tiles.css" />
+    <link rel="stylesheet" href="/assets/css/cluster.css" />
+    <link rel="stylesheet" href="/assets/css/tunnels.css" />
+    <link rel="stylesheet" href="/assets/css/brief.css" />
+    <link rel="stylesheet" href="/assets/css/logs.css" />
+    <link rel="stylesheet" href="/assets/css/events.css" />
+    <link rel="stylesheet" href="/assets/css/charts.css" />
+    <link rel="stylesheet" href="/assets/css/diagnostics.css" />
+    <link rel="stylesheet" href="/assets/css/dialogs.css" />
+    <link rel="stylesheet" href="/assets/css/settings.css" />
+    <link rel="stylesheet" href="/assets/css/usage.css" />
+    <link rel="stylesheet" href="/assets/css/reports.css" />
+    <link rel="stylesheet" href="/assets/css/jobs-watch.css" />
+    <link rel="stylesheet" href="/assets/css/daemons.css" />
+    <link rel="stylesheet" href="/assets/css/onboarding.css" />
+    <link rel="stylesheet" href="/assets/css/team-admin.css" />
+    <link rel="stylesheet" href="/assets/css/storage-admin.css" />
+    <link rel="stylesheet" href="/assets/css/galaxy-edition.css" />
+    <link rel="stylesheet" href="/assets/css/observatory.css" />
+    <!-- 首帧之前打好侧栏形态类（经典脚本、同步执行），避免启动时侧栏先展开再收起 -->
+    <script src="/assets/js/sidebar-boot.js"></script>
+    <!-- perf：预声明 app.js 的静态模块图，浏览器一次性并行拉取，免去逐层 import 发现的瀑布。
+         新增/删除模块时同步本列表（漏列只是少一次预取，不影响正确性；动态 import 的 changelog-data.js 不列）。 -->
+    <link rel="modulepreload" href="/app.js" />
+    <link rel="modulepreload" href="/assets/js/api.js" />
+    <link rel="modulepreload" href="/assets/js/error-reporter.js" />
+    <link rel="modulepreload" href="/assets/js/store.js" />
+    <link rel="modulepreload" href="/assets/js/ui-labels.js" />
+    <link rel="modulepreload" href="/assets/js/display-names.js" />
+    <link rel="modulepreload" href="/assets/js/render/validation-model.js" />
+    <link rel="modulepreload" href="/assets/js/render/handover-model.js" />
+    <link rel="modulepreload" href="/assets/js/empty-state.js" />
+    <link rel="modulepreload" href="/assets/js/sse.js" />
+    <link rel="modulepreload" href="/assets/js/refresh-queue.js" />
+    <link rel="modulepreload" href="/assets/js/dom-utils.js" />
+    <link rel="modulepreload" href="/assets/js/thresholds.js" />
+    <link rel="modulepreload" href="/assets/js/toast.js" />
+    <link rel="modulepreload" href="/assets/js/theme.js" />
+    <link rel="modulepreload" href="/assets/js/charts.js" />
+    <link rel="modulepreload" href="/assets/js/gpu-trend.js" />
+    <link rel="modulepreload" href="/assets/js/line-chart.js" />
+    <link rel="modulepreload" href="/assets/js/logs-panel.js" />
+    <link rel="modulepreload" href="/assets/js/bootstrap-panel.js" />
+    <link rel="modulepreload" href="/assets/js/server-cards.js" />
+    <link rel="modulepreload" href="/assets/js/connection-target.js" />
+    <link rel="modulepreload" href="/assets/js/command-palette.js" />
+    <link rel="modulepreload" href="/assets/js/doctor-advisories.js" />
+    <link rel="modulepreload" href="/assets/js/render/render-skip.js" />
+    <link rel="modulepreload" href="/assets/js/render/visibility.js" />
+    <link rel="modulepreload" href="/assets/js/render/overview.js" />
+    <link rel="modulepreload" href="/assets/js/render/skin-transition.js" />
+    <link rel="modulepreload" href="/assets/js/render/cli-model.js" />
+    <link rel="modulepreload" href="/assets/js/render/load-panel.js" />
+    <link rel="modulepreload" href="/assets/js/render/resources-model.js" />
+    <link rel="modulepreload" href="/assets/js/render/resources-view.js" />
+    <link rel="modulepreload" href="/assets/js/render/tunnel-egress-model.js" />
+    <link rel="modulepreload" href="/assets/js/render/tunnel-egress-view.js" />
+    <link rel="modulepreload" href="/assets/js/render/gpu-card-view.js" />
+    <link rel="modulepreload" href="/assets/js/app/gpu-card-controller.js" />
+    <link rel="modulepreload" href="/assets/js/render/dir-usage-view.js" />
+    <link rel="modulepreload" href="/assets/js/app/dir-usage-controller.js" />
+    <link rel="modulepreload" href="/assets/js/render/storage-admin-view.js" />
+    <link rel="modulepreload" href="/assets/js/render/storage-admin-viz.js" />
+    <link rel="modulepreload" href="/assets/js/app/storage-admin-controller.js" />
+    <link rel="modulepreload" href="/assets/js/render/disk-growth-view.js" />
+    <link rel="modulepreload" href="/assets/js/app/disk-growth-controller.js" />
+    <link rel="modulepreload" href="/assets/js/render/daemons-view.js" />
+    <link rel="modulepreload" href="/assets/js/app/daemons-controller.js" />
+    <link rel="modulepreload" href="/assets/js/app/codex-app-server.js" />
+    <link rel="modulepreload" href="/assets/js/render/trend-model.js" />
+    <link rel="modulepreload" href="/assets/js/render/cluster-panel.js" />
+    <link rel="modulepreload" href="/assets/js/render/cluster-model.js" />
+    <link rel="modulepreload" href="/assets/js/render/cluster-view.js" />
+    <link rel="modulepreload" href="/assets/js/render/cluster-history-model.js" />
+    <link rel="modulepreload" href="/assets/js/render/cluster-history-loader.js" />
+    <link rel="modulepreload" href="/assets/js/render/cluster-history-lookup.js" />
+    <link rel="modulepreload" href="/assets/js/render/cluster-diagnosis-model.js" />
+    <link rel="modulepreload" href="/assets/js/render/server-card-model.js" />
+    <link rel="modulepreload" href="/assets/js/render/checklist.js" />
+    <link rel="modulepreload" href="/assets/js/render/chain-model.js" />
+    <link rel="modulepreload" href="/assets/js/render/chain.js" />
+    <link rel="modulepreload" href="/assets/js/app/chain-traffic-controller.js" />
+    <link rel="modulepreload" href="/assets/js/render/attention.js" />
+    <link rel="modulepreload" href="/assets/js/render/diagnostics.js" />
+    <link rel="modulepreload" href="/assets/js/render/endpoint-panel.js" />
+    <link rel="modulepreload" href="/assets/js/render/endpoint-starfield.js" />
+    <link rel="modulepreload" href="/assets/js/render/timeline-swim.js" />
+    <link rel="modulepreload" href="/assets/js/render/timeline-episodes.js" />
+    <link rel="modulepreload" href="/assets/js/render/log-stream.js" />
+    <link rel="modulepreload" href="/assets/js/render/signal-banner.js" />
+    <link rel="modulepreload" href="/assets/js/render/update-banner.js" />
+    <link rel="modulepreload" href="/assets/js/render/repair-runbook.js" />
+    <link rel="modulepreload" href="/assets/js/render/incidents.js" />
+    <link rel="modulepreload" href="/assets/js/render/incident-insights.js" />
+    <link rel="modulepreload" href="/assets/js/render/usage-model.js" />
+    <link rel="modulepreload" href="/assets/js/render/usage-view.js" />
+    <link rel="modulepreload" href="/assets/js/render/usage-observatory.js" />
+    <link rel="modulepreload" href="/assets/js/render/usage-insights.js" />
+    <link rel="modulepreload" href="/assets/js/render/tunnel-stability-model.js" />
+    <link rel="modulepreload" href="/assets/js/render/tunnel-stability-view.js" />
+    <link rel="modulepreload" href="/assets/js/render/brief-view.js" />
+    <link rel="modulepreload" href="/assets/js/app/state.js" />
+    <link rel="modulepreload" href="/assets/js/app/session.js" />
+    <link rel="modulepreload" href="/assets/js/app/actions.js" />
+    <link rel="modulepreload" href="/assets/js/app/dialogs.js" />
+    <link rel="modulepreload" href="/assets/js/app/refresh-loop.js" />
+    <link rel="modulepreload" href="/assets/js/app/server-switch.js" />
+    <link rel="modulepreload" href="/assets/js/app/view-tabs.js" />
+    <link rel="modulepreload" href="/assets/js/app/sidebar.js" />
+    <link rel="modulepreload" href="/assets/js/app/skeleton.js" />
+    <link rel="modulepreload" href="/assets/js/motion.js" />
+    <link rel="modulepreload" href="/assets/js/app/settings-dialog.js" />
+    <link rel="modulepreload" href="/assets/js/app/settings-egress.js" />
+    <link rel="modulepreload" href="/assets/js/app/settings-proxy-auth.js" />
+    <link rel="modulepreload" href="/assets/js/app/cli-login-dialog.js" />
+    <link rel="modulepreload" href="/assets/js/app/settings-cli.js" />
+    <link rel="modulepreload" href="/assets/js/app/onboarding-guide.js" />
+    <link rel="modulepreload" href="/assets/js/render/onboarding-view.js" />
+    <link rel="modulepreload" href="/assets/js/render/onboarding-setup.js" />
+    <link rel="modulepreload" href="/assets/js/app/settings-access.js" />
+    <link rel="modulepreload" href="/assets/js/app/incidents-controller.js" />
+    <link rel="modulepreload" href="/assets/js/app/server-actions.js" />
+    <link rel="modulepreload" href="/assets/js/app/render-pipeline.js" />
+    <link rel="modulepreload" href="/assets/js/app/usage-controller.js" />
+    <link rel="modulepreload" href="/assets/js/app/tunnel-stability-controller.js" />
+    <link rel="modulepreload" href="/assets/js/app/brief-controller.js" />
+    <link rel="modulepreload" href="/assets/js/app/cli-controller.js" />
+    <link rel="modulepreload" href="/assets/js/app/panels.js" />
+    <link rel="modulepreload" href="/assets/js/app/settings-modules.js" />
+    <link rel="modulepreload" href="/assets/js/app/settings-autostart.js" />
+    <link rel="modulepreload" href="/assets/js/app/diagnostics-export.js" />
+    <link rel="modulepreload" href="/assets/js/app/settings-backup.js" />
+    <link rel="modulepreload" href="/assets/js/app/report-controller.js" />
+    <link rel="modulepreload" href="/assets/js/app/job-watch-controller.js" />
+    <link rel="modulepreload" href="/assets/js/app/job-notifications-controller.js" />
+    <link rel="modulepreload" href="/assets/js/app/job-navigation.js" />
+    <link rel="modulepreload" href="/assets/js/render/job-watch-view.js" />
+    <link rel="modulepreload" href="/assets/js/app/log-readback.js" />
+    <link rel="modulepreload" href="/assets/js/render/log-readback-view.js" />
+  </head>
+  <body data-skin="classic">
+    <canvas id="galaxyGlobalSkyCanvas" class="galaxy-global-sky-canvas" width="0" height="0" aria-hidden="true"></canvas>
+    <!-- 侧边栏（app/sidebar.js 管开合 / 浮层 / 悬停提示 / 页名）：品牌 → 通道状态 → 搜索 → 视图 → 诊断 → 操作 → 收起。
+         展开 232px、细栏 64px；窗口 <1180 时固定细栏，展开浮在内容上。
+         nav.sidebar-nav 上挂着浮层入口（[data-dialog]）的点击委托（app/dialogs.js）；视图标签由 app/view-tabs.js 接线。 -->
+    <aside class="sidebar" id="sidebar" aria-label="侧边栏">
+      <div class="sidebar-brand">
+        <svg class="sidebar-logo" viewBox="0 0 28 28" aria-hidden="true">
+          <defs><linearGradient id="sidebarLogoBg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#2c313c"/><stop offset="1" stop-color="#15171b"/></linearGradient><linearGradient id="sidebarLogoLink" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#7aa7f0"/><stop offset="1" stop-color="#5cc48a"/></linearGradient></defs>
+          <rect width="28" height="28" rx="7.5" fill="url(#sidebarLogoBg)"/><rect x=".5" y=".5" width="27" height="27" rx="7" fill="none" stroke="#fff" stroke-opacity=".08"/>
+          <path d="M9.4 10.2h9.2M9.4 10.2 14 18.2M18.6 10.2 14 18.2" stroke="url(#sidebarLogoLink)" stroke-width="1.7" stroke-linecap="round" fill="none"/>
+          <circle cx="9.4" cy="10.2" r="2.6" fill="#7aa7f0"/><circle cx="18.6" cy="10.2" r="2.6" fill="#7aa7f0"/><circle cx="14" cy="18.6" r="3" fill="#5cc48a"/>
+        </svg>
+        <div class="sidebar-brand-text">
+          <span class="sidebar-product">集群运维工作台</span>
+          <span class="version-badge" id="versionBadge" title="查看更新日志">v2.14.0</span>
+        </div>
+      </div>
+      <!-- 通道状态：圆点与文案颜色跟随 body[data-health]；通道异常 / 降级时出「一键修复」（render-pipeline.js 控制显隐，走 runbook 预览） -->
+      <div class="sidebar-health" data-tip="通道" data-tip-live="overall">
+        <div class="pulse-ring" id="overallRing"></div>
+        <div class="health-text">
+          <span class="caption">通道</span>
+          <div id="overall" class="overall" aria-live="polite">检查中</div>
+        </div>
+        <button type="button" id="sidebarRepairBtn" class="btn btn-warning sidebar-repair" style="display: none;" title="重启所有连接（先弹预览）">一键修复</button>
+        <button type="button" id="sidebarTakeoverBtn" class="btn btn-secondary sidebar-repair" style="display: none;" title="另一台 Mac 正在承载隧道：点这里让这台电脑接管（先弹预览）">让这台承载</button>
+      </div>
+      <button type="button" id="cmdPaletteBtn" class="cmd-trigger-btn" data-tip="搜索命令" data-kbd="⌘K" title="唤起全局命令面板 (⌘K / Ctrl+K)">
+        <svg class="cmd-search-icon" width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><circle cx="7" cy="7" r="4.75"/><path d="M10.5 10.5 14 14"/></svg><span class="sidebar-label">搜索命令</span><span class="cmd-kbd-badge">⌘K</span>
+      </button>
+      <nav class="sidebar-nav" aria-label="主导航">
+        <div class="sidebar-group">
+          <div class="sidebar-group-label"><span>视图</span></div>
+          <!-- 主视图：原生 button + role=tablist（竖排，↑↓ 循环，app/view-tabs.js）；切换只改 .view.active 与 [hidden]，
+               不动任何既有 DOM ID（render/island/browser-smoke 的引用零破坏）。「事件」的数字 = 概览「需要处理的事件」（render/incidents.js）。 -->
+          <div class="view-tabs" role="tablist" aria-label="控制台视图" aria-orientation="vertical" id="viewTabs">
+            <button type="button" class="view-tab sidebar-item" id="tab-overview" role="tab" data-view="overview" aria-selected="true" aria-controls="view-overview" data-tip="概览"><svg class="sidebar-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="3.5" width="7" height="8" rx="1.6"/><rect x="13.5" y="3.5" width="7" height="5" rx="1.6"/><rect x="13.5" y="11.5" width="7" height="9" rx="1.6"/><rect x="3.5" y="14.5" width="7" height="6" rx="1.6"/></svg><span class="sidebar-label">概览</span></button>
+            <button type="button" class="view-tab sidebar-item" id="tab-servers" role="tab" data-view="servers" aria-selected="false" aria-controls="view-servers" data-tip="服务器"><svg class="sidebar-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="4" width="17" height="7" rx="2"/><rect x="3.5" y="13" width="17" height="7" rx="2"/><path d="M7.5 7.5h.01M7.5 16.5h.01M11 7.5h2M11 16.5h2"/></svg><span class="sidebar-label">服务器</span></button>
+            <button type="button" class="view-tab sidebar-item" id="tab-events" role="tab" data-view="events" aria-selected="false" aria-controls="view-events" data-tip="事件" data-tip-live="eventsNavCount"><svg class="sidebar-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M10.3 4.2 2.9 17.3A2 2 0 0 0 4.6 20.3h14.8a2 2 0 0 0 1.7-3L13.7 4.2a2 2 0 0 0-3.4 0Z"/><path d="M12 9.5v4M12 16.8h.01"/></svg><span class="sidebar-label">事件</span><span class="sidebar-count" id="eventsNavCount" data-tone="crit" hidden></span><span class="sidebar-dot" aria-hidden="true"></span></button>
+            <button type="button" class="view-tab sidebar-item" id="tab-usage" role="tab" data-view="usage" aria-selected="false" aria-controls="view-usage" data-tip="用量"><svg class="sidebar-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3.5 20.5h17"/><path d="M7 16.5v-5M12 16.5v-10M17 16.5v-7"/></svg><span class="sidebar-label">用量</span></button>
+            <button type="button" class="view-tab sidebar-item" id="tab-team" role="tab" data-view="team" aria-selected="false" aria-controls="view-team" data-tip="团队管理" hidden><svg class="sidebar-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8.5" r="3.2"/><path d="M3.5 19.2c0-2.9 2.5-5.2 5.5-5.2s5.5 2.3 5.5 5.2"/><circle cx="16.8" cy="9.5" r="2.4"/><path d="M15.5 14.3c2.4.2 4.3 2 4.5 4.4"/></svg><span class="sidebar-label">团队管理</span></button>
+            <button type="button" class="view-tab sidebar-item" id="tab-storage" role="tab" data-view="storage" aria-selected="false" aria-controls="view-storage" data-tip="存储管理" hidden><svg class="sidebar-icon" viewBox="0 0 24 24" aria-hidden="true"><ellipse cx="12" cy="6" rx="7.5" ry="2.8"/><path d="M4.5 6v6c0 1.5 3.4 2.8 7.5 2.8s7.5-1.3 7.5-2.8V6"/><path d="M4.5 12v6c0 1.5 3.4 2.8 7.5 2.8s7.5-1.3 7.5-2.8v-6"/></svg><span class="sidebar-label">存储管理</span></button>
+          </div>
+        </div>
+        <div class="sidebar-group">
+          <div class="sidebar-group-label"><span>诊断</span></div>
+          <button type="button" class="sidebar-item" data-dialog="dlgTimeline" data-tip="时间线" title="状态变更时间线"><svg class="sidebar-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></svg><span class="sidebar-label">时间线</span></button>
+          <button type="button" class="sidebar-item" data-dialog="dlgLogs" data-tip="日志" title="运维与修复操作日志"><svg class="sidebar-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M14 3.5H7.5a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2h9a2 2 0 0 0 2-2V8l-4.5-4.5Z"/><path d="M14 3.5V8h4.5M9 12.5h6M9 16h4"/></svg><span class="sidebar-label">日志</span></button>
+          <button type="button" class="sidebar-item" data-dialog="dlgEndpoint" data-tip="端点" title="API 端点检测报文"><svg class="sidebar-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="2"/><path d="M15.9 8.1a5.5 5.5 0 0 1 0 7.8M8.1 15.9a5.5 5.5 0 0 1 0-7.8M18.7 5.3a9.5 9.5 0 0 1 0 13.4M5.3 18.7a9.5 9.5 0 0 1 0-13.4"/></svg><span class="sidebar-label">端点</span></button>
+          <!-- Codex 监控关闭时隐藏（render-pipeline.js） -->
+          <button type="button" class="sidebar-item" id="doctorToolBtn" data-dialog="dlgDoctor" data-tip="Doctor" title="Doctor 详细输出"><svg class="sidebar-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12h3.5l2-5 4 10 2.2-5H21"/></svg><span class="sidebar-label">Doctor</span></button>
+        </div>
+        <!-- 操作组贴底：外观、离线安装 Agent 在「配置」浮层里（⌘K 也能直达） -->
+        <div class="sidebar-group sidebar-actions">
+          <button type="button" id="jobNotificationsBtn" class="sidebar-item" aria-haspopup="dialog" data-tip="作业提醒" data-tip-live="jobNotificationsCount" title="关注作业的状态提醒"><svg class="sidebar-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9a6 6 0 1 1 12 0c0 6.5 2.5 8 2.5 8h-17S6 15.5 6 9Z"/><path d="M10.2 20.5a2 2 0 0 0 3.6 0"/></svg><span class="sidebar-label">作业提醒</span><span id="jobNotificationsCount" hidden></span><span class="sidebar-dot" aria-hidden="true"></span></button>
+          <button type="button" id="configBtn" class="sidebar-item config-trigger" data-dialog="dlgSettings" aria-haspopup="dialog" data-tip="配置" title="配置与偏好"><svg class="sidebar-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h9M17 7h3M4 17h3M11 17h9"/><circle cx="15" cy="7" r="2"/><circle cx="9" cy="17" r="2"/></svg><span class="sidebar-label">配置</span></button>
+          <button type="button" class="sidebar-item sidebar-item-primary" data-dialog="dlgControl" data-tip="通道控制" title="通道控制"><svg class="sidebar-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3.5v7.5"/><path d="M6.4 6.6a7.5 7.5 0 1 0 11.2 0"/></svg><span class="sidebar-label">控制</span></button>
+        </div>
+      </nav>
+      <div class="sidebar-foot">
+        <button type="button" class="sidebar-item" id="sidebarToggle" aria-controls="sidebar" aria-expanded="true" data-tip="收起侧栏" data-kbd="⌘\"><svg class="sidebar-icon sidebar-toggle-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="4.5" width="17" height="15" rx="2.5"/><path d="M9.5 4.5v15M15 10l-2 2 2 2"/></svg><span class="sidebar-label">收起侧栏</span><span class="sidebar-kbd">⌘\</span></button>
+      </div>
+    </aside>
+    <div class="sidebar-scrim" id="sidebarScrim" aria-hidden="true"></div>
+
+    <main class="console">
+
+      <!-- 吸顶页头条：页名（服务器页带查看中的服务器，app/sidebar.js）+ Agent 状态胶囊（render/overview.js）；视觉版本在「配置」里切 -->
+      <div class="pagebar" id="pagebar" data-view="overview">
+        <div class="pagebar-title"><h1 id="pageTitle">概览</h1><span class="pagebar-crumb" id="pageCrumb"></span></div>
+        <div class="pagebar-agents">
+          <div class="agent-strip" id="agentOverviewGrid"></div>
+        </div>
+      </div>
+
+      <!-- 横幅区：注意力队列 / 卡顿信号 / 热更新 / Agent 详情。都隐藏时只剩 16px 下边距（shell.css）。
+           注意：本 header 位于 <main> 内，按 HTML-AAM 其隐式角色是 generic，不允许再显式声明 role="banner"。 -->
+      <header class="console-header">
+        <!-- 注意力队列(attention.js):通道条 + 指标越线/Doctor 告警条统一排序展示。
+             注意:#alertBanner 的 class 必须保持 alert-banner —— checklist.js renderAlertBanner
+             每次渲染都会整体覆写 className 为 "alert-banner state-<health>",自定义类名会被冲掉;
+             排序通过 style.order 实现(renderAlertBanner 不碰 style)。 -->
+        <div id="attentionQueue" class="attention-queue">
+          <!-- v2.15 一键修复 runbook 运行条目(repair-runbook.js 控制显隐与内容)。
+               独立元素、CSS order:-1 置顶,不侵入 #alertBanner(className 会被
+               renderAlertBanner 整体覆写)也不放进 #attentionItems(innerHTML 会被重建)。 -->
+          <div id="repairRunbook" class="repair-runbook" style="display: none;" role="status" aria-live="polite" aria-atomic="true"></div>
+          <div id="alertBanner" class="alert-banner state-waiting" aria-live="polite" aria-atomic="true">
+            <div class="alert-message">
+              <h3 id="alertTitle">正在获取通道状态...</h3>
+              <p id="alertBody">系统正在与远端集群握手并检测链路节点，请稍候。</p>
+              <!-- 探测已放慢（/api/status.probeBackoff）时才出现：手动探一次，不受退避约束（app/actions.js probeNow）。 -->
+              <button type="button" id="alertProbeBtn" class="text-btn alert-probe-btn" style="display: none;" title="现在就探测一次，不等下一个探测时刻；连得上就立刻恢复正常节奏">立即探测</button>
+            </div>
+            <button type="button" id="alertActionBtn" class="btn btn-warning alert-action-btn" style="display: none;" title="重启所有连接（先弹预览）">一键修复（所有连接）</button>
+          </div>
+          <div id="attentionItems" class="attention-items" aria-live="polite" aria-atomic="true" style="display: none;"></div>
+        </div>
+        <div id="signalBanner" class="alert-banner signal-banner state-error" style="display:none" role="alert" aria-live="assertive" aria-atomic="true">
+          <div class="alert-text">
+            <h3 id="signalTitle">卡顿信号</h3>
+            <p id="signalBody"></p>
+          </div>
+        </div>
+        <!-- 热更新横幅(update-banner.js):已安装未生效 → 重启界面(隧道不中断);
+             重启后后台组件待升级 → 平滑升级。class 不被其他模块覆写。 -->
+        <div id="updateBanner" class="alert-banner update-banner" style="display:none" role="status" aria-live="polite" aria-atomic="true"></div>
+        <!-- 展开的 Agent 详情（一次一个）：状态带下方通栏，由 render/overview.js 填充与显隐 -->
+        <section class="agent-strip-drawer" id="agentStripDrawer" aria-label="Agent 详情" hidden></section>
+      </header>
+
+      <section id="view-overview" class="view active" role="tabpanel" aria-label="概览视图">
+      <!-- 数据链路「请求之路」(chain.js / chain-model.js,v2.65):集群 ══SSH 隧道══ 本机代理 ── 出网 → 去向。
+           去向与近一分钟流量、端到端往返由 app/chain-traffic-controller.js 拉取;曲线画在 .chain-scroller 里的 .road-fan 层。
+           点击节点 / 去向卡在下方详情区展示这一环的事实数据(断线统计、端口映射、心跳、进程、出网失败、去向明细……)。 -->
+      <!-- 首屏顶部两栏（assets/css/brief.css）：左数据链路（底部带「隧道稳定性」：在线条、SSH 响应、断线清单，app/tunnel-stability-controller.js），右今日简报。
+           窄于 860px 上下堆叠（链路在上）。简报由 app/brief-controller.js 拉取渲染。 -->
+      <div class="ov-top" id="ovTop">
+      <article class="panel panel-chain" id="chainPanel">
+        <div class="panel-header">
+          <h2>数据链路</h2>
+          <span class="panel-hint" id="chainHint">点击节点查看详情</span>
+        </div>
+        <div class="chain-scroller">
+          <div class="chain-track" id="chainTrack"></div>
+        </div>
+        <div class="chain-detail" id="chainDetail" hidden></div>
+        <section class="chain-uptime" id="chainUptime" aria-label="隧道稳定性" hidden></section>
+      </article>
+
+      <article class="panel panel-brief" id="briefPanel" aria-label="今日简报">
+        <div class="panel-header flex-header">
+          <div class="header-left-side">
+            <h2 id="briefTitle">今日简报</h2>
+            <span class="panel-hint" id="briefCaption" title="根据断线账本、事件、用量与作业记录自动生成，每 5 分钟更新；归档保留最近 31 天">—</span>
+          </div>
+          <div class="bf-days">
+            <fieldset class="us-segmented us-segmented-sm" aria-label="简报日期"><button type="button" data-brief-day="today" aria-pressed="true">今天</button><button type="button" data-brief-day="yesterday" aria-pressed="false">昨天</button></fieldset>
+            <select id="briefArchiveSelect" class="styled-select bf-archive" aria-label="查看更早的简报" hidden></select>
+          </div>
+        </div>
+        <div class="bf-body" id="briefBody"><p class="bf-loading">正在生成简报…</p></div>
+      </article>
+      </div>
+
+      <!-- T06 概览事件摘要：/api/incidents 的未解决事件前 3 条（render/incidents.js）。
+           完整列表与恢复记录在「事件」视图；详细技术日志收进事件详情，不占首页。 -->
+      <article class="panel panel-overview-events is-collapsed" id="overviewEventsPanel">
+        <div class="panel-header flex-header">
+          <div class="header-left-side">
+            <h2>需要处理的事件</h2>
+            <span class="badge" id="overviewIncidentBadge">-</span>
+            <span class="panel-hint" id="overviewIncidentHint"></span>
+          </div>
+          <button type="button" class="text-btn" data-goto-view="events">查看全部事件 →</button>
+        </div>
+        <div class="overview-incident-summary" id="overviewIncidentSummary">
+          <p class="overview-events-empty">暂无未解决事件</p>
+        </div>
+      </article>
+
+      <!-- 服务器简报（T06 从「服务器监控」面板拆到概览：可比较的紧凑卡片行） -->
+      <article class="panel panel-briefs" id="serverBriefsPanel">
+        <div class="panel-header flex-header">
+          <div class="header-left-side">
+            <h2>服务器简报</h2>
+            <span class="panel-hint">点击卡片切换查看视角</span>
+          </div>
+          <button type="button" class="text-btn" data-goto-view="servers">服务器详情 →</button>
+        </div>
+        <!-- v2.18 所有隧道常驻：选择/查看只改变重探针与 Agent 视角，不再放掉旧隧道 -->
+        <div class="server-briefs-container" id="serverBriefsContainer"></div>
+      </article>
+      </section>
+
+      <section id="view-servers" class="view" role="tabpanel" aria-label="服务器视图" hidden>
+      <!-- 服务器监控(通道控制已移入顶部工具栏浮层) -->
+      <article class="panel panel-servers" id="resourcesPanel">
+        <div class="panel-header flex-header">
+          <div class="header-left-side">
+            <h2>资源与负载</h2>
+            <span class="badge" id="hostBadge">-</span>
+            <!-- 采样新鲜度：文案 + data-level（ok/warn/error/unknown）由 render/load-panel.js 维护 -->
+            <span class="res-fresh" id="resFreshness" data-level="unknown">尚未采样</span>
+            <!-- 三条趋势线的范围（charts.js initTrendRange）：选择记在 localStorage，默认 24 小时 -->
+            <fieldset class="us-segmented us-segmented-sm res-range" aria-label="趋势范围"><button type="button" data-res-range="m30" aria-pressed="false">30 分钟</button><button type="button" data-res-range="h24" aria-pressed="true">24 小时</button><button type="button" data-res-range="d7" aria-pressed="false">7 天</button><button type="button" data-res-range="d30" aria-pressed="false">30 天</button></fieldset>
+          </div>
+          <div class="server-selector-container">
+            <select id="serverSelect" class="styled-select server-select-dropdown" aria-label="选择要查看的服务器"></select>
+            <!-- v2.18 所有隧道常驻：选择/查看只改变重探针与 Agent 视角，不再放掉旧隧道 -->
+            <span class="server-selector-hint">只改变查看视角 · 隧道不受影响</span>
+          </div>
+        </div>
+        <div class="res-body">
+          <!-- 三块指标：正文（大字/环比/明细/注释）经 morphInnerHtml 就地修补；
+               sparkline SVG 必须静态存在（charts.js 的 ResizeObserver 只观察首绘时已在的节点），
+               它的 title / aria-label 随趋势范围由 charts.js 改写（这里写的是默认的 24 小时）。
+               级别写在 data-level 上（ok/warn/critical/unknown），配色见 assets/css/tiles.css。 -->
+          <!-- 这台服务器从没采到过数据时的等待 / 取不到说明（render/load-panel.js；有数据后隐藏） -->
+          <div class="res-notice" id="resNotice" role="status" hidden></div>
+          <div class="res-tiles">
+          <section class="res-tile" id="resCpuTile" data-level="unknown" aria-label="CPU">
+            <div class="res-tile-body" id="resCpuBody"><div class="res-tile-top"><div class="res-tile-heading"><div class="res-tile-title">CPU</div><div class="res-tile-figure"><span class="res-tile-value res-tile-value-empty">未采集</span></div></div></div></div>
+            <div class="trend-chart-container res-spark" title="最近 24 小时 CPU">
+              <svg class="trend-chart" id="cpuTrendSvg" viewBox="0 0 300 24" preserveAspectRatio="none" role="img" aria-label="最近 24 小时 CPU 趋势">
+                <!-- 三块趋势图共用这一个面积渐变（同一文档内 url(#trendGrad) 可跨 SVG 引用） -->
+                <defs>
+                  <linearGradient id="trendGrad" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stop-color="var(--cyan)" stop-opacity="0.16"/>
+                    <stop offset="100%" stop-color="var(--cyan)" stop-opacity="0.0"/>
+                  </linearGradient>
+                </defs>
+                <path class="trend-area" id="cpuTrendArea" fill="url(#trendGrad)" d=""></path>
+                <path class="trend-line" id="cpuTrendLine" stroke="var(--cyan)" stroke-width="1.25" fill="none" d=""></path>
+              </svg>
+            </div>
+          </section>
+          <section class="res-tile" id="resMemoryTile" data-level="unknown" aria-label="内存">
+            <div class="res-tile-body" id="resMemoryBody"><div class="res-tile-top"><div class="res-tile-heading"><div class="res-tile-title">内存</div><div class="res-tile-figure"><span class="res-tile-value res-tile-value-empty">未采集</span></div></div></div></div>
+            <div class="trend-chart-container res-spark" title="最近 24 小时内存">
+              <svg class="trend-chart" id="ramTrendSvg" viewBox="0 0 300 24" preserveAspectRatio="none" role="img" aria-label="最近 24 小时内存占用趋势">
+                <path class="trend-area" id="ramTrendArea" fill="url(#trendGrad)" d=""></path>
+                <path class="trend-line" id="ramTrendLine" stroke="var(--cyan)" stroke-width="1.25" fill="none" d=""></path>
+              </svg>
+            </div>
+          </section>
+          <!-- 磁盘 = $HOME 所在共享卷（df），不是个人配额 -->
+          <section class="res-tile" id="resDiskTile" data-level="unknown" aria-label="磁盘">
+            <div class="res-tile-body" id="resDiskBody"><div class="res-tile-top"><div class="res-tile-heading"><div class="res-tile-title">磁盘</div><div class="res-tile-figure"><span class="res-tile-value res-tile-value-empty">未采集</span></div></div></div></div>
+            <div class="trend-chart-container res-spark" title="最近 24 小时磁盘">
+              <svg class="trend-chart" id="diskTrendSvg" viewBox="0 0 300 24" preserveAspectRatio="none" role="img" aria-label="最近 24 小时磁盘占用趋势">
+                <path class="trend-area" id="diskTrendArea" fill="url(#trendGrad)" d=""></path>
+                <path class="trend-line" id="diskTrendLine" stroke="var(--cyan)" stroke-width="1.25" fill="none" d=""></path>
+              </svg>
+            </div>
+            <!-- 管理员：存储管理入口（摘要由 app/storage-admin-controller.js 填，点卡片或这一行进「存储管理」页） -->
+            <button type="button" class="res-sa-entry" id="resDiskStorage" hidden title="打开存储管理：各盘按用户占用与目录树"></button>
+          </section>
+          </div>
+
+          <!-- 本人目录占用（app/dir-usage-controller.js）：只在团队集群显示；展开只读本机结果，点「开始 / 继续扫描」才发一次有界只读 SSH -->
+          <section class="res-dirusage" id="resDirUsage" aria-label="我的目录占用" hidden>
+            <div class="du-bar"><button type="button" class="text-btn du-toggle" id="resDirUsageToggle" aria-expanded="false" aria-controls="resDirUsageBody">查看我的目录占用</button><span class="du-hint">磁盘是共享卷用量；这里按需扫描 $HOME 下你自己的目录</span></div>
+            <!-- 作业产出目录（app/disk-growth-controller.js）：随上面的按钮展开；后端每 6 小时自动量一次各批次目录的大小，没有这类目录时不显示 -->
+            <section class="du-body dg-block" id="resDiskGrowth" aria-label="作业产出目录" hidden></section>
+            <div class="du-body" id="resDirUsageBody" hidden></div>
+          </section>
+
+          <!-- GPU：仅在采到 nvidia-smi 数据时显示 -->
+          <section class="res-gpu" id="resGpuSection" aria-label="GPU" hidden>
+            <div class="res-gpu-head" id="resGpuSummary"></div>
+            <div class="res-gpu-list" id="resGpuList"></div>
+          </section>
+
+          <!-- 经隧道出网的程序（render/tunnel-egress-view.js）：这台服务器上此刻连着 127.0.0.1:<反向端口> 的连接按程序名汇总，
+               随 60s 采集刷新（ss 只读查询）。还没采到 / 旧采集脚本 / 不建隧道的服务器整块隐藏。 -->
+          <section class="res-egress" id="resEgressSection" aria-label="经隧道出网的程序" hidden></section>
+
+        </div>
+      </article>
+
+      <!-- 远端守护进程（app/daemons-controller.js）：查看中的团队集群上 Paseo / T3 Code 是否在运行。
+           只在服务器页可见时每 60 秒读一次状态（一次只读 SSH）；未运行的可在行内确认后启动——
+           从不重启或停止。不是团队集群时整块隐藏；模块关闭时由 app/panels.js 隐藏。
+           同一次查询顺带列出「我在这台服务器上的服务」（本人监听的端口），可临时转发到本机打开；没有就不出现。 -->
+      <article class="panel panel-daemons" id="daemonsPanel" aria-label="远端守护进程" hidden>
+        <div class="panel-header flex-header">
+          <div class="header-left-side">
+            <h2>远端守护进程</h2>
+            <span class="badge" id="daemonsServer">-</span>
+          </div>
+          <button type="button" class="btn btn-secondary dm-refresh" id="daemonsRefreshBtn" title="立即重新检查（只读）。只在未运行时启动，从不重启或停止；已在运行的会话不受影响">刷新</button>
+        </div>
+        <div class="dm-body" id="daemonsBody" aria-live="polite"></div>
+      </article>
+
+      <!-- 集群节点与队列（render/cluster-panel.js）：layers.resources[id].slurm，随 60s 采集刷新。
+           查看的服务器没有 Slurm 时整块隐藏。动态区域经 morphInnerHtml 就地修补，
+           级别 / 语气写在 data-* 上（配色见 assets/css/cluster.css）。
+           作业列表可在「当前队列」与「我的历史 · 48 小时」（GET /api/jobs，sacct 5 分钟一轮）之间切换。 -->
+      <article class="panel panel-cluster" id="clusterPanel" hidden>
+        <div class="panel-header flex-header">
+          <div class="header-left-side">
+            <h2>集群节点与队列</h2>
+            <span class="badge" id="clusterBadge">Slurm</span>
+            <span class="res-fresh" id="clusterFreshness" data-level="unknown">尚未采样</span>
+          </div>
+          <button type="button" class="btn btn-secondary cl-refresh" id="clusterRefreshBtn" title="立即重新采集这台服务器（sinfo / squeue 只读查询）">立即刷新</button>
+        </div>
+        <div class="cl-body">
+          <!-- 调度器查询失败：有旧数据时是一条红色说明；从没拿到过数据时换成整块空状态（render/cluster-panel.js） -->
+          <div class="cl-error" id="clusterError" role="status" hidden></div>
+          <div class="cl-kpis" id="clusterKpis"></div>
+
+          <section class="cl-section" aria-labelledby="clusterNodesTitle">
+            <div class="cl-section-head">
+              <h3 id="clusterNodesTitle">节点</h3>
+              <span class="cl-section-count" id="clusterNodeCount"></span>
+              <span class="cl-section-hint" id="clusterNodeHint">点节点可筛选作业</span>
+              <span class="cl-legend" aria-hidden="true">
+                <span class="cl-legend-item" data-kind="alloc">外环 分配（直连节点为利用率）</span>
+                <span class="cl-legend-item" data-kind="load">内环 负载 / 总核数</span>
+              </span>
+            </div>
+            <div class="cl-mine" id="clusterIdleRadar" hidden></div>
+            <div class="cl-nodes" id="clusterNodes"></div>
+          </section>
+
+          <div class="cl-split">
+            <section class="cl-section cl-queue" aria-labelledby="clusterJobsTitle">
+              <div class="cl-section-head">
+                <h3 id="clusterJobsTitle">作业队列</h3>
+                <!-- 认不出当前用户 / 服务器没有 id 时不显示（render/cluster-panel.js） -->
+                <fieldset class="us-segmented us-segmented-sm cl-queue-mode" id="clusterQueueMode" aria-label="作业列表" hidden><button type="button" data-cl-mode="queue" aria-pressed="true">当前队列 <span id="clusterQueueCount"></span></button><button type="button" data-cl-mode="history" aria-pressed="false">我的历史 · 48 小时</button></fieldset>
+                <div class="cl-filters" id="clusterFilters"></div>
+                <div class="cl-filters" id="clusterHistoryFilters" hidden></div>
+              </div>
+              <div class="cl-queue-view" id="clusterQueueView">
+                <!-- 「我的」汇总条 + 同名实验折叠（render/cluster-model.groupJobRows）：一次提交几十个实验也不拉长整页 -->
+                <div class="cl-mine" id="clusterMine" hidden></div>
+                <div class="cl-table-wrap">
+                  <!-- 固定列宽 + 单行省略：任何宽度下都不出现横向滚动，完整信息在行的悬停提示里；
+                       限高约 14 行，超出在表格内部滚动、表头吸顶 -->
+                  <table class="cl-jobs">
+                    <caption class="cl-caption">Slurm 作业队列</caption>
+                    <colgroup>
+                      <col class="cl-col-job" />
+                      <col class="cl-col-user" />
+                      <col class="cl-col-state" />
+                      <col class="cl-col-time" />
+                      <col class="cl-col-res" />
+                      <col class="cl-col-where" />
+                    </colgroup>
+                    <thead>
+                      <tr>
+                        <th scope="col">作业</th>
+                        <th scope="col">用户</th>
+                        <th scope="col">状态</th>
+                        <th scope="col">时长</th>
+                        <th scope="col">资源</th>
+                        <th scope="col">节点 / 原因</th>
+                      </tr>
+                    </thead>
+                    <tbody id="clusterJobsBody"></tbody>
+                  </table>
+                </div>
+                <p class="cl-truncated" id="clusterTruncated" hidden></p>
+              </div>
+              <!-- 我的历史：近 48 小时已结束的作业。有问题的（失败 / 超时 / 取消）排最前并带左侧状态色，
+                   同名实验折成一行（点击展开）；汇总条沿用「我的」汇总条的样式 -->
+              <div class="cl-history" id="clusterHistory" hidden>
+                <!-- 按需回查（v2.51，render/cluster-history-lookup.js）：作业号或日期查 48 小时之外的记录，结果换进下面同一张表 -->
+                <form class="cl-hist-lookup" id="clusterHistoryLookup" autocomplete="off" novalidate>
+                  <input type="search" id="clusterHistoryQuery" maxlength="40" placeholder="作业号或日期，如 18036、10-01、09-28~10-01" aria-label="按作业号或日期查询历史作业" aria-describedby="clusterHistoryLookupHint" />
+                  <button type="submit" class="text-btn">查询</button>
+                  <button type="button" class="text-btn" id="clusterHistoryLookupReset" hidden>回到近 48 小时</button>
+                  <span class="cl-hist-lookup-hint" id="clusterHistoryLookupHint" role="status"></span>
+                </form>
+                <div class="cl-mine cl-hist-summary" id="clusterHistorySummary" hidden></div>
+                <!-- 失败作业诊断（v2.49）：近 48 小时同一原因失败不止一个时，在这里合并成一行，点击筛出这些作业 -->
+                <div class="cl-diag-causes" id="clusterHistoryCauses" hidden></div>
+                <div class="cl-table-wrap">
+                  <table class="cl-jobs cl-jobs-history">
+                    <caption class="cl-caption">我的作业历史（近 48 小时）</caption>
+                    <colgroup>
+                      <col class="cl-hcol-job" />
+                      <col class="cl-hcol-state" />
+                      <col class="cl-hcol-end" />
+                      <col class="cl-hcol-time" />
+                      <col class="cl-hcol-where" />
+                      <col class="cl-hcol-exit" />
+                    </colgroup>
+                    <thead>
+                      <tr>
+                        <th scope="col">作业</th>
+                        <th scope="col">状态</th>
+                        <th scope="col">结束</th>
+                        <th scope="col">耗时</th>
+                        <th scope="col">节点 · 分区</th>
+                        <th scope="col">退出</th>
+                      </tr>
+                    </thead>
+                    <tbody id="clusterHistoryBody"></tbody>
+                  </table>
+                </div>
+                <p class="cl-truncated" id="clusterHistoryNote" hidden></p>
+                <!-- 覆盖范围与「更早…」（每次往前加载一天） -->
+                <div class="cl-hist-more" id="clusterHistoryMore" hidden></div>
+              </div>
+            </section>
+
+            <section class="cl-section cl-users-section" aria-labelledby="clusterUsersTitle">
+              <div class="cl-section-head">
+                <h3 id="clusterUsersTitle">按用户占用</h3>
+                <span class="cl-section-count" id="clusterUserCount"></span>
+              </div>
+              <div class="cl-users" id="clusterUsers"></div>
+            </section>
+          </div>
+        </div>
+      </article>
+
+      </section>
+
+      <section id="view-events" class="view" role="tabpanel" aria-label="事件视图" hidden>
+      <!-- 银河天象增强舞台：星空版与纸面天台版下展示「天顶火流星轨迹 + 浑天星盘四象限呼吸罗盘」，简洁版下隐藏 -->
+      <div id="eventsGalaxyStage" class="gx-observatory-stage"></div>
+      <!-- T06 事件视图：/api/incidents 未解决 + 已恢复记录；确认/稍后提醒走 attention API。
+           已恢复默认按类型汇总（/api/incidents/summary，表格由 render/incidents.js 写进 #incidentSummary），
+           分段控件切到逐条卡片（#incidentList）；分段控件只在筛选为「已恢复」时出现。 -->
+      <article class="panel panel-incidents" id="incidentsPanel">
+        <div class="panel-header flex-header">
+          <div class="header-left-side">
+            <h2>事件</h2>
+            <span class="badge" id="incidentListBadge">-</span>
+          </div>
+          <fieldset class="us-segmented us-segmented-sm ev-mode" id="incidentResolvedMode" aria-label="已恢复事件的排列方式" hidden>
+            <button type="button" id="incidentModeType" data-ev-mode="type" aria-pressed="true">按类型</button>
+            <button type="button" id="incidentModeEach" data-ev-mode="each" aria-pressed="false">逐条</button>
+          </fieldset>
+          <select id="incidentStateFilter" class="styled-select" aria-label="筛选事件状态">
+            <option value="open" selected>未解决</option>
+            <option value="resolved">已恢复</option>
+          </select>
+        </div>
+        <div class="ev-agg" id="incidentSummary" hidden></div>
+        <div class="incident-list" id="incidentList">
+          <p class="incidents-empty" data-skeleton-wait>正在加载事件…</p>
+        </div>
+      </article>
+      <!-- 实时日志流:底部通栏横条（T06 归入「事件」视图，作为原始证据源） -->
+      <article class="panel panel-logstream" id="logStreamPanel">
+        <div class="panel-header">
+          <h2><span class="ls-live" aria-hidden="true"></span>实时日志流</h2>
+          <span class="badge" id="lastUpdateBadge">最近检查</span>
+        </div>
+        <!-- 还没有日志行时由 render/log-stream.js 放「等待第一条日志」空状态，第一行到达即替换 -->
+        <div class="log-stream" id="logStream"></div>
+      </article>
+      </section>
+
+      <!-- Agent 用量（render/usage-view.js + app/usage-controller.js；数据 /api/usage/*）。
+           数据来自团队服务器上的会话日志增量扫描，口径见「统计口径」浮层。 -->
+      <section id="view-usage" class="view us-view" role="tabpanel" aria-label="用量视图" hidden>
+        <!-- 数据源条只在有服务器同步失败时出现（render/usage-view.js renderSource）；平时的同步时刻写在「立即同步」的悬停提示里 -->
+        <div class="us-source" id="usageSourceBar" hidden>
+          <p class="us-source-items" id="usageSource"></p>
+        </div>
+        <div class="us-toolbar">
+          <div class="us-heading"><span class="us-caption" id="usageRangeCaption">—</span></div>
+          <div class="us-controls">
+            <fieldset class="us-segmented" aria-label="统计日期"><button type="button" data-usage-range="1" aria-pressed="true">今天</button><button type="button" data-usage-range="7" aria-pressed="false">近 7 天</button><button type="button" data-usage-range="30" aria-pressed="false">近 30 天</button></fieldset>
+            <select id="usageAgentFilter" class="styled-select" aria-label="筛选 Agent"><option value="all">全部 Agent</option><option value="codex">Codex</option><option value="claude">Claude</option></select>
+            <select id="usageProjectFilter" class="styled-select" aria-label="筛选项目"><option value="all">全部项目</option></select>
+            <button type="button" class="btn btn-secondary us-export" id="usageExportBtn">导出 CSV</button>
+            <button type="button" class="text-btn" id="usageSyncBtn">立即同步</button>
+            <button type="button" class="text-btn" data-dialog-usage="dlgUsageMethod">统计口径</button>
+          </div>
+        </div>
+        <div class="us-filter" id="usageFilterBar" hidden><span id="usageFilterText"></span><button type="button" class="text-btn" id="usageClearFilter">清除 ×</button></div>
+        <!-- 页面级空状态（没有团队服务器 / 首次扫描中 / 取不到 / 模块关闭），render/usage-view.js 写入 -->
+        <div class="us-empty-state" id="usageEmptyState" hidden></div>
+        <!-- 星图总览（render/usage-observatory.js）：星空版 / 纸面版显示，代替下面的四张指标卡；简洁版隐藏 -->
+        <div id="usageGalaxyStage" class="gx-observatory-stage"></div>
+
+        <div class="us-metrics">
+          <article class="us-metric"><div class="us-metric-label">Token 总量 <span>含缓存读取</span></div><div class="us-figure"><span id="usageTotal">—</span><span class="us-unit" id="usageTotalUnit"></span></div><div class="us-metric-desc" id="usageTotalDesc"></div></article>
+          <article class="us-metric"><div class="us-metric-label">未命中输入 <span>普通输入 + 缓存写入</span></div><div class="us-figure"><span id="usageFresh">—</span><span class="us-unit" id="usageFreshUnit"></span><span class="us-delta" id="usageFreshDelta"></span></div><div class="us-metric-desc" id="usageFreshDesc"></div></article>
+          <article class="us-metric"><div class="us-metric-label">模型调用</div><div class="us-figure"><span id="usageCalls">—</span><span class="us-unit">次</span><span class="us-rate" id="usageCallsRate"></span></div><div class="us-metric-desc" id="usageCallsDesc"></div></article>
+          <article class="us-metric"><div class="us-metric-label">会话</div><div class="us-figure"><span id="usageSessions">—</span><span class="us-unit" id="usageSessionsUnit"></span></div><div class="us-metric-desc" id="usageSessionsDesc"></div></article>
+        </div>
+
+        <div class="us-analytics">
+          <article class="panel us-trend">
+            <div class="panel-header flex-header"><div class="header-left-side"><h2>Token 用量趋势</h2><span class="panel-hint" id="usageTrendScope">按小时</span></div><div class="us-trend-tools"><fieldset class="us-segmented us-segmented-sm" id="usageTrendMode" aria-label="趋势图排布"><button type="button" data-usage-trend="merged" aria-pressed="true" title="两个 Agent 画在同一张图里">合并</button><button type="button" data-usage-trend="split" aria-pressed="false" title="每个 Agent 一张小图，各用各的刻度">分开</button></fieldset><div class="us-legend" id="usageTrendLegend"></div></div></div>
+            <div class="us-chart-body" id="usageChartBody"><div class="us-chart" id="usageTrendChart"></div><div class="us-split" id="usageTrendSplit" hidden><div class="us-split-rows" id="usageTrendSplitRows"></div></div><div class="us-tooltip" id="usageTooltip" hidden></div></div>
+            <div class="us-trend-foot"><span id="usagePeak">—</span><span>含缓存读取 · 失败调用不计 Token</span></div>
+          </article>
+          <article class="panel us-calendar">
+            <div class="panel-header flex-header"><div class="header-left-side"><h2>请求日历</h2><span class="panel-hint">点击日期联动</span></div><select class="us-calendar-select" id="usageCalendarPeriod" aria-label="日历范围"><option value="rolling">近 30 天</option></select></div>
+            <div class="us-calendar-body">
+              <div class="us-calendar-top"><span id="usageCalendarCaption">—</span><select class="us-calendar-select" id="usageCalendarMetric" aria-label="日历热度指标"><option value="calls">按调用次数</option><option value="tokens">按 Token 用量</option></select></div>
+              <div class="us-weekdays" aria-hidden="true"><span>一</span><span>二</span><span>三</span><span>四</span><span>五</span><span>六</span><span>日</span></div>
+              <div class="us-days" id="usageCalendarDays"></div>
+              <div class="us-calendar-legend"><span>少</span><i data-heat="0"></i><i data-heat="1"></i><i data-heat="2"></i><i data-heat="3"></i><i data-heat="4"></i><span>多</span><span class="us-calendar-key"><i class="us-key-uncollected"></i>未采集 · 虚线为未来</span></div>
+            </div>
+            <div class="us-calendar-selection" id="usageCalendarSelection"></div>
+          </article>
+        </div>
+
+        <article class="panel us-insights" id="usageInsights" aria-label="成本归因与同期对比"></article>
+        <article class="panel us-projects">
+          <div class="panel-header flex-header"><div class="header-left-side"><h2>按项目</h2><span class="panel-hint">会话日志的工作目录 · 点击筛选</span></div></div>
+          <div class="us-project-strip" id="usageProjects"></div>
+        </article>
+
+        <article class="panel us-sessions" id="usageSessionsPanel">
+          <div class="panel-header flex-header">
+            <div class="header-left-side"><h2 id="usageSessionsTitle">会话</h2><span class="us-live" id="usageLive"></span></div>
+            <button type="button" class="btn btn-secondary us-follow" id="usageFollowBtn" aria-pressed="true">停止跟随</button>
+          </div>
+          <div class="us-session-toolbar">
+            <label class="us-search"><input id="usageSearch" type="search" placeholder="搜索项目、会话 ID 或模型" aria-label="搜索会话" /></label>
+            <fieldset class="us-segmented us-segmented-sm" aria-label="会话筛选"><button type="button" data-usage-filter="all" aria-pressed="true">全部</button><button type="button" data-usage-filter="recent" aria-pressed="false">近期活跃</button><button type="button" data-usage-filter="error" aria-pressed="false">有失败</button></fieldset>
+            <span class="us-count" id="usageSessionCount">— 个</span>
+          </div>
+          <div class="us-session-scroll" id="usageSessionScroll">
+            <table class="us-table">
+              <thead><tr><th scope="col" aria-sort="descending"><button type="button" class="us-sort" data-usage-sort="recent">最近活动</button></th><th scope="col">项目</th><th scope="col" class="us-col-agent">Agent · 模型</th><th scope="col" class="us-num us-col-calls">调用</th><th scope="col" class="us-num" aria-sort="none"><button type="button" class="us-sort" data-usage-sort="tokens">Token</button></th><th scope="col" class="us-num us-col-fresh">未命中输入</th><th scope="col" class="us-col-context" aria-sort="none"><button type="button" class="us-sort" data-usage-sort="context">上下文</button></th><th scope="col" aria-sort="none"><button type="button" class="us-sort" data-usage-sort="errors">状态 · 失败</button></th><th scope="col"><span class="sr-only">详情</span></th></tr></thead>
+              <tbody id="usageSessionRows"></tbody>
+            </table>
+            <!-- 会话表空状态（render/usage-view.js usageSessionEmptyState；「清除会话筛选」按钮沿用 #usageResetSessions） -->
+            <div class="us-table-empty" id="usageSessionEmpty" hidden></div>
+            <div class="us-more" id="usageMore" hidden><button type="button" class="text-btn" id="usageMoreBtn">显示更多</button></div>
+          </div>
+          <div class="us-held" id="usageHeld" hidden><button type="button" id="usageHeldBtn"><span id="usageHeldText">有更新</span> · 回到最新 ↑</button></div>
+          <div class="us-foot"><span id="usageSessionFoot">—</span><span>行内为整个会话的累计 · 点表头排序 · 点失败计数直达失败调用 ›</span></div>
+        </article>
+      </section>
+
+      <!-- 存储管理（仅管理员，侧栏一页；app/storage-admin-controller.js，数据 /api/storage-admin*）：以 root 经专用受限密钥只读查看
+           各机器磁盘容量、按用户占用（repquota、读 inode 表或整盘扫描的属主合计），并可在服务器后台整树扫描某个目录后
+           逐层浏览（矩形树图 + 排序列表，render/storage-admin-viz.js）。服务器页的磁盘卡片里有入口。非管理员整页隐藏，后端同样 403。 -->
+      <section id="view-storage" class="view" role="tabpanel" aria-label="存储管理视图" hidden>
+      <article class="panel panel-storage-admin" id="storageAdminPanel" aria-label="存储管理">
+        <div class="panel-header flex-header">
+          <div class="header-left-side">
+            <h2>存储管理</h2>
+            <span class="badge">管理员 · root 只读</span>
+          </div>
+          <button type="button" class="btn btn-secondary sa-reload" id="storageAdminReload" title="重读本机保存的结果（不连服务器）。连服务器请点各机器的「刷新」">重读</button>
+        </div>
+        <div class="sa-body" id="storageAdminBody" aria-live="polite"></div>
+      </article>
+      <!-- 目录浏览（扫描结果逐层 / 即时列目录）：打开时显示 -->
+      <article class="panel panel-storage-admin sa-browser-panel" id="storageAdminBrowserPanel" aria-label="目录浏览" hidden>
+        <div class="sa-browser" id="storageAdminBrowser"></div>
+      </article>
+      <div class="sa-tip" id="storageAdminTip" role="tooltip" hidden></div>
+      </section>
+
+      <!-- 团队管理（仅管理员可见；app/team-admin-controller.js，数据 /api/team/*）。
+           顶部团队星图（render/team-galaxy*.js）：恒星=集群，行星=成员，轨道由内到外=隧道在线 / 仅 SSH / 离线，
+           大小=今日用量，卫星=GPU 卡；连线=隧道链路 / 同节点算力 / 同一份配置。下方成员名单（render/team-admin-view.js）
+           按轨道分组，列表 / 卡片由使用者切换（记在本机），点开原地展开详情。 -->
+      <section id="view-team" class="view" role="tabpanel" aria-label="团队管理视图" hidden>
+        <div class="tm-panel" id="teamAdminPanel">
+          <div class="tm-head">
+            <div class="tm-head-meta">
+              <span class="panel-hint" id="teamAdminUpdatedBadge">未检查</span>
+            </div>
+            <div class="tm-head-actions">
+              <button type="button" class="text-btn" id="teamAdminNoticeBtn" title="向全员广播团队置顶公告（如节点维护、中转站切换通知）">发布公告</button>
+              <button type="button" class="text-btn" id="teamAdminRootGuideBtn" title="使用集群 root 账号给管理员账号赋权，解锁强踢僵尸端口与未装客户端成员兜底采集">配置 Root 赋权</button>
+              <button type="button" class="text-btn" id="teamAdminSyncBtn" title="立即执行一次心跳上报、加密信封同步与全员探测">立即同步</button>
+              <button type="button" class="btn btn-secondary" id="teamAdminBatchReleasePortsBtn" hidden title="一键回收所有已登记但当前未建立 SSH 反向隧道监听的闲置端口，释放端口池占用">回收闲置端口</button>
+              <button type="button" class="btn btn-secondary" id="teamAdminBatchOnboardBtn" hidden title="将集群上所有已自动发现、尚未入名册的账号一键纳入团队名册并自动分配不冲突的专属端口（离线成员也会预分配，便于其上线即用）">一键纳管自动发现</button>
+              <button type="button" class="btn btn-secondary" id="teamAdminBatchAssignBtn" title="自由勾选多位团队成员，一次性批量加密下发 AI 配置">批量下发配置</button>
+              <button type="button" class="btn btn-secondary" id="teamAdminRefreshBtn">刷新全员状态</button>
+              <button type="button" class="btn btn-primary" id="teamAdminAddMemberBtn">+ 添加 / 预分配成员</button>
+            </div>
+          </div>
+
+          <div id="teamAdminBanner" hidden></div>
+
+          <section class="tm-sky" id="teamSky" aria-label="团队星图">
+            <canvas class="tm-sky-layer tm-sky-backdrop" width="0" height="0" aria-hidden="true"></canvas>
+            <canvas class="tm-sky-layer tm-sky-links" width="0" height="0" aria-hidden="true"></canvas>
+            <svg class="tm-sky-layer tm-sky-svg" role="img" aria-label="成员与集群的连接关系：成员明细见下方名单"></svg>
+            <div class="tm-sky-hud">
+              <div class="tm-sky-title">团队星图</div>
+              <div class="tm-sky-sub" id="teamSkySub"></div>
+            </div>
+            <div class="tm-sky-legend">
+              <fieldset class="tm-lg-chips" aria-label="连线图层">
+                <button type="button" class="tm-lg-chip" data-tm-layer="tunnel" aria-pressed="true"><svg class="tm-lg-swatch" viewBox="0 0 18 6" aria-hidden="true"><line x1="0" y1="3" x2="18" y2="3" class="is-tunnel"/><circle cx="12" cy="3" r="1.4"/></svg>隧道链路<span class="tm-lg-n" data-tm-layer-count="tunnel"></span></button>
+                <button type="button" class="tm-lg-chip" data-tm-layer="node" aria-pressed="true"><svg class="tm-lg-swatch" viewBox="0 0 18 6" aria-hidden="true"><line x1="0" y1="3" x2="18" y2="3" class="is-node"/></svg>同节点算力<span class="tm-lg-n" data-tm-layer-count="node"></span></button>
+                <button type="button" class="tm-lg-chip" data-tm-layer="config" aria-pressed="true"><svg class="tm-lg-swatch" viewBox="0 0 18 6" aria-hidden="true"><line x1="1" y1="3" x2="18" y2="3" class="is-config"/></svg>同一份配置<span class="tm-lg-n" data-tm-layer-count="config"></span></button>
+                <button type="button" class="tm-lg-chip" data-tm-toggle-motion aria-pressed="false" title="暂停或恢复星图公转与背景闪烁动效">⏸ 暂停星轨</button>
+              </fieldset>
+              <div class="tm-lg-key">行星大小 = 今日 AI 用量 · 卫星 = 占用 GPU 卡<br />轨道由内到外：隧道在线 · 仅 SSH · 离线</div>
+            </div>
+            <div class="tm-sky-tip" role="tooltip"></div>
+            <div class="tm-sky-readout" id="teamAdminKpis"><div class="tm-ro"><div class="tm-ro-label">团队成员</div><div class="tm-ro-value">—</div><div class="tm-ro-sub">&nbsp;</div></div><div class="tm-ro"><div class="tm-ro-label">实时在线</div><div class="tm-ro-value">—</div><div class="tm-ro-sub">&nbsp;</div></div><div class="tm-ro"><div class="tm-ro-label">今日 AI 用量</div><div class="tm-ro-value">—</div><div class="tm-ro-sub">&nbsp;</div></div><div class="tm-ro"><div class="tm-ro-label">集群算力占用</div><div class="tm-ro-value">—</div><div class="tm-ro-sub">&nbsp;</div></div><div class="tm-ro"><div class="tm-ro-label">配置托管</div><div class="tm-ro-value">—</div><div class="tm-ro-sub">&nbsp;</div></div></div>
+          </section>
+
+          <div class="tm-toolbar">
+            <div class="tm-toolbar-left">
+              <label class="tm-search-wrap"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="m16 16 4 4"/></svg><input id="teamAdminSearchInput" class="tm-search-input" type="search" placeholder="搜索账号、姓名、端口、节点或模型" aria-label="搜索团队成员" /></label>
+              <fieldset class="tm-filter-pills" id="teamAdminFilterPills" aria-label="筛选成员状态">
+                <button type="button" class="tm-filter-pill is-active" data-tm-filter="all" aria-pressed="true">全部<span class="tm-filter-n"></span></button>
+                <button type="button" class="tm-filter-pill" data-tm-filter="online" aria-pressed="false">在线<span class="tm-filter-n"></span></button>
+                <button type="button" class="tm-filter-pill" data-tm-filter="offline" aria-pressed="false">离线<span class="tm-filter-n"></span></button>
+                <button type="button" class="tm-filter-pill" data-tm-filter="roster" aria-pressed="false">名册内<span class="tm-filter-n"></span></button>
+                <button type="button" class="tm-filter-pill" data-tm-filter="attention" aria-pressed="false">需关注<span class="tm-filter-n"></span></button>
+              </fieldset>
+            </div>
+            <div class="tm-toolbar-right">
+              <span class="tm-count" id="teamAdminCount"></span>
+              <select id="teamAdminSortSelect" class="styled-select tm-sort-select" aria-label="成员排序方式（只改变每组内顺序）" aria-describedby="teamAdminSortHelp">
+                <option value="default">排序：默认</option>
+                <option value="errors">排序：今日失败</option>
+                <option value="tokens">排序：今日用量</option>
+                <option value="week">排序：7 天用量</option>
+                <option value="gpu">排序：GPU 占用</option>
+                <option value="storage">排序：家目录大小</option>
+                <option value="name">排序：账号名称</option>
+              </select>
+              <span class="tm-sr-only" id="teamAdminSortHelp">按所选字段在每个轨道分组内重新排序（默认顺序：我、今日用量降序），不会改变成员的分组或筛选结果。</span>
+              <button type="button" class="btn btn-secondary tm-export-btn" id="teamAdminExportBtn" title="导出团队成员状态、AI 用量与算力占用 CSV 报表">导出 CSV</button>
+              <fieldset class="tm-filter-pills tm-layout-toggle" id="teamAdminLayoutToggle" aria-label="名单排布">
+                <button type="button" class="tm-filter-pill" data-tm-layout="list" aria-pressed="true"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg>列表</button>
+                <button type="button" class="tm-filter-pill" data-tm-layout="cards" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="7" height="7" rx="1.5"/><rect x="13" y="4" width="7" height="7" rx="1.5"/><rect x="4" y="13" width="7" height="7" rx="1.5"/><rect x="13" y="13" width="7" height="7" rx="1.5"/></svg>卡片</button>
+              </fieldset>
+            </div>
+          </div>
+
+          <div class="tm-list" id="teamAdminList">
+            <div class="tm-empty">正在读取团队成员状态…</div>
+          </div>
+          <p class="tm-foot-hint">密钥采用本机 X25519 + AES-256-GCM 端到端加密信封投递，集群共享目录不落明文</p>
+        </div>
+        <!-- 名单行尾「···」菜单（position: fixed；窄窗时「下发 / 编辑」也收在这里） -->
+        <div class="tm-row-menu" id="teamRowMenu" role="menu" aria-label="成员操作" hidden></div>
+      </section>
+
+    </main>
+
+
+<dialog id="dlgSettings" class="hud-dialog settings-dialog" aria-labelledby="settingsTitle">
+  <header class="dialog-header"><h2 id="settingsTitle">配置</h2><button type="button" class="dialog-close" data-close aria-label="关闭配置">✕</button></header>
+  <div class="dialog-body settings-options">
+    <p class="settings-intro">按需调整个人偏好，配置资料集中在这里。</p>
+    <!-- 不常用的入口（原先在页头）：外观三档由 app.js 接到 theme.js，切换视觉版本时播放过场（render/skin-transition.js）；[data-dialog] 由 dialogs.js 统一委托 -->
+    <div class="settings-rows">
+      <div class="settings-row">
+        <div class="settings-row-text"><strong>视觉版本</strong><small>在经典简洁版、深空星空版与古籍宣纸天台版之间自由切换</small></div>
+        <fieldset class="us-segmented" id="settingsSkinSegmented" aria-label="视觉版本">
+          <button type="button" data-skin-mode="classic" aria-pressed="true">⚡ 简洁版</button>
+          <button type="button" data-skin-mode="starry" aria-pressed="false">🌌 星空版</button>
+          <button type="button" data-skin-mode="paper" aria-pressed="false">☀️ 纸面天台版</button>
+        </fieldset>
+      </div>
+      <div class="settings-row">
+        <div class="settings-row-text"><strong>外观</strong><small>浅色、深色，或跟随系统</small></div>
+        <fieldset class="us-segmented" id="themeSegmented" aria-label="外观">
+          <button type="button" data-theme-pref="light" aria-pressed="false">浅色</button>
+          <button type="button" data-theme-pref="system" aria-pressed="false">跟随系统</button>
+          <button type="button" data-theme-pref="dark" aria-pressed="false">深色</button>
+        </fieldset>
+      </div>
+      <div class="settings-row">
+        <div class="settings-row-text"><strong>接入引导</strong><small>填集群用户名和密码，自动完成密钥、专属端口、隧道与集群上的代理配置；换了电脑或账号时重新走一遍</small></div>
+        <button type="button" class="btn btn-secondary" data-onboarding-open>打开接入引导</button>
+      </div>
+      <!-- v2.62 接入管理（app/settings-access.js）：接在「接入引导」这一行下面——这个账号在集群上登记的端口，与「撤销接入」。
+           打开配置时读 /api/onboarding/access；没接入过时整块不显示。预览、确认与逐步结果都在这一块里就地展开。 -->
+      <div class="settings-access" id="settingsAccess" hidden></div>
+      <div class="settings-row">
+        <div class="settings-row-text"><strong>离线安装 Agent</strong><small>把 ReClaude 离线包装到集群，7 步、按需逐步执行</small></div>
+        <button type="button" class="btn btn-secondary" data-dialog="dlgBootstrap">打开安装向导</button>
+      </div>
+    </div>
+    <details class="config-option" open><summary><span>服务器管理<small>添加、测试、禁用或删除个人服务器</small></span></summary>
+        <div class="server-registry" id="serverRegistry">
+          <div id="serverRegistryList" class="server-registry-list"></div>
+          <form id="serverRegistryForm" class="server-registry-form">
+            <label>名称<input name="name" autocomplete="off" placeholder="腾讯云"></label>
+            <label>地址<input name="address" required autocomplete="off" placeholder="10.0.0.8 或 hostname"></label>
+            <label>SSH 端口<input name="sshPort" type="number" min="1" max="65535" value="22"></label>
+            <label>用户名<input name="sshUser" required autocomplete="username" placeholder="ubuntu"></label>
+            <label>反向端口（建隧道时填写）<input name="remotePort" type="number" min="1" max="65535" disabled></label>
+            <label>SSH 密码（可选）<input name="password" type="password" autocomplete="new-password" placeholder="留空则使用 ssh-agent / 私钥"></label>
+            <label class="server-registry-check"><input type="checkbox" name="monitor" checked>监控</label>
+            <label class="server-registry-check"><input type="checkbox" name="tunnel">建隧道</label>
+            <button type="submit" class="btn btn-primary" id="serverRegistrySaveBtn">保存服务器</button>
+            <button type="button" class="text-btn" id="serverRegistryCancelBtn" hidden>取消编辑</button>
+          </form>
+          <p id="serverRegistryHint" class="server-action-note">默认只监控。填写地址、SSH 端口和用户名后，核对主机密钥并测试连接；配置保存后自动重新加载。</p>
+          <div id="localResourceBox" class="local-resource-box" aria-live="polite">本机资源将在打开配置时采样。</div>
+        </div>
+        <details class="config-advanced"><summary>高级：个人配置 JSON</summary><div class="settings-editor">
+          <label for="personalConfigEditor">个人配置 JSON</label>
+          <textarea id="personalConfigEditor" spellcheck="false" aria-label="个人配置 JSON"></textarea>
+          <div class="settings-editor-actions"><button type="button" class="btn btn-primary" id="savePersonalConfigBtn">保存配置</button><button type="button" class="text-btn" id="reloadPersonalConfigBtn">重新加载配置</button><span id="configSaveHint">服务器条目会重新加载；全局代理等启动配置需重启通道后应用。</span></div>
+        </div></details>
+      </details>
+    <!-- v2.54 出网（app/settings-egress.js）：本机代理连外网的方式、连通测试、个人端口白名单。
+         打开配置时读 /api/egress；方式与白名单逐项即时写入个人层，本机代理约 2 秒内热载，不重启连接。 -->
+    <details class="config-option" id="settingsEgress"><summary><span>出网<small>本机代理怎么连外网、连通测试与端口白名单</small></span></summary>
+      <div class="settings-egress">
+        <div class="eg-row">
+          <div class="eg-row-text"><strong class="eg-title">出网方式</strong><small class="eg-hint" id="egressModeHint">打开后读取出网设置…</small></div>
+          <fieldset class="us-segmented" id="egressModes" aria-label="出网方式">
+            <button type="button" data-egress-mode="direct" aria-pressed="false">直连</button>
+            <button type="button" data-egress-mode="system" aria-pressed="false">系统代理</button>
+            <button type="button" data-egress-mode="manual" aria-pressed="false">手动</button>
+          </fieldset>
+        </div>
+        <form class="eg-inline-form" id="egressManualForm" hidden>
+          <input id="egressManualUrl" name="url" autocomplete="off" spellcheck="false" placeholder="http://127.0.0.1:7890" aria-label="上游代理地址">
+          <button type="submit" class="btn btn-secondary">使用这个地址</button>
+        </form>
+        <dl class="eg-facts" id="egressFacts" aria-live="polite"></dl>
+        <div class="eg-test">
+          <div class="eg-actions">
+            <button type="button" class="btn btn-secondary" id="egressTestBtn">测试本机出网</button>
+            <button type="button" class="text-btn" id="egressFullTestBtn" title="再经 SSH 在集群上 curl -x 自己的反向端口，看整条链路">测试集群全链路</button>
+          </div>
+          <div class="eg-test-result" id="egressTestResult" aria-live="polite"></div>
+        </div>
+        <div class="eg-allow">
+          <div class="eg-row-text"><strong class="eg-title">端口白名单</strong><small class="eg-hint">公网 443 默认放行；中转站用其他端口时在这里添加，几秒内生效</small></div>
+          <ul class="eg-list" id="egressAllowList"></ul>
+          <form class="eg-inline-form" id="egressAllowForm">
+            <input id="egressAllowInput" name="entry" autocomplete="off" spellcheck="false" placeholder="主机名:端口，或中转站地址 https://…:9443" aria-label="添加白名单条目">
+            <button type="submit" class="btn btn-secondary">添加</button>
+          </form>
+        </div>
+        <!-- v2.62 代理口令（app/settings-proxy-auth.js）：集群上的反向端口谁都连得上，这里决定连上来的请求要不要带口令。
+             数据随上面同一次 /api/egress 读回；服务端没有这项能力时整块不显示。界面与接口里都没有口令本身。 -->
+        <div class="eg-auth" id="egressAuth" hidden>
+          <div class="eg-row">
+            <div class="eg-row-text"><strong class="eg-title">代理口令</strong><small class="eg-hint" id="egressAuthHint"></small></div>
+            <fieldset class="us-segmented" id="egressAuthModes" aria-label="代理口令">
+              <button type="button" data-auth-mode="off" aria-pressed="false">关</button>
+              <button type="button" data-auth-mode="observe" aria-pressed="false">只记录</button>
+              <button type="button" data-auth-mode="enforce" aria-pressed="false">强制</button>
+            </fieldset>
+          </div>
+          <dl class="eg-facts" id="egressAuthFacts" aria-live="polite"></dl>
+          <div class="eg-actions" id="egressAuthActions" hidden>
+            <button type="button" class="btn btn-secondary" id="egressAuthSyncBtn">把口令写到集群…</button>
+            <button type="button" class="text-btn" id="egressAuthRotateBtn">换口令…</button>
+            <button type="button" class="text-btn" id="egressAuthRetireBtn" hidden>停用旧口令</button>
+          </div>
+          <div id="egressAuthPanel" aria-live="polite" hidden></div>
+          <div class="eg-usage" id="egressUsage" hidden></div>
+        </div>
+      </div>
+    </details>
+    <!-- v2.57 命令行工具（app/settings-cli.js）：集群上 Codex / Claude Code 的安装、更新与回滚。
+         打开配置时读 /api/cli；动作先行内确认，安装在后台进行，浮层开着时轮询 /api/cli/jobs/:jobId 显示进度。 -->
+    <details class="config-option" id="settingsCli"><summary><span>命令行工具<small>集群上 Codex / Claude Code 的安装、更新与回滚</small></span></summary>
+      <div class="settings-cli" id="settingsCliBody"><p class="incidents-empty">打开后读取集群上的安装状态…</p></div>
+    </details>
+    <!-- v2.47 可拔插模块（app/settings-modules.js）：打开配置时读 /api/modules；开关与面板勾选逐项即时保存到个人层。 -->
+    <details class="config-option" id="settingsModules"><summary><span>监控模块<small>关闭不需要的监控，停止对应的远端检查</small></span></summary>
+      <div class="settings-modules" id="settingsModulesBody"><p class="incidents-empty">打开后读取模块列表…</p></div>
+    </details>
+    <details class="config-option" id="settingsPanels"><summary><span>界面面板<small>隐藏不常看的面板或整页，偏好存在本机个人配置里</small></span></summary>
+      <div class="settings-panels" id="settingsPanelsBody"></div>
+    </details>
+    <!-- v2.62 启动（app/settings-autostart.js）：登录电脑后自动启动。打开配置时读 /api/autostart；
+         打包的 App 的登录项在桌面壳里（electronAPI）。这里是骨架，说明文字、提醒与开关状态由脚本填。 -->
+    <details class="config-option" id="settingsAutostart"><summary><span>启动<small>登录电脑后自动启动，不用每天点图标</small></span></summary>
+      <div class="settings-autostart">
+        <div class="mod-list">
+          <label class="mod-item">
+            <span class="mod-text">
+              <span class="mod-label">登录电脑后自动启动</span>
+              <span class="mod-desc" id="autostartText">打开后读取启动设置…</span>
+              <span class="mod-desc" id="autostartNote" hidden></span>
+              <span class="mod-warn" id="autostartWarn" hidden></span>
+            </span>
+            <!-- biome-ignore lint/a11y/useAriaPropsForRole: 原生复选框自带勾选状态，不另写 aria-checked（与「监控模块」的开关同一种写法） -->
+            <input type="checkbox" role="switch" class="mod-switch" id="autostartSwitch" aria-label="登录电脑后自动启动" disabled>
+          </label>
+        </div>
+        <code class="as-command" id="autostartCommand" hidden></code>
+      </div>
+    </details>
+    <!-- v2.64 备份与迁移（app/settings-backup.js）：导出个人配置与本机偏好（不含令牌 / 口令 / 私钥）；导入时先就地列出
+         将改动的条目（端口相关的单独一组、默认不勾），确认后才写，写前自动备份。骨架在这里，说明、预览与结果由脚本填。 -->
+    <details class="config-option" id="settingsBackup"><summary><span>备份与迁移<small>导出配置，换电脑时导入；改动先列出来再确认</small></span></summary>
+      <div class="settings-backup">
+        <div class="eg-row">
+          <div class="eg-row-text"><strong class="eg-title">导出配置</strong><small class="eg-hint">存成一个 JSON 文件，不含任何令牌、口令与密钥</small></div>
+          <button type="button" class="btn btn-secondary" id="backupExportBtn">导出…</button>
+        </div>
+        <div class="eg-row">
+          <div class="eg-row-text"><strong class="eg-title">导入配置</strong><small class="eg-hint">选一份导出文件，先看要改哪些地方，确认了才写</small></div>
+          <button type="button" class="btn btn-secondary" id="backupImportBtn">选择文件…</button>
+          <input type="file" id="backupImportFile" accept=".json,application/json" hidden>
+        </div>
+        <div class="bk-panel" id="backupImportPanel" aria-live="polite" hidden></div>
+        <p class="bk-ssh" id="backupSshNote"></p>
+        <div class="bk-info" id="backupInfo"><p class="eg-note">打开后读取…</p></div>
+      </div>
+    </details>
+    <details class="config-option"><summary><span>配置来源<small>查看团队与个人配置的合并信息</small></span></summary><div class="settings-config-body" id="settingsConfigBody"></div></details>
+    <details class="config-option"><summary><span>版本与更新<small>查看运行版本和更新记录</small></span></summary><article class="panel panel-settings-version">
+        <div class="panel-header flex-header">
+          <div class="header-left-side">
+            <h2>版本与更新</h2>
+            <span class="badge" id="settingsVersionState">-</span>
+          </div>
+          <div class="settings-version-actions">
+            <button type="button" class="text-btn" id="diagExportOpenBtn" aria-expanded="false" aria-controls="diagExportPanel">导出诊断包…</button>
+            <button type="button" class="text-btn" id="openChangelogBtn">查看更新日志</button>
+          </div>
+        </div>
+        <!-- v2.64 导出诊断包（app/diagnostics-export.js）：点面板头的「导出诊断包…」就地展开，先列出包含什么、哪些会隐藏，
+             确认后取 /api/diagnostics/bundle（已脱敏），桌面壳走保存对话框、网页模式由浏览器下载。内容由脚本填。 -->
+        <div class="diag-export" id="diagExportPanel" hidden></div>
+        <div class="settings-version-body" id="settingsVersionBody">
+          <p class="incidents-empty">正在读取版本信息…</p>
+        </div>
+      </article></details>
+    <details class="config-option"><summary><span>本地存储<small>查看用量与清理历史数据</small></span></summary><article class="panel panel-settings-storage">
+        <div class="panel-header">
+          <h2>本地数据预算</h2>
+        </div>
+        <div class="load-content">
+              <div class="load-item">
+                <div class="load-meta">
+                  <span class="load-title">本地数据</span>
+                  <span class="load-value" id="storageVal">-</span>
+                </div>
+                <div class="bar-container">
+                  <div class="bar-progress storage-bar" id="storageBar" style="width: 100%; transform: scaleX(0)"></div>
+                </div>
+                <button type="button" id="storagePruneBtn" class="text-btn storage-prune-btn"
+                  title="立即清理运维数据到预算的一半（日志分卷 / 历史文件 / 指标采样）">清理到预算一半</button>
+              </div>
+        </div>
+      </article></details>
+  </div>
+</dialog>
+
+    <!-- 诊断浮层组 -->
+<dialog id="dlgControl" class="hud-dialog" aria-labelledby="controlTitle">
+  <header class="dialog-header">
+    <h2 id="controlTitle">通道控制</h2>
+    <button type="button" class="dialog-close" data-close aria-label="关闭通道控制">✕</button>
+  </header>
+  <div class="dialog-body">
+    <div class="controls-wrapper">
+              <div class="btn-group">
+                <!-- T04a：全局动作的范围文案统一——所有入口都明确"作用于所有连接"。
+                     启动按钮的形态随状态变（app/actions.js startButtonView）：所有连接都在运行时显示「已在运行」并禁用。 -->
+                <button type="button" id="startBtn" class="btn btn-primary" title="启动守护进程、本地代理与全部服务器的 SSH 隧道（所有连接）">启动所有连接</button>
+                <button type="button" id="restartBtn" class="btn btn-warning" title="先弹预览：重启守护进程、本地代理与全部服务器隧道（所有连接都会短暂中断）">重启所有连接</button>
+                <button type="button" id="stopBtn" class="btn btn-danger" title="停止守护进程、本地代理与全部服务器的 SSH 隧道（所有连接）">停止所有连接</button>
+              </div>
+              <div id="desktopControls" class="desktop-controls-group" style="display: none;">
+                <button type="button" id="desktopHideBtn" class="btn btn-secondary btn-half">隐藏窗口</button>
+                <button type="button" id="desktopQuitBtn" class="btn btn-half" title="关闭控制台并停止守护进程、本地代理与全部 SSH 隧道（会先确认）">退出并停止后台</button>
+              </div>
+              <div class="control-extra" style="gap: 8px;">
+                <button type="button" id="refreshBtn" class="btn btn-secondary">立即刷新</button>
+                <div class="refresh-setting">
+                  <label for="refreshSelect">轮询:</label>
+                  <select id="refreshSelect" class="styled-select">
+                    <option value="5000">5 秒</option>
+                    <option value="10000" selected>10 秒</option>
+                    <option value="30000">30 秒</option>
+                    <option value="0">已暂停</option>
+                  </select>
+                </div>
+              </div>
+              <div class="agent-selector-panel">
+                <div>
+                  <span class="agent-selector-label">详细诊断视角</span>
+                  <p class="agent-selector-copy">决定「端点」「Doctor」两个浮层默认显示哪个 Agent 的详细输出。</p>
+                </div>
+                <select id="agentSelect" class="styled-select agent-select" aria-label="选择详细诊断视角 Agent">
+                  <!-- JS 动态载入 Agent 列表 -->
+                </select>
+              </div>
+        </div>
+  </div>
+</dialog>
+
+    <dialog id="jobNotificationsDialog" class="hud-dialog dialog-wide" aria-labelledby="jobNotificationsTitle">
+      <header class="dialog-header"><h2 id="jobNotificationsTitle">作业提醒</h2><button type="button" class="dialog-close" data-close aria-label="关闭作业提醒">✕</button></header>
+      <div class="dialog-body" id="jobNotificationsBody"></div>
+    </dialog>
+
+    <dialog id="reportDialog" class="hud-dialog dialog-wide" aria-labelledby="reportTitle">
+      <header class="dialog-header"><h2 id="reportTitle">排障报告</h2><button type="button" class="dialog-close" data-close aria-label="关闭排障报告">✕</button></header>
+      <div class="dialog-body">
+        <p class="report-note">整理本机已保存的作业、事件和处置记录。常见凭据与地址会自动隐藏；草稿可直接删改，末尾「现场说明」供补充现场情况（留空则导出时省略），复制与下载都使用当前草稿。</p>
+        <div class="report-toolbar"><label id="reportScriptOption"><input type="checkbox" id="reportIncludeScript" />包含已保存的提交脚本</label><button type="button" class="text-btn" id="reportRefreshBtn">重新生成</button><button type="button" class="text-btn" id="reportHideBtn" disabled>隐藏所选</button><button type="button" class="text-btn" id="reportRestoreBtn" disabled>恢复生成稿</button><span id="reportDirty" class="report-dirty" hidden>已修改</span></div>
+        <textarea id="reportPreview" class="report-preview" aria-label="排障报告草稿（可编辑）" spellcheck="false" readonly></textarea>
+        <div class="report-actions"><span id="reportMeta" class="panel-hint" role="status"></span><button type="button" class="btn btn-secondary" id="reportCopyBtn" disabled>复制报告</button><button type="button" class="btn btn-primary" id="reportDownloadBtn" disabled>下载 Markdown</button></div>
+      </div>
+    </dialog>
+
+    <dialog id="dlgUsageSession" class="hud-dialog dialog-wide us-detail-dialog" aria-labelledby="usageSessionTitle">
+      <header class="dialog-header">
+        <h2 id="usageSessionTitle">会话详情</h2>
+        <span class="panel-hint" id="usageSessionLive"></span>
+        <button type="button" class="dialog-close" data-close aria-label="关闭会话详情">✕</button>
+      </header>
+      <div class="dialog-body" id="usageSessionDetail"></div>
+    </dialog>
+
+    <!-- GPU 逐卡详情（app/gpu-card-controller.js）：点服务器页 GPU 行的卡号打开。
+         只读当前资源层的快照（本机 gpu 段 / 直连节点 cards），不发任何请求。
+         要紧的是「提交方式」一列：作业号取自进程 cgroup，空 = 不经 Slurm 直接在节点上跑。 -->
+    <dialog id="dlgGpuCard" class="hud-dialog dialog-wide gpu-detail-dialog" aria-labelledby="dlgGpuCardTitle">
+      <header class="dialog-header">
+        <h2 id="dlgGpuCardTitle">GPU 详情</h2>
+        <span class="panel-hint">这块卡被谁占着 · 怎么起的</span>
+        <button type="button" class="dialog-close" data-close aria-label="关闭 GPU 详情">✕</button>
+      </header>
+      <div class="dialog-body" id="dlgGpuCardBody"></div>
+    </dialog>
+
+    <dialog id="dlgUsageMethod" class="hud-dialog" aria-labelledby="usageMethodTitle">
+      <header class="dialog-header">
+        <h2 id="usageMethodTitle">用量统计口径与数据来源</h2>
+        <button type="button" class="dialog-close" data-close aria-label="关闭统计口径">✕</button>
+      </header>
+      <div class="dialog-body us-method">
+        <h3>数据从哪来（自动扫描与多工具发现）</h3>
+        <p>本地代理只转发加密流量，看不到模型与 Token，所以用量不从代理采集，而是每分钟经 SSH 只读扫描团队服务器上已安装的 AI 工具与会话日志（按文件偏移 / SQLite 游标增量读取，服务器上不落任何文件），结果保存在本机，保留 90 天。个人服务器不统计。</p>
+        <ul>
+          <li><b>Codex</b>：<code>~/.codex/sessions</code>，逐次调用取 <code>token_usage_record</code>（旧版本按 <code>token_count</code> 累计值差分）。</li>
+          <li><b>Claude / ReClaude</b>：<code>~/.claude/projects</code>（含子 Agent），同一请求的多份记录取用量最大的一份。</li>
+          <li><b>Antigravity (agy)</b>：<code>~/.gemini/antigravity-cli/conversations/*.db</code> 与 <code>~/.gemini/antigravity/conversations/*.db</code>，只读解析 <code>gen_metadata</code> 与 <code>steps</code> 表。</li>
+          <li><b>Gemini CLI</b>：<code>~/.gemini/tmp/*/chats/session-*.jsonl</code>。</li>
+          <li><b>ZCode / OpenCode</b>：<code>~/.zcode/cli/db/db.sqlite</code> 与 <code>~/.local/share/opencode/opencode.db</code>。</li>
+          <li><b>Cursor / 自定义 AI</b>：<code>~/.cursor/projects/*/agent-transcripts</code>，以及自定义 JSONL 目录 <code>~/.config/cluster-workbench/usage-logs</code>（或在服务器配置中指定 <code>customUsageDirs</code>）。</li>
+        </ul>
+        <h3>口径</h3>
+        <ul>
+          <li>四个基础量：<b>普通输入</b>、<b>缓存写入</b>、<b>缓存读取</b>、<b>输出</b>；总 Token = 四者之和。</li>
+          <li><b>未命中输入 = 普通输入 + 缓存写入</b>，即实际新增的输入量，全页同一算法。</li>
+          <li>时间一律按<b>北京时间</b>（UTC+8）：按每次调用的时间归日，跨零点的会话拆到两天。失败调用计入调用次数，不计 Token。</li>
+          <li>失败调用的错误原文：v2.51 起随扫描保存（单行、最多 300 字、远端与本机各脱敏一次，每台服务器总量上限 1 MiB），在会话详情里点「原文」查看；没有状态码的失败按原文归类，认不出的记为「其他」。更早的记录没有原文。</li>
+          <li>「近期活跃」= 最近 5 分钟有新日志；「暂无新记录」= 今天有记录但最近 5 分钟没有。</li>
+          <li>上下文 = 最近一次成功主线调用的输入合计 ÷ 窗口。Codex 与 Antigravity 窗口优先取日志记录，其余按模型名与观测值推断，标「估」。</li>
+          <li>每轮耗时：Codex 取 task_started → task_complete，Claude 取 turn_duration，Antigravity / ZCode / Gemini CLI 取单轮步骤起止时间。</li>
+          <li>日历里最早有数据之前的日期标为「未采集」。远端过期清理的日志历史保留在本机。</li>
+        </ul>
+        <h3>不展示的</h3>
+        <ul><li>首 Token 时间、流式中的实时 Token（日志不记录）、订阅额度（号池均衡分配）。</li></ul>
+      </div>
+    </dialog>
+
+    <!-- v2.57 集群 CLI 登录（app/cli-login-dialog.js）：从 Agent 详情里的「登录」进入。账号授权 / 长期令牌 / API key / 中转站；
+         登录在集群上进行，凭证只写进本人集群家目录。key 输入框提交时立即清空，本机不保存。 -->
+    <dialog id="dlgCliLogin" class="hud-dialog cli-login-dialog" aria-labelledby="cliLoginTitle">
+      <header class="dialog-header">
+        <h2 id="cliLoginTitle">登录</h2>
+        <span class="panel-hint" id="cliLoginServer"></span>
+        <button type="button" class="dialog-close" data-close aria-label="关闭登录">✕</button>
+      </header>
+      <div class="dialog-body cl-body">
+        <form class="cl-form" id="cliLoginForm" autocomplete="off" novalidate>
+          <fieldset class="us-segmented" id="cliLoginCli" aria-label="要登录的工具">
+            <button type="button" data-cli="codex" aria-pressed="true">Codex</button>
+            <button type="button" data-cli="claude" aria-pressed="false">Claude Code</button>
+          </fieldset>
+          <div class="cl-methods" id="cliLoginMethods" role="radiogroup" aria-label="登录方式"></div>
+          <p class="cl-notes" id="cliLoginRouteHint"></p>
+          <div class="cl-fields" id="cliLoginFields" hidden>
+            <label class="cl-field" id="cliLoginUrlField"><span>中转站地址</span><input id="cliLoginBaseUrl" autocomplete="off" spellcheck="false" placeholder="https://relay.example.com/v1"></label>
+            <p class="cl-notes" id="cliLoginRelayNotes" aria-live="polite"></p>
+            <label class="cl-check" id="cliLoginPlainField" hidden><input type="checkbox" id="cliLoginPlain"><span>我知道这是明文 http，确认中转站可信</span></label>
+            <label class="cl-field" id="cliLoginProviderField"><span>名称</span><input id="cliLoginProvider" autocomplete="off" spellcheck="false" placeholder="relay"></label>
+            <label class="cl-field"><span id="cliLoginKeyLabel">API key</span><input id="cliLoginKey" type="password" autocomplete="off" spellcheck="false"></label>
+          </div>
+          <p class="cl-hint" id="cliLoginHint" aria-live="polite"></p>
+          <div class="cl-actions">
+            <span class="cl-foot">凭证只写进你的集群家目录，本机不保存</span>
+            <button type="submit" class="btn btn-primary" id="cliLoginStart">开始登录</button>
+          </div>
+        </form>
+        <section class="cl-progress" id="cliLoginProgress" hidden>
+          <p class="cl-phase" id="cliLoginPhase" aria-live="polite"></p>
+          <div class="cl-link" id="cliLoginLink" hidden>
+            <a id="cliLoginUrl" class="btn btn-secondary" href="about:blank" target="_blank" rel="noopener noreferrer">在浏览器中打开授权页</a>
+            <button type="button" class="text-btn" id="cliLoginCopy">复制链接</button>
+          </div>
+          <form class="eg-inline-form" id="cliLoginCodeForm" autocomplete="off" hidden>
+            <input id="cliLoginCode" autocomplete="off" spellcheck="false" placeholder="粘贴页面上显示的授权码" aria-label="授权码">
+            <button type="submit" class="btn btn-secondary">提交</button>
+          </form>
+          <div class="cl-result" id="cliLoginResult" aria-live="polite"></div>
+          <div class="cl-actions">
+            <button type="button" class="text-btn" id="cliLoginCancel">取消登录</button>
+            <button type="button" class="btn btn-secondary" id="cliLoginAgain" hidden>换一种方式</button>
+          </div>
+        </section>
+      </div>
+    </dialog>
+
+    <!-- 接入引导（app/onboarding-guide.js + render/onboarding-view.js）：首次打开、还没配置好时自动弹出；
+         之后从首页横幅或「配置 → 接入引导」进入。不带 .hud-dialog：点遮罩不关闭（避免配到一半误触），
+         只能点「稍后再说」/ Esc。#onboardingMain 由脚本整块重画；走完后才显示的两段（装 CLI / 登录）是静态块，
+         其中「命令行工具」与配置浮层那一节是同一套界面的第二个宿主。 -->
+    <dialog id="dlgOnboarding" class="onboarding-dialog" aria-labelledby="onboardingTitle">
+      <header class="ob-header">
+        <div class="ob-heading">
+          <h2 id="onboardingTitle">接入集群</h2>
+          <p class="ob-sub" id="onboardingSub"></p>
+        </div>
+        <button type="button" class="text-btn" id="onboardingLater">稍后再说</button>
+      </header>
+      <div class="ob-body">
+        <p class="ob-hint" id="onboardingHint" role="status" aria-live="polite"></p>
+        <div id="onboardingMain"><p class="incidents-empty">正在读取…</p></div>
+        <section class="ob-next" id="onboardingNext" hidden>
+          <div id="onboardingRoute"></div>
+          <h3 id="onboardingStage2" data-ob-stage="2"><span class="ob-stage-number">2</span> 选择并安装工具<small>只装你需要的；已经装好可以跳过；团队缓存里有的几秒就装好</small></h3>
+          <div class="settings-cli" id="onboardingCliBody"><p class="incidents-empty">正在读取集群上的安装状态…</p></div>
+          <h3 id="onboardingStage3" data-ob-stage="3"><span class="ob-stage-number">3</span> 填 API Key / 登录<small>中转站地址 + Key、官方 API Key 或官方账号</small></h3>
+          <div id="onboardingLogin"></div>
+          <h3 id="onboardingStage4" data-ob-stage="4"><span class="ob-stage-number">4</span> 测试一下并开始使用<small>发一条很短的测试对话，确认真的能用</small></h3>
+          <div class="ob-check" id="onboardingCheck"></div>
+        </section>
+      </div>
+      <footer class="ob-footer" id="onboardingFooter" hidden>
+        <button type="button" class="btn btn-primary" id="onboardingFinish">进入工作台</button>
+      </footer>
+    </dialog>
+
+    <dialog id="dlgTimeline" class="hud-dialog dialog-wide" aria-labelledby="timelineTitle">
+      <header class="dialog-header">
+        <h2 id="timelineTitle">状态变更时间线</h2>
+        <span class="panel-hint" id="timelineBadge">通道 / Agent / 资源变迁</span>
+        <select id="timelineDateSelect" class="styled-select timeline-date-select" aria-label="选择复盘日期">
+          <option value="live">实时</option>
+        </select>
+        <button type="button" class="dialog-close" data-close aria-label="关闭状态变更时间线">✕</button>
+      </header>
+      <div class="dialog-body" id="timelinePanel">
+        <div class="timeline-summary" id="timelineSummary" hidden></div>
+        <div class="tl-swim" id="timelineSwim" hidden></div>
+        <!-- 清单按「一阵」归组（render/timeline-episodes.js）：相隔不到 5 分钟的变更是一段，逐条明细收在卡片里 -->
+        <div class="tl-ep-bar" id="timelineEpisodeBar" hidden>
+          <span class="tl-ep-bar-text" data-ep-summary></span>
+          <button type="button" class="tl-ep-btn" data-ep-only-bad aria-pressed="false">只看异常</button>
+          <button type="button" class="tl-ep-btn" data-ep-expand="all">全部展开</button>
+          <button type="button" class="tl-ep-btn" data-ep-expand="none">全部收起</button>
+        </div>
+        <div class="tl-ep-strip" id="timelineEpisodeStrip" hidden></div>
+        <ul class="timeline-list" id="timelineList"></ul>
+      </div>
+    </dialog>
+
+    <dialog id="dlgBootstrap" class="hud-dialog" aria-labelledby="bootstrapTitle">
+      <header class="dialog-header">
+        <h2 id="bootstrapTitle">离线安装 Agent（7 步）</h2>
+        <span class="panel-hint">按需逐步执行</span>
+        <button type="button" class="dialog-close" data-close aria-label="关闭离线安装引导">✕</button>
+      </header>
+      <div class="dialog-body" id="bootstrapContent">
+        <div class="bootstrap-hint">把 ReClaude 离线包装到集群。每步独立执行、可跳步重跑；执行输出见「运维日志」浮层（来源选「向导 (bootstrap)」）。这里不是首次接入——集群账号与专属端口在「配置 → 接入引导」里配置。</div>
+        <div class="bootstrap-list" id="bootstrapList"></div>
+      </div>
+    </dialog>
+
+    <dialog id="dlgLogs" class="hud-dialog dialog-wide" aria-labelledby="logsTitle">
+      <header class="dialog-header">
+        <h2 id="logsTitle">运维与修复操作日志</h2>
+        <button type="button" class="dialog-close" data-close aria-label="关闭运维与修复操作日志">✕</button>
+      </header>
+      <div class="dialog-body" id="logContent">
+        <div class="log-summary" id="logSummary"></div>
+        <div class="log-filter-bar">
+          <div class="log-filters">
+            <input id="logSearchInput" class="styled-select log-filter-select" type="search" placeholder="搜索关键词…" />
+            <select id="logRangeSelect" class="styled-select log-filter-select" title="时间范围" aria-label="按时间范围过滤日志">
+              <option value="">全部时间</option>
+              <option value="15m">最近 15 分钟</option>
+              <option value="1h">最近 1 小时</option>
+              <option value="6h">最近 6 小时</option>
+              <option value="24h">最近 24 小时</option>
+            </select>
+            <select id="logSourceFilter" class="styled-select log-filter-select" title="按来源过滤" aria-label="按来源过滤日志">
+              <option value="">全部来源</option>
+              <option value="ops">运维 (ops)</option>
+              <option value="supervisor">守护 (supervisor)</option>
+              <option value="timeline">时间线 (timeline)</option>
+              <option value="bootstrap">向导 (bootstrap)</option>
+              <option value="signal">卡顿信号</option>
+              <option value="desktop">桌面壳 (desktop)</option>
+              <option value="renderer">页面脚本 (renderer)</option>
+              <option value="launcher">启动器 (launcher)</option>
+            </select>
+            <select id="logLevelFilter" class="styled-select log-filter-select" title="按级别过滤" aria-label="按级别过滤日志">
+              <option value="">全部级别</option>
+              <option value="info">信息</option>
+              <option value="warn">警告</option>
+              <option value="error">错误</option>
+            </select>
+            <!-- v2.15 操作过滤指示(logs-panel openOperation 控制):点击清除 operationId 过滤 -->
+            <button id="logOpFilterChip" class="summary-chip chip-op" style="display: none;" type="button" title="点击清除本次操作过滤">仅看本次操作 ✕</button>
+          </div>
+          <div class="log-actions">
+            <button type="button" id="exportLogBtn" class="text-btn">导出当前结果</button>
+            <button type="button" id="clearLogBtn" class="text-btn">清空历史日志</button>
+          </div>
+        </div>
+        <div class="console-box" id="logBox">
+          <pre id="log">-</pre>
+        </div>
+      </div>
+    </dialog>
+
+    <dialog id="dlgEndpoint" class="hud-dialog dialog-wide" aria-labelledby="endpointPanelTitle">
+      <header class="dialog-header">
+        <h2 id="endpointPanelTitle">端点检测</h2>
+        <fieldset class="us-segmented us-segmented-sm ep-agents" id="endpointAgents" aria-label="查看哪个 Agent 的端点" hidden></fieldset>
+        <span class="badge" id="epStatusBadge">-</span>
+        <button type="button" class="dialog-close" data-close aria-label="关闭端点检测">✕</button>
+      </header>
+      <div class="dialog-body" id="endpointContent">
+        <div class="ep-trend">
+          <div class="ep-stats" id="endpointStats" hidden></div>
+          <div class="ep-chart" id="endpointChart" hidden></div>
+          <p class="ep-empty" id="endpointEmpty" hidden></p>
+          <p class="ep-caption" id="endpointCaption" hidden></p>
+        </div>
+        <div class="endpoint-brief" id="endpointBrief">检测中...</div>
+        <div class="console-box response-box">
+          <pre id="endpoint">-</pre>
+        </div>
+      </div>
+    </dialog>
+
+    <dialog id="dlgDoctor" class="hud-dialog dialog-wide" aria-labelledby="doctorPanelTitle">
+      <header class="dialog-header">
+        <h2 id="doctorPanelTitle">查看 Codex Doctor 详细检查输出</h2>
+        <span class="badge" id="doctorSummaryBadge">-</span>
+        <button type="button" class="dialog-close" data-close aria-label="关闭 Doctor 检查输出">✕</button>
+      </header>
+      <div class="dialog-body" id="doctorContent">
+        <div class="console-box doc-box">
+          <pre id="doctorOutput">-</pre>
+        </div>
+      </div>
+    </dialog>
+
+    <!-- v2.15 一键修复预览确认层(repair-runbook.js):列出实际修复序列后再执行。
+         复用 hud-dialog 体系(含 margin:auto 居中修正);取消/Esc/点遮罩由 app.js
+         的通用 data-close 处理关闭,close 事件回收 preview 态。 -->
+    <dialog id="dlgRepairPreview" class="hud-dialog" aria-labelledby="repairPreviewTitle">
+      <header class="dialog-header">
+        <h2 id="repairPreviewTitle">重启所有连接确认</h2>
+        <button class="dialog-close" data-close type="button" aria-label="取消重启确认">✕</button>
+      </header>
+      <div class="dialog-body">
+        <p class="runbook-preview-intro">影响范围：<strong>所有连接</strong> —— 守护进程、本地代理与全部服务器的 SSH 隧道都会重启。将按以下序列执行：</p>
+        <ol class="runbook-preview-steps" id="repairPreviewSteps"></ol>
+        <p class="runbook-preview-note">预计耗时 10~30 秒，期间所有连接都会短暂中断（共享代理端口一并重启）；执行进度将显示在顶部注意力队列。取消不会产生任何进程或配置副作用。</p>
+        <div class="runbook-preview-actions">
+          <button id="repairCancelBtn" class="btn btn-secondary" type="button" data-close>取消</button>
+          <button id="repairConfirmBtn" class="btn btn-warning" type="button">确认执行</button>
+        </div>
+      </div>
+    </dialog>
+
+    <!-- 操作确认层(repair-runbook.js requestScopedRestart):单隧道重启先展示影响范围,确认后才执行。
+         previewId 2 分钟过期,倒计时到点即禁用确认;取消/Esc/遮罩走通用 data-close,
+         close 事件回收 preview 态。 -->
+    <dialog id="dlgActionPreview" class="hud-dialog dialog-wide" aria-labelledby="actionPreviewHeading">
+      <header class="dialog-header">
+        <h2 id="actionPreviewHeading">操作确认</h2>
+        <button class="dialog-close" data-close type="button" aria-label="取消操作确认">✕</button>
+      </header>
+      <div class="dialog-body">
+        <p class="runbook-preview-intro" id="actionPreviewTitle"></p>
+        <p class="action-preview-target" id="actionPreviewTarget"></p>
+        <p class="action-preview-section-title">影响范围</p>
+        <pre class="action-preview-commands" id="actionPreviewCommands"></pre>
+        <ul class="action-preview-notes" id="actionPreviewNotes" style="display: none;"></ul>
+        <p class="runbook-preview-note">只重启这一台服务器的 SSH 反向隧道，本地代理与其它服务器的隧道不受影响。执行进度将显示在顶部注意力队列。</p>
+        <p class="action-preview-expire" id="actionPreviewExpire"></p>
+        <div class="runbook-preview-actions">
+          <button id="actionPreviewCancelBtn" class="btn btn-secondary" type="button" data-close>取消</button>
+          <button id="actionPreviewConfirmBtn" class="btn btn-warning" type="button">确认执行</button>
+        </div>
+      </div>
+    </dialog>
+
+    <dialog id="dlgTeamMember" class="hud-dialog" aria-labelledby="teamMemberDialogTitle">
+      <header class="dialog-header">
+        <h2 id="teamMemberDialogTitle">添加 / 纳管团队成员</h2>
+        <button type="button" class="dialog-close" data-close aria-label="关闭成员名册弹窗">✕</button>
+      </header>
+      <div class="dialog-body">
+        <form id="teamMemberForm" class="tm-dialog-form" autocomplete="off">
+          <div class="tm-field-group">
+            <div class="tm-form-row">
+              <label for="tmMemberUser">集群用户名</label>
+              <input id="tmMemberUser" name="user" required autocomplete="off" spellcheck="false" placeholder="例如 zhangsan" />
+            </div>
+            <div class="tm-form-row">
+              <label for="tmMemberDisplayName">姓名 / 昵称</label>
+              <input id="tmMemberDisplayName" name="displayName" autocomplete="off" placeholder="例如 张三（可选）" />
+            </div>
+            <div class="tm-form-row">
+              <label for="tmMemberAssignedPort">预分配端口</label>
+              <div class="tm-input-with-act">
+                <input id="tmMemberAssignedPort" name="assignedPort" type="number" min="7891" max="8891" placeholder="7891 ~ 8891（7891 为团队保留端口，新成员建议从 7892 起；留空则自动选端口）" />
+                <button type="button" class="text-btn tm-recommend-port-btn" id="tmRecommendPortBtn" title="自动计算并填入 7892~8891 区间内下一个不冲突的空闲专属端口（7891 为团队生产端口，仅其原持有者可沿用）">推荐空闲端口</button>
+              </div>
+            </div>
+            <div class="tm-form-row">
+              <label for="tmMemberNote">备注说明</label>
+              <input id="tmMemberNote" name="note" autocomplete="off" placeholder="例如 课题组 A / 2026 级博士" />
+            </div>
+            <div class="tm-form-row">
+              <label for="tmMemberEnabled">账号状态</label>
+              <label><input id="tmMemberEnabled" name="enabled" type="checkbox" checked /> 启用（允许认领预分配端口与接收统一配置）</label>
+            </div>
+          </div>
+          <p class="tm-form-hint">预分配端口写入集群名册后，该成员首次运行「接入引导」时会自动优先认领该专属端口，且其他成员自动选端口时会避开此端口。</p>
+          <div class="runbook-preview-actions">
+            <button type="button" class="btn btn-secondary" data-close>取消</button>
+            <button type="submit" class="btn btn-primary">保存到团队名册</button>
+          </div>
+        </form>
+      </div>
+    </dialog>
+
+    <dialog id="dlgTeamAssign" class="hud-dialog dialog-wide" aria-labelledby="teamAssignDialogTitle">
+      <header class="dialog-header">
+        <h2 id="teamAssignDialogTitle">统一下发 AI 配置与子密钥</h2>
+        <button type="button" class="dialog-close" data-close aria-label="关闭配置下发弹窗">✕</button>
+      </header>
+      <div class="dialog-body">
+        <form id="teamAssignForm" class="tm-dialog-form" autocomplete="off">
+          <div class="tm-form-row">
+            <label for="tmAssignUser">目标成员账号</label>
+            <input id="tmAssignUser" name="user" readonly class="tm-mono" />
+          </div>
+          <div id="tmAssignUserPicker" class="tm-assign-picker" hidden></div>
+          <p class="tm-form-hint" id="tmAssignPubkeyHint"></p>
+          <div id="tmAssignPresetBar" class="tm-preset-bar"></div>
+
+          <div class="tm-field-group">
+            <div class="tm-field-group-title">
+              <label><input id="tmAssignCodexEnabled" type="checkbox" checked /> 下发 Codex 配置（写入成员 ~/.codex/config.toml &amp; auth.json）</label>
+            </div>
+            <div class="tm-form-row">
+              <label for="tmAssignCodexProvider">Provider 名称</label>
+              <input id="tmAssignCodexProvider" autocomplete="off" spellcheck="false" value="relay" placeholder="relay" />
+            </div>
+            <div class="tm-form-row">
+              <label for="tmAssignCodexBaseUrl">中转站 Base URL</label>
+              <input id="tmAssignCodexBaseUrl" autocomplete="off" spellcheck="false" placeholder="https://relay.example.com/v1（官方直连可留空）" />
+            </div>
+            <div class="tm-form-row">
+              <label for="tmAssignCodexApiKey">分配的 API Key</label>
+              <input id="tmAssignCodexApiKey" type="password" autocomplete="new-password" spellcheck="false" placeholder="sk-..." />
+            </div>
+            <div class="tm-form-row">
+              <label for="tmAssignCodexModel">默认模型（可选）</label>
+              <input id="tmAssignCodexModel" autocomplete="off" spellcheck="false" placeholder="例如 gpt-5.3-codex（留空保持成员原设置）" />
+            </div>
+          </div>
+
+          <div class="tm-field-group">
+            <div class="tm-field-group-title">
+              <label><input id="tmAssignClaudeEnabled" type="checkbox" /> 下发 Claude Code 配置（写入成员 ~/.claude/settings.json）</label>
+            </div>
+            <div class="tm-form-row">
+              <label for="tmAssignClaudeBaseUrl">Anthropic Base URL</label>
+              <input id="tmAssignClaudeBaseUrl" autocomplete="off" spellcheck="false" placeholder="https://relay.example.com" />
+            </div>
+            <div class="tm-form-row">
+              <label for="tmAssignClaudeApiKey">Anthropic Token / Key</label>
+              <input id="tmAssignClaudeApiKey" type="password" autocomplete="new-password" spellcheck="false" placeholder="sk-ant-..." />
+            </div>
+            <div class="tm-form-row">
+              <label for="tmAssignClaudeModel">默认模型（可选）</label>
+              <input id="tmAssignClaudeModel" autocomplete="off" spellcheck="false" placeholder="例如 claude-sonnet-4-6（留空保持成员原设置）" />
+            </div>
+          </div>
+
+          <p class="tm-form-hint">安全性说明：API Key 使用成员工作台生成的 X25519 公钥（ECDH + HKDF-SHA256 + AES-256-GCM）在管理员本机完成加密，集群共享目录仅存放密文信封；成员端工作台解密后以 0600 权限写入其本人家目录，并把中转站非 443 端口自动加入其本机出网白名单。</p>
+          <div class="runbook-preview-actions">
+            <button type="button" class="text-btn" id="tmAssignClearBtn" hidden>解除托管</button>
+            <button type="button" class="btn btn-secondary" data-close>取消</button>
+            <button type="submit" class="btn btn-primary">加密并下发</button>
+          </div>
+        </form>
+      </div>
+    </dialog>
+
+    <dialog id="dlgTeamRootGuide" class="hud-dialog dialog-wide" aria-labelledby="teamRootGuideTitle">
+      <header class="dialog-header">
+        <h2 id="teamRootGuideTitle">🔑 集群 Root 一次性赋权操作指南</h2>
+        <span class="badge" id="teamRootGuideStatusBadge">检查中</span>
+        <button type="button" class="dialog-close" data-close aria-label="关闭 Root 赋权指南">✕</button>
+      </header>
+      <div class="dialog-body tm-dialog-form">
+        <p class="tm-form-hint">无需在工作台日常保存高风险的 <code>root</code> 私钥。只需用集群 <code>root</code> 账号给你的管理员账号（如 <code>kai</code>）执行一次以下最小权限赋权，即可永久解锁三项能力：</p>
+        <div class="tm-field-group">
+          <div class="tm-subline">1. <strong>共享目录全权接管</strong>：将 <code>/public/agent-hub</code> 及其子目录属主设为你的管理员账号，无需每次敲命令即可直接清理任何人的闲置端口文件与占坑文件。</div>
+          <div class="tm-subline">2. <strong>强踢卡死/僵尸隧道端口</strong>：在成员列表操作栏一键终止集群上卡死占着反向端口不放的 <code>sshd</code> 会话子进程。</div>
+          <div class="tm-subline">3. <strong>未安装客户端成员无感兜底采集</strong>：即使某个组员没有打开工作台，也能通过受限只读辅助脚本（3 分钟缓存）自动统计其家目录占用与 <code>~/.codex</code> / <code>~/.claude</code> 调用量。</div>
+        </div>
+        <div class="tm-field-group">
+          <div class="tm-field-group-title">
+            <span>操作步骤（仅需执行一次，30 秒完成）</span>
+            <button type="button" class="btn btn-secondary" id="tmCopyRootScriptBtn">一键复制赋权脚本</button>
+          </div>
+          <div class="tm-subline"><strong>第 1 步</strong>：在终端以 <code>root</code> 身份登录集群（或在有 sudo 权限的终端执行 <code>sudo -i</code>）；</div>
+          <div class="tm-subline"><strong>第 2 步</strong>：点击右上角「一键复制赋权脚本」，粘贴到集群 <code>root</code> 终端回车执行（看到 <code>✅ 团队管理员 Root 赋权已完成！</code> 即可）；</div>
+          <div class="tm-subline"><strong>第 3 步</strong>：回到本弹窗点击下方「验证赋权并刷新状态」。</div>
+          <div class="console-box">
+            <pre id="tmRootGrantScriptBox" class="tm-mono"></pre>
+          </div>
+        </div>
+        <div class="runbook-preview-actions">
+          <button type="button" class="btn btn-secondary" data-close>关闭</button>
+          <button type="button" class="btn btn-primary" id="tmVerifyRootGrantBtn">验证赋权并刷新状态</button>
+        </div>
+      </div>
+    </dialog>
+
+    <dialog id="dlgTeamNotice" class="hud-dialog" aria-labelledby="teamNoticeDialogTitle">
+      <header class="dialog-header">
+        <h2 id="teamNoticeDialogTitle">📢 发布团队置顶公告</h2>
+        <button type="button" class="dialog-close" data-close aria-label="关闭团队公告弹窗">✕</button>
+      </header>
+      <div class="dialog-body">
+        <form id="teamNoticeForm" class="tm-dialog-form" autocomplete="off">
+          <div class="tm-field-group">
+            <div class="tm-form-row">
+              <label for="tmNoticeTitle">公告标题</label>
+              <input id="tmNoticeTitle" name="title" autocomplete="off" value="团队公告" placeholder="例如 节点维护通知 / 中转站切换" />
+            </div>
+            <div class="tm-form-row">
+              <label for="tmNoticeLevel">提醒级别</label>
+              <select id="tmNoticeLevel" name="level" class="styled-select">
+                <option value="info">通知 (Info)</option>
+                <option value="warn">提醒 (Warn)</option>
+                <option value="crit">紧急 (Crit)</option>
+              </select>
+            </div>
+            <div class="tm-form-row">
+              <label for="tmNoticeText">公告内容</label>
+              <input id="tmNoticeText" name="text" autocomplete="off" placeholder="例如 g02 节点今晚 22:00 升级驱动，请提前保存 checkpoint" />
+            </div>
+          </div>
+          <p class="tm-form-hint">公告保存在集群 <code>/public/agent-hub/admin/notice.json</code>，团队成员工作台同步时会自动读取。</p>
+          <div class="runbook-preview-actions">
+            <button type="button" class="text-btn" id="tmNoticeClearBtn" hidden>清除公告</button>
+            <button type="button" class="btn btn-secondary" data-close>取消</button>
+            <button type="submit" class="btn btn-primary">发布公告</button>
+          </div>
+        </form>
+      </div>
+    </dialog>
+
+    <dialog id="changelogModal" class="hud-dialog dialog-wide" aria-labelledby="changelogTitle">
+      <header class="dialog-header">
+        <h2 id="changelogTitle">系统更新与修复日志</h2>
+        <button type="button" class="dialog-close" id="changelogCloseBtn" data-close aria-label="关闭更新日志">✕</button>
+      </header>
+      <div class="dialog-body" id="changelogBody"></div>
+    </dialog>
+
+    <!-- 全局命令面板浮层 (⌘K / Ctrl+K) -->
+    <dialog id="dlgCommandPalette" class="cmd-palette-dialog" aria-label="命令面板">
+      <div class="cmd-input-wrapper">
+        <svg class="cmd-search-icon" width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><circle cx="7" cy="7" r="4.75"/><path d="M10.5 10.5 14 14"/></svg>
+        <input id="cmdInput" class="cmd-input" type="text" placeholder="输入命令，或搜索服务器 / Agent（? 查看快捷键）" autocomplete="off" aria-label="搜索命令或服务器" />
+        <span class="cmd-shortcut-tag">↑↓ 选择 · ↵ 执行</span>
+        <button type="button" class="dialog-close" data-close aria-label="关闭命令面板">✕</button>
+      </div>
+      <div class="cmd-list" id="cmdList"></div>
+    </dialog>
+
+    <!-- 全局 Toast 提示容器 -->
+    <div id="toastContainer" class="toast-container" role="status" aria-live="polite" aria-atomic="false" aria-relevant="additions"></div>
+
+    <!-- 换肤过场（render/skin-transition.js）：只在「配置」里切换视觉版本时播放；popover 进 top layer，盖得住「配置」对话框 -->
+    <div id="celestialOverlay" class="celestial-stage-overlay" popover="manual" aria-hidden="true">
+      <div class="cso-backdrop"></div>
+      <div class="cso-card">
+        <div id="celestialOverlaySvg"></div>
+        <div class="cso-caption" id="celestialOverlayCaption"></div>
+      </div>
+    </div>
+
+    <script type="module" src="/app.js"></script>
+  </body>
+</html>

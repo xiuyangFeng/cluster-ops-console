@@ -1,0 +1,55 @@
+/* charts.css —— 通用折线图（assets/js/line-chart.js）。类名统一 lc- 前缀。
+   用量页「分开」小图与端点延迟图共用。约定：线 2px 圆头；面积只铺 10% 同色；网格与基线是
+   实线细线；末点和悬停点带一圈底色描边。系列色写在 data-tone 上（缺省是强调蓝），
+   主题切换不用重画。提示框与用量页合并图的 .us-tooltip 同一观感。 */
+.lc { position: relative; min-width: 0; }
+.lc-svg { display: block; width: 100%; overflow: visible; }
+.lc-grid { stroke: var(--hud-border); stroke-width: 1; shape-rendering: crispEdges; }
+.lc-grid.is-base { stroke: var(--hud-border-strong); }
+.lc-axis { fill: var(--muted); font: 10px var(--font-mono); }
+.lc-axis.is-strong { fill: var(--text-softer); font-weight: 600; }
+.lc-rule { stroke: var(--text-softer); stroke-width: 1; opacity: 0.3; shape-rendering: crispEdges; }
+.lc-line { fill: none; stroke: var(--cyan); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.lc-line.is-thin { stroke-width: 1.5; }
+.lc-line.is-partial { stroke-dasharray: 4 4; opacity: 0.85; }
+.lc-area { fill: var(--cyan); opacity: 0.1; pointer-events: none; }
+.lc-end,
+.lc-hover-dot { fill: var(--cyan); stroke: var(--panel); stroke-width: 2; pointer-events: none; }
+.lc-cross { stroke: var(--muted); stroke-width: 1; opacity: 0.75; pointer-events: none; shape-rendering: crispEdges; }
+.lc-hit { fill: transparent; cursor: crosshair; }
+.lc-hit.is-pickable { cursor: pointer; }
+
+/* 系列色（令牌声明在 usage.css 的 body 上，两档都过了色觉障碍校验） */
+[data-tone="codex"] { --tone-color: var(--series-codex); }
+[data-tone="claude"] { --tone-color: var(--series-claude); }
+[data-tone="antigravity"] { --tone-color: var(--series-antigravity); }
+[data-tone="gemini"] { --tone-color: var(--series-gemini); }
+[data-tone="zcode"] { --tone-color: var(--series-zcode); }
+[data-tone="opencode"] { --tone-color: var(--series-opencode); }
+[data-tone="cursor"] { --tone-color: var(--series-cursor); }
+[data-tone="custom"] { --tone-color: var(--series-custom); }
+.lc-line[data-tone] { stroke: var(--tone-color, var(--cyan)); }
+:is(.lc-area, .lc-end, .lc-hover-dot)[data-tone] { fill: var(--tone-color, var(--cyan)); }
+
+/* 提示框：标题一行 + 若干「名称 … 数值」行；文字不用系列色，系列靠行首的色键认 */
+.lc-tip {
+  position: absolute;
+  z-index: 2;
+  min-width: 150px;
+  padding: 8px 10px;
+  border: 1px solid var(--hud-border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--panel);
+  box-shadow: var(--shadow-2);
+  color: var(--text);
+  font-size: 11px;
+  white-space: nowrap;
+  pointer-events: none;
+}
+.lc-tip strong { display: block; margin-bottom: 4px; font-weight: 550; }
+.lc-tip p { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-top: 2px; }
+.lc-tip p span:first-child { display: inline-flex; align-items: center; gap: 6px; }
+.lc-tip p span:last-child { font-family: var(--font-mono); }
+.lc-tip p[data-tone="total"] { margin-top: 4px; padding-top: 3px; border-top: 1px solid var(--hud-border); color: var(--muted-strong); }
+.lc-tip p[data-tone="fail"] span:first-child { color: var(--red); }
+.lc-key { display: inline-block; width: 14px; height: 2px; background: var(--tone-color, var(--cyan)); }

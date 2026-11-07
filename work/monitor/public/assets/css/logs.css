@@ -1,0 +1,241 @@
+/* logs.css —— 日志：日志浮层（#dlgLogs 的过滤条 / 摘要 chip / #log 操作分组折叠）与
+   事件视图的实时日志流（#logStream）共用的日志行样式，日期分隔行、[signal] 锚点、
+   「自动」「远端」徽标（后两者也用在时间线条目上）。
+   归属：logs-panel.js / render/log-stream.js / store.js autoBadgeHtml。
+   颜色全部由 styles.css 令牌派生，深浅主题自动跟随。 */
+
+/* ---- 日志浮层：过滤条、摘要 chip、导出 ---- */
+
+/* 过滤控件沿用 .styled-select 外观 */
+.log-filter-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+}
+.log-filters {
+  display: flex;
+  gap: 8px;
+}
+.log-filter-select {
+  font-size: 11px;
+  padding: 4px 8px;
+}
+#logSearchInput { min-width: 120px; }
+.log-actions { display: flex; gap: 10px; align-items: center; }
+
+/* v2.3 日志摘要卡 */
+.log-summary { display: flex; flex-wrap: wrap; gap: 6px; padding: 8px 12px 0; }
+.log-summary:empty { display: none; }
+.summary-chip { border: 1px solid var(--hud-border-strong); background: var(--btn-bg); color: var(--text-soft); border-radius: var(--radius-sm); padding: 2px 9px; font: inherit; font-size: var(--text-xs); cursor: pointer; transition: border-color 0.15s ease; }
+.summary-chip:hover { border-color: var(--hud-border-strong); }
+.summary-chip.chip-error { border-color: color-mix(in srgb, var(--red) 40%, transparent); color: var(--red); }
+.summary-chip.chip-warn { border-color: color-mix(in srgb, var(--yellow) 40%, transparent); color: var(--yellow); }
+.summary-quiet { color: var(--muted); font-size: var(--text-xs); }
+/* 操作过滤指示 chip（logs-panel openOperation 控制；复用 summary-chip 骨架，须在其后覆写描边与文字色） */
+.chip-op { border-color: color-mix(in srgb, var(--cyan) 45%, var(--hud-border)); color: var(--cyan); }
+
+/* ---- 日志行：级别着色（class 化，取代内联 style） ---- */
+
+.log-line {
+  display: block;
+}
+.log-line.log-error { color: var(--red); }
+.log-line.log-warn { color: var(--yellow); }
+.log-line.log-ok { color: var(--muted-strong); }
+.log-omitted {
+  display: block;
+  color: var(--gray);
+  font-style: italic;
+  padding-bottom: 4px;
+}
+
+/* ---- 常驻实时日志流 (live tail)：固定高度内部滚动，不撑破整页布局；块级容器而非 flex 列 ---- */
+
+.log-stream {
+  font-size: var(--text-xs);
+  line-height: 1.6;
+  padding: var(--space-2) var(--space-2) var(--space-3);
+  height: 320px;
+  overflow-y: auto;
+  contain: content;
+  scrollbar-gutter: stable;
+}
+/* 还没有日志行时的空状态（render/log-stream.js）：在固定高度里竖向居中 */
+.log-stream > .empty-state { min-height: 100%; justify-content: center; line-height: normal; }
+
+/* 一行三栏：时刻 · 来源标签 · 正文（render/log-stream.js buildStreamLineHtml）。
+   左侧 2px 色条标级别：故障红、警告黄、恢复绿，普通信息不画；正文一行放不下时省略，悬停看全文 */
+.log-stream .ls-row {
+  --ls-tone: transparent;
+  display: grid;
+  grid-template-columns: max-content 3.6em minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  padding: 4px 10px 4px 8px;
+  border-left: 2px solid var(--ls-tone);
+  border-radius: 0 6px 6px 0;
+  color: var(--text-soft);
+  white-space: nowrap;
+  animation: log-in 0.3s ease;
+  transition: background-color 0.12s ease;
+}
+.log-stream .ls-row + .ls-row { margin-top: 1px; }
+.log-stream .ls-row:hover { background: rgba(var(--surface-rgb), 0.05); }
+.log-stream .ls-row[data-level="ok"] { --ls-tone: color-mix(in srgb, var(--green) 70%, transparent); }
+.log-stream .ls-row[data-level="warn"] { --ls-tone: var(--yellow); background: color-mix(in srgb, var(--yellow) 5%, transparent); }
+.log-stream .ls-row[data-level="error"] { --ls-tone: var(--red); background: color-mix(in srgb, var(--red) 7%, transparent); }
+.log-stream .ls-row[data-level="warn"]:hover { background: color-mix(in srgb, var(--yellow) 10%, transparent); }
+.log-stream .ls-row[data-level="error"]:hover { background: color-mix(in srgb, var(--red) 12%, transparent); }
+@keyframes log-in { from { opacity: 0; transform: translateY(3px); } to { opacity: 1; transform: none; } }
+
+.ls-time { color: var(--muted); font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+.ls-src {
+  --src-tone: var(--muted-strong);
+  justify-self: start;
+  padding: 0 6px;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--src-tone) 14%, transparent);
+  color: var(--src-tone);
+  font-size: 11px;
+  line-height: 1.6;
+}
+.ls-src:empty { display: none; }
+.ls-src[data-src="timeline"] { --src-tone: var(--cyan); }
+.ls-src[data-src="ops"] { --src-tone: var(--muted-strong); }
+.ls-src[data-src="signal"] { --src-tone: var(--yellow); }
+.ls-src[data-src="supervisor"],
+.ls-src[data-src="bootstrap"] { --src-tone: var(--green); }
+.ls-msg { display: block; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.ls-row[data-level="error"] .ls-msg { color: var(--text); }
+.ls-key { margin-right: 8px; color: var(--text); font-family: var(--font-mono); font-weight: 550; }
+.ls-state { padding: 0 5px; border-radius: 4px; background: rgba(var(--surface-rgb), 0.06); color: var(--muted-strong); font-family: var(--font-mono); }
+.ls-state[data-level="ok"] { background: color-mix(in srgb, var(--green) 14%, transparent); color: var(--green); }
+.ls-state[data-level="warn"] { background: color-mix(in srgb, var(--yellow) 14%, transparent); color: var(--yellow); }
+.ls-state[data-level="error"] { background: color-mix(in srgb, var(--red) 14%, transparent); color: var(--red); }
+.ls-arrow { margin: 0 5px; color: var(--muted); }
+.ls-reason { margin-left: 10px; color: var(--muted); }
+.ls-reason::before { content: "· "; color: var(--label-dim); }
+.ls-kv { font-family: var(--font-mono); }
+.ls-kv i { color: var(--muted); font-style: normal; }
+.ls-id { padding: 0 4px; border-radius: 4px; background: rgba(var(--surface-rgb), 0.06); color: var(--text-softer); font-family: var(--font-mono); cursor: help; }
+@media (prefers-reduced-motion: reduce) {
+  .log-stream .ls-row { animation: none; }
+}
+
+/* 面板头的「直播中」小圆点 */
+.ls-live {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  margin-right: 8px;
+  border-radius: 50%;
+  background: var(--green);
+  vertical-align: 2px;
+  animation: ls-live 2s ease-in-out infinite;
+}
+@keyframes ls-live { 50% { box-shadow: 0 0 0 4px color-mix(in srgb, var(--green) 18%, transparent); } }
+@media (prefers-reduced-motion: reduce) { .ls-live { animation: none; } }
+
+/* ---- 操作分组折叠（logs-panel：#log 位于 <pre> 内，全 inline 结构） ---- */
+
+.log-group-head {
+  display: inline-block;
+  cursor: pointer;
+  user-select: none;
+  margin: 1px 0;
+  padding: 0 8px;
+  border: 1px solid var(--border);
+  border-left-width: 3px;
+  border-radius: var(--radius-sm);
+  background: var(--panel-hover);
+  color: var(--text);
+  line-height: 1.8;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+.log-group-head:hover,
+.log-group-head:focus-visible {
+  border-color: var(--border-focus);
+  outline: none;
+}
+.log-group-head::before {
+  content: "▸ ";
+  color: var(--muted);
+}
+.log-group.expanded > .log-group-head::before {
+  content: "▾ ";
+  color: var(--cyan);
+}
+
+/* 组结果配色：按组内最高 level（error=失败红 / warn=黄 / 否则成功绿） */
+.log-group-ok > .log-group-head { border-left-color: var(--green); }
+.log-group-warn > .log-group-head { border-left-color: var(--yellow); }
+.log-group-error > .log-group-head { border-left-color: var(--red); }
+.log-group-ok .log-group-result { color: var(--green); }
+.log-group-warn .log-group-result { color: var(--yellow); }
+.log-group-error .log-group-result { color: var(--red); }
+
+/* 收起时隐藏明细体（明细行与其间的换行/缩进文本节点一并隐藏） */
+.log-group:not(.expanded) > .log-group-body { display: none; }
+
+/* ---- 日期分隔行（logs-panel 与 log-stream 共用） ---- */
+
+.log-date-sep {
+  display: inline-block;
+  margin: 3px 0 1px;
+  color: var(--muted);
+  font-size: var(--text-xs);
+}
+/* 日志流里的跨天分隔：居中的日期，两侧细线 */
+.log-stream .log-date-sep {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 8px 0 6px;
+  padding: 0 10px;
+  color: var(--label-dim);
+  white-space: nowrap;
+}
+.log-stream .log-date-sep::before,
+.log-stream .log-date-sep::after { content: ""; flex: 1; height: 1px; background: var(--hud-border); }
+
+/* ---- [signal] 卡顿信号锚点：左侧色条跟随级别色（currentColor），扫读时可快速定位 ---- */
+
+.log-line.log-signal {
+  border-left: 3px solid currentColor;
+  padding-left: 6px;
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  background: color-mix(in srgb, currentColor 10%, transparent);
+}
+
+/* ---- 触发来源徽标：日志行与时间线条目共用（store.js autoBadgeHtml 产出） ---- */
+
+/* v2.18「自动」：标的是"这一步不是人点的"，低调中性底，不与告警色抢注意力 */
+.auto-badge {
+  display: inline-block;
+  flex: none;
+  margin-right: 4px;
+  padding: 0 5px;
+  border-radius: var(--radius-sm);
+  background: rgba(var(--surface-rgb), 0.08);
+  color: var(--muted-strong);
+  font-size: var(--text-xs);
+  line-height: 1.5;
+  vertical-align: 1px;
+}
+
+.timeline-item .auto-badge { vertical-align: baseline; }
+.log-stream .auto-badge { margin-right: 6px; }
+
+/* ---- 日志浮层 #log 是 <pre>，行与行之间有 "\n" 文本节点（保留供复制换行）：
+        父级设 white-space: normal 让块间 "\n" 折叠不占行高，每条日志行独立成块并隔离 layout/style，
+        避免数百行挤在同一个行内排版上下文（Inline Formatting Context）里导致每次尾部追加都重算整段行盒。 ---- */
+#log { white-space: normal; }
+#log .log-line { display: block; white-space: pre-wrap; animation: none; contain: layout style; }
+#log .log-date-sep,
+#log .log-group,
+#log .log-group.expanded > .log-group-body { display: block; }
+#log .log-group > .log-group-body > .log-line { padding-left: 2ch; }
+/* 翻旧日志时的阅读位置由 logs-panel.js 按行手动对齐；关掉浏览器自带的滚动锚定，免得两边各补一次。 */
+#logBox { overflow-anchor: none; contain: content; }
+#log .log-line.log-signal { width: 100%; }

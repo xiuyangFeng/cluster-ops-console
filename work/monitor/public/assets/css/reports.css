@@ -1,0 +1,9 @@
+/* 与现有诊断弹层共用骨架与主题令牌。 */
+.report-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3); margin-bottom: var(--space-3); }
+.report-toolbar label { display: flex; align-items: center; gap: var(--space-2); color: var(--muted); font-size: var(--text-sm); }
+.report-note { color: var(--muted); font-size: var(--text-sm); margin: 0 0 var(--space-3); line-height: 1.6; }
+.report-preview { display: block; width: 100%; min-height: min(38vh, 340px); resize: vertical; padding: var(--space-4); border: 1px solid var(--hud-border); border-radius: 6px; background: var(--bg); color: var(--text); font-family: var(--font-mono); font-size: var(--text-sm); line-height: 1.7; white-space: pre-wrap; overflow-wrap: anywhere; max-height: 48vh; overflow: auto; user-select: text; }
+.report-actions { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-3); padding-top: var(--space-3); }
+.report-actions .panel-hint { flex: 1 1 240px; }
+.report-dirty { color: var(--cyan); font-size: var(--text-sm); }
+.report-preview[readonly] { color: var(--muted); }

@@ -1,0 +1,362 @@
+/* settings.css —— 配置浮层（#dlgSettings：外观与离线安装入口 / 服务器管理 / 监控模块 / 界面面板 / 配置来源 /
+   版本与更新 / 本地存储 / 个人配置 JSON / 出网 / 命令行工具）与离线安装向导（#dlgBootstrap）的内容样式。浮层骨架见 dialogs.css，
+   本地数据 tile 见 tiles.css。
+   归属：app/settings-dialog.js / app/settings-egress.js / app/settings-cli.js / app/settings-modules.js / server-cards.js / bootstrap-panel.js。 */
+
+/* ==========================================================================
+   配置浮层：按需展开的 <details> 选项卡片
+   ========================================================================== */
+/* 比 .hud-dialog 宽；溢出交给内部 .dialog-body 滚动（须在 dialogs.css 之后加载才能覆写宽度） */
+.settings-dialog { width: min(780px, 94vw); overflow: hidden; }
+.settings-intro { color: var(--muted); font-size: var(--text-sm); margin: 0 0 14px; }
+.settings-options { padding: 18px 20px 20px; }
+.settings-options, .config-option { min-width: 0; }
+/* ---- 顶部的偏好与入口行（外观、离线安装 Agent）：左说明、右控件，行间发丝线 ---- */
+.settings-rows { margin-bottom: 8px; border: 1px solid var(--hud-border); border-radius: var(--radius-hud); background: var(--panel); }
+.settings-row { display: flex; align-items: center; justify-content: space-between; gap: var(--space-4); padding: 10px 16px; }
+.settings-row + .settings-row { border-top: 1px solid var(--hud-border); }
+.settings-row-text { display: flex; flex-direction: column; min-width: 0; }
+.settings-row-text strong { color: var(--text-strong); font-size: var(--text-base); font-weight: 600; }
+.settings-row-text small { color: var(--muted); font-size: var(--text-xs); margin-top: 2px; }
+.settings-row > :last-child { flex: none; }
+@media (max-width: 600px) { .settings-row { flex-direction: column; align-items: flex-start; gap: var(--space-2); } }
+/* ---- 按需展开的选项卡片 ---- */
+.config-option { border: 1px solid var(--hud-border); border-radius: var(--radius-hud); background: var(--panel); margin-bottom: 8px; overflow: hidden; }
+.config-option > summary { display: flex; align-items: center; justify-content: space-between; cursor: pointer; padding: 12px 16px; color: var(--text-strong); font-size: var(--text-base); font-weight: 600; list-style: none; }
+.config-option > summary::-webkit-details-marker { display: none; }
+.config-option > summary::after { content: '›'; color: var(--muted); font-size: 18px; font-weight: 400; line-height: 1; transition: transform 0.15s ease; }
+.config-option[open] > summary::after { transform: rotate(90deg); }
+.config-option > summary small { display: block; color: var(--muted); font-size: var(--text-xs); font-weight: 400; margin-top: 2px; }
+/* 对话框内滚动容器会把外扩焦点环裁掉，这里改为内收（styles.css 的全局焦点环不压 offset） */
+.config-option > summary:focus-visible { outline: 2px solid var(--border-focus); outline-offset: -2px; }
+@media (max-width: 600px) { .settings-options { padding: 12px; } }
+
+/* ---- 高级：个人配置 JSON 编辑器（在「服务器管理」选项的 .config-advanced 里） ---- */
+.settings-editor { margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--hud-border); display: grid; gap: 8px; }
+.settings-editor label { color: var(--text-strong); font-size: var(--text-sm); font-weight: 600; }
+.settings-editor textarea { width: 100%; min-height: 220px; max-height: 35vh; box-sizing: border-box; resize: vertical; border: 1px solid var(--hud-border-strong); border-radius: var(--radius-md); background: var(--inset-bg); color: var(--text-strong); padding: 12px; font: 12px/1.55 var(--font-mono); }
+.settings-editor textarea:focus { outline: 2px solid var(--border-focus); outline-offset: 2px; }
+.settings-editor-actions { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.settings-editor-actions span { color: var(--muted); font-size: 12px; }
+
+/* ---- 服务器管理（server-cards.js：列表 + 删除后可恢复的墓碑 + 添加 / 编辑表单） ---- */
+.server-registry-list, .server-registry-form { display: grid; gap: 10px; }
+.server-registry-card, .server-registry-tombstone {
+  border: 1px solid var(--hud-border);
+  border-radius: var(--radius-md);
+  background: var(--card-bg);
+  padding: 10px 12px;
+}
+.server-registry-head { display: flex; justify-content: space-between; gap: 10px; align-items: center; }
+.server-registry-meta, .server-registry-flags, .server-registry-test, .server-registry-empty { color: var(--muted); font-size: var(--text-xs); margin: 4px 0 0; }
+.server-registry-actions { display: flex; flex-wrap: wrap; gap: 4px 14px; margin-top: 6px; }
+.server-registry-actions .text-btn { min-height: 28px; }
+.server-registry-form { grid-template-columns: repeat(4, minmax(0, 1fr)); margin-top: 14px; }
+.server-registry-form label { display: grid; gap: 5px; color: var(--muted-strong); font-size: var(--text-xs); }
+.server-registry-form input { min-height: 34px; border: 1px solid var(--hud-border-strong); border-radius: var(--radius-md); background: var(--control-bg); color: var(--text-strong); font: inherit; padding: 0 10px; }
+/* 复选框不吃上面的输入框尺寸（之前被拉成 38px 的大方块） */
+.server-registry-form input[type="checkbox"] { min-height: 0; width: 15px; height: 15px; padding: 0; accent-color: var(--cyan); }
+/* 提高选择器权重而不是靠 !important 压同一区块内的 (.server-registry-form) 通用 label 规则。 */
+.server-registry-form label.server-registry-check { display: flex; align-items: center; align-self: end; gap: 8px; min-height: 34px; color: var(--text); font-size: var(--text-sm); }
+.server-registry-form .btn { min-height: 36px; grid-column: 1 / -1; }
+@media (max-width: 767px) { .server-registry-form { grid-template-columns: 1fr; } }
+.config-advanced { margin-top: 12px; border-top: 1px solid var(--hud-border); padding-top: 10px; }
+.config-advanced > summary { cursor: pointer; color: var(--muted-strong); font-size: var(--text-sm); }
+.local-resource-box { margin-top: 12px; color: var(--muted); font-size: var(--text-xs); font-variant-numeric: tabular-nums; }
+.local-resource-box ul { margin: 6px 0 0; padding-left: 18px; }
+
+/* ---- 配置来源 / 版本与更新 ---- */
+.settings-config-body, .settings-version-body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.settings-config-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: var(--text-sm);
+  color: var(--text-strong);
+  border-bottom: 1px solid var(--hud-border);
+  padding-bottom: 8px;
+}
+.settings-config-label { color: var(--muted-strong); }
+.settings-config-row > span:last-child { overflow-wrap: anywhere; text-align: right; }
+.settings-version-body ul ul { margin: 4px 0 0 16px; }
+
+/* ---- 选项卡片里直接嵌的内容：去掉各自的外框 / 边距，融进卡片 ---- */
+.config-option > .settings-editor, .config-option > .settings-config-body, .config-option > .server-registry { padding: 0 16px 16px; margin: 0; border: 0; }
+/* 版本与更新 / 本地存储是 .panel：去掉面板外框 */
+.config-option .panel { margin: 0; border: 0; border-radius: 0; background: transparent; }
+.config-option .settings-version-body { padding: 0 18px 18px; }
+/* 「版本与更新」面板头右侧两个文字按钮；窄窗随面板头折行 */
+.settings-version-actions { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-2) var(--space-4); }
+/* 导出诊断包（app/diagnostics-export.js，v2.64）：在面板头下面就地展开，中性灰，只有一个主按钮 */
+.diag-export { display: grid; gap: var(--space-2); margin: 0 18px 14px; padding: 10px 12px; border: 1px solid var(--hud-border); border-radius: var(--radius-md); background: var(--card-bg); }
+.diag-export-lead, .diag-export-note { margin: 0; font-size: var(--text-sm); line-height: 1.5; overflow-wrap: anywhere; }
+.diag-export-lead { color: var(--muted-strong); }
+.diag-export-note { color: var(--muted); font-size: var(--text-xs); }
+.diag-export-list { margin: 0; padding-left: 18px; color: var(--text); font-size: var(--text-sm); line-height: 1.6; }
+.diag-export-actions { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-2) var(--space-3); }
+.diag-export-status { min-width: 0; color: var(--muted-strong); font-size: var(--text-xs); overflow-wrap: anywhere; }
+
+/* ---- 监控模块 / 界面面板（app/settings-modules.js）：分组标题 + 带发丝线分隔的行列表，控件沿用原生复选框 ---- */
+.settings-modules, .settings-panels { display: grid; gap: var(--space-3); padding: 0 16px 16px; }
+.mod-group, .pn-group { display: grid; align-content: start; gap: 6px; min-width: 0; }
+.mod-group-title, .pn-group-title { margin: 0; color: var(--muted-strong); font-size: var(--text-xs); font-weight: 600; }
+.mod-list, .pn-list { border: 1px solid var(--hud-border); border-radius: var(--radius-md); background: var(--card-bg); }
+.mod-item { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-4); padding: 10px 12px; cursor: pointer; }
+.pn-item { display: flex; align-items: center; gap: var(--space-2); padding: 8px 12px; color: var(--text); font-size: var(--text-sm); cursor: pointer; }
+.mod-item + .mod-item, .pn-item + .pn-item { border-top: 1px solid var(--hud-border); }
+.mod-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.mod-label { color: var(--text-strong); font-size: var(--text-sm); font-weight: 600; }
+.pn-label { min-width: 0; }
+.pn-item.pn-page .pn-label { color: var(--text-strong); font-weight: 600; }
+.mod-desc, .mod-cost, .mod-empty, .mod-core, .pn-note, .pn-hint { color: var(--muted); font-size: var(--text-xs); }
+.mod-cost { font-variant-numeric: tabular-nums; }
+.mod-warn { color: var(--yellow); font-size: var(--text-xs); }
+.mod-empty, .mod-core { margin: 0; }
+.pn-note { margin-left: auto; white-space: nowrap; }
+.mod-switch, .pn-item input { flex: none; width: 15px; height: 15px; margin: 2px 0 0; accent-color: var(--cyan); cursor: pointer; }
+.pn-item input { margin: 0; }
+.mod-switch:disabled, .pn-item input:disabled { cursor: default; }
+.settings-panels .pn-groups { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; gap: var(--space-3); }
+.pn-actions { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-3); }
+@media (max-width: 600px) { .settings-panels .pn-groups { grid-template-columns: 1fr; } }
+
+/* ---- 启动（app/settings-autostart.js，v2.62）：一个开关加一句说明，行与开关沿用上面的 .mod-*；
+   不支持自动设置的系统上多一条手动命令（可整条选中复制） ---- */
+.settings-autostart { display: grid; gap: var(--space-3); padding: 0 16px 16px; }
+.as-command { display: block; padding: 8px 12px; border: 1px solid var(--hud-border); border-radius: var(--radius-md); background: var(--card-bg); color: var(--text-strong); font: 12px var(--font-mono); overflow-wrap: anywhere; user-select: all; }
+
+/* ---- 出网（app/settings-egress.js，v2.54）：方式分段按钮、事实行、连通测试、端口白名单。
+   中性灰为主，颜色只用在测试结果的通 / 不通圆点上 ---- */
+.settings-egress { display: grid; gap: var(--space-3); padding: 0 16px 16px; }
+.eg-row { display: flex; align-items: center; justify-content: space-between; gap: var(--space-4); }
+.eg-row-text { display: flex; flex-direction: column; min-width: 0; }
+.eg-title { color: var(--text-strong); font-size: var(--text-sm); font-weight: 600; }
+.eg-hint { color: var(--muted); font-size: var(--text-xs); margin-top: 2px; }
+.eg-row > .us-segmented { flex: none; }
+.eg-inline-form { display: flex; gap: var(--space-2); }
+.eg-inline-form[hidden] { display: none; }
+.eg-inline-form input { flex: 1; min-width: 0; min-height: 32px; border: 1px solid var(--hud-border-strong); border-radius: var(--radius-md); background: var(--control-bg); color: var(--text-strong); font: 12px var(--font-mono); padding: 0 10px; }
+.eg-facts { margin: 0; border: 1px solid var(--hud-border); border-radius: var(--radius-md); background: var(--card-bg); }
+.eg-facts:empty { display: none; }
+.eg-fact { display: flex; justify-content: space-between; gap: 12px; padding: 7px 12px; font-size: var(--text-sm); }
+.eg-fact + .eg-fact { border-top: 1px solid var(--hud-border); }
+.eg-fact dt { color: var(--muted-strong); }
+.eg-fact dd { margin: 0; color: var(--text-strong); text-align: right; overflow-wrap: anywhere; }
+.eg-test, .eg-allow { display: grid; gap: var(--space-2); }
+.eg-actions { display: flex; align-items: center; gap: var(--space-3); flex-wrap: wrap; }
+.eg-results { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+.eg-result, .eg-full { display: flex; align-items: baseline; gap: 10px; margin: 0; font-size: var(--text-sm); }
+.eg-result::before, .eg-full::before { content: ""; flex: none; width: 6px; height: 6px; border-radius: 50%; background: var(--gray); transform: translateY(-1px); }
+.eg-result.is-ok::before, .eg-full.is-ok::before { background: var(--green); }
+.eg-result.is-fail::before, .eg-full.is-fail::before { background: var(--red); }
+.eg-target { flex: none; min-width: 140px; color: var(--text-strong); font: 12px var(--font-mono); }
+.eg-outcome { min-width: 0; color: var(--muted); }
+.eg-suggestion, .eg-testing { margin: 0; color: var(--muted-strong); font-size: var(--text-sm); }
+.eg-list { list-style: none; margin: 0; padding: 0; border: 1px solid var(--hud-border); border-radius: var(--radius-md); background: var(--card-bg); }
+.eg-entry, .eg-empty { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 6px 12px; font-size: var(--text-sm); }
+.eg-entry + .eg-entry { border-top: 1px solid var(--hud-border); }
+.eg-entry code { font: 12px var(--font-mono); color: var(--text-strong); overflow-wrap: anywhere; }
+.eg-note, .eg-empty { color: var(--muted); font-size: var(--text-xs); }
+@media (max-width: 600px) { .eg-row { flex-direction: column; align-items: flex-start; } .eg-target { min-width: 0; } }
+/* 代理口令（app/settings-proxy-auth.js，v2.62）：沿用上面的行 / 事实行 / 动作行；另有确认面板与一张小表。
+   同样是中性灰，不用颜色表达状态——要说的话都在事实行的文字里。唯一的例外（v2.64）：已是「强制」而集群口令
+   不同步（那里正在断网）时，集群那一行用警告色 */
+.eg-auth { display: grid; gap: var(--space-2); padding-top: var(--space-3); border-top: 1px solid var(--hud-border); }
+.eg-fact.is-warn dt, .eg-fact.is-warn dd { color: var(--yellow); }
+.eg-confirm { display: grid; gap: var(--space-2); padding: 10px 12px; border: 1px solid var(--hud-border); border-radius: var(--radius-md); background: var(--card-bg); }
+.eg-confirm p { margin: 0; color: var(--muted-strong); font-size: var(--text-sm); line-height: 1.5; overflow-wrap: anywhere; }
+.eg-usage { display: grid; gap: var(--space-2); padding-top: var(--space-2); }
+.eg-usage-table { width: 100%; border-collapse: collapse; font-size: var(--text-sm); }
+.eg-usage-table th, .eg-usage-table td { padding: 5px 8px; text-align: right; white-space: nowrap; border-top: 1px solid var(--hud-border); }
+.eg-usage-table th { color: var(--muted); font-weight: 400; font-size: var(--text-xs); border-top: 0; }
+.eg-usage-table th:first-child, .eg-usage-table td:first-child { text-align: left; padding-left: 0; white-space: normal; overflow-wrap: anywhere; }
+.eg-usage-table td { color: var(--text-strong); }
+.eg-usage-target { font: 12px var(--font-mono); }
+
+/* ---- 命令行工具（app/settings-cli.js，v2.57）：每个 CLI 一行（名称 + 状态 / 动作或行内确认），
+   下面是当前任务的进度块。颜色只用在进度条（主色）与失败 / 提醒文字上；
+   进度块右下角的「取消」是文字按钮，已取消的任务标题用中性灰（不是失败，不用红） ---- */
+.settings-cli { display: grid; gap: var(--space-3); padding: 0 16px 16px; }
+.cli-list { list-style: none; margin: 0; padding: 0; border: 1px solid var(--hud-border); border-radius: var(--radius-md); background: var(--card-bg); }
+.cli-row { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: var(--space-2) var(--space-4); padding: 8px 12px; }
+.cli-row + .cli-row { border-top: 1px solid var(--hud-border); }
+.cli-row-text { display: flex; flex-direction: column; min-width: 0; }
+.cli-name { color: var(--text-strong); font-size: var(--text-sm); }
+.cli-state { color: var(--muted); font-size: var(--text-xs); margin-top: 2px; overflow-wrap: anywhere; }
+.cli-actions, .cli-confirm-actions { display: flex; align-items: center; gap: var(--space-3); flex-wrap: wrap; }
+.cli-confirm { flex: 1 1 100%; display: grid; gap: var(--space-2); }
+.cli-confirm p { margin: 0; color: var(--muted-strong); font-size: var(--text-sm); line-height: 1.5; }
+.cli-job { display: grid; gap: 6px; padding: 10px 12px; border: 1px solid var(--hud-border); border-radius: var(--radius-md); background: var(--card-bg); }
+.cli-job-head { margin: 0; color: var(--text-strong); font-size: var(--text-sm); font-weight: 600; }
+.cli-job-path { margin-left: 8px; color: var(--muted); font-weight: 400; font-size: var(--text-xs); }
+.cli-job.is-failed .cli-job-head { color: var(--red); }
+.cli-job.is-cancelled .cli-job-head { color: var(--muted-strong); }
+.cli-job-actions { display: flex; justify-content: flex-end; }
+.cli-job-actions .text-btn:disabled { color: var(--muted); cursor: default; }
+.cli-progress { height: 6px; border-radius: 3px; background: var(--hud-border); overflow: hidden; }
+.cli-progress span { display: block; height: 100%; border-radius: 3px; background: var(--cyan); transform-origin: left center; transition: transform .4s ease; }
+.cli-progress span.is-indeterminate { opacity: .45; }
+.cli-job-facts { margin: 0; color: var(--muted-strong); font: 12px var(--font-mono); }
+.cli-job-notes { margin: 0; padding-left: 18px; color: var(--muted); font-size: var(--text-xs); display: grid; gap: 2px; }
+.cli-job-notes .is-error { color: var(--red); }
+.cli-job-notes .is-warn { color: var(--yellow); }
+@media (prefers-reduced-motion: reduce) { .cli-progress span { transition: none; } }
+
+/* ---- 接入管理（app/settings-access.js，v2.62）：接在顶部「接入引导」那一行下面，在同一张卡片里往下展开——
+   名下的端口登记（一行一个端口）、撤销接入的预览 / 确认 / 逐步结果。中性灰为主，
+   颜色只用在步骤结果的圆点与「没有成功」几个字上 ---- */
+.settings-access { display: grid; gap: var(--space-3); padding: 2px 16px 14px; }
+/* 这一块插在两行之间，后一行与前一行不再相邻（.settings-row + .settings-row 落空），分隔线在这里补上 */
+.settings-access + .settings-row { border-top: 1px solid var(--hud-border); }
+.acc-ports { display: grid; gap: 6px; }
+.acc-title { margin: 0; color: var(--muted-strong); font-size: var(--text-xs); font-weight: 600; }
+.acc-list { list-style: none; margin: 0; padding: 0; border: 1px solid var(--hud-border); border-radius: var(--radius-md); background: var(--card-bg); }
+.acc-row { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: var(--space-2) var(--space-4); padding: 7px 12px; }
+.acc-row + .acc-row { border-top: 1px solid var(--hud-border); }
+.acc-row-text { display: flex; align-items: baseline; gap: var(--space-3); min-width: 0; }
+.acc-port { color: var(--text-strong); font: 600 12px var(--font-mono); font-variant-numeric: tabular-nums; }
+.acc-state { color: var(--muted); font-size: var(--text-xs); }
+.acc-actions { display: flex; align-items: center; gap: var(--space-3); flex-wrap: wrap; }
+.acc-confirm { flex: 1 1 100%; display: grid; gap: var(--space-2); }
+.acc-confirm p, .acc-lead, .acc-summary { margin: 0; color: var(--muted-strong); font-size: var(--text-sm); line-height: 1.5; }
+/* 说明与提示里会带服务器给的原话（失败原因、字段路径、文件路径）：长串不许把这一块撑出横向滚动 */
+.acc-hint, .acc-note { margin: 0; color: var(--muted); font-size: var(--text-xs); line-height: 1.5; overflow-wrap: anywhere; }
+.acc-note .text-btn { margin-left: 8px; font-size: var(--text-xs); }
+.acc-entry { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-2) var(--space-3); }
+.acc-panel { display: grid; gap: var(--space-2); padding: 10px 12px; border: 1px solid var(--hud-border); border-radius: var(--radius-md); background: var(--card-bg); }
+.acc-panel-title { margin: 0; color: var(--text-strong); font-size: var(--text-sm); font-weight: 600; }
+.acc-plan, .acc-steps { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.acc-plan-item { display: grid; gap: 1px; padding-left: 10px; border-left: 2px solid var(--hud-border-strong); }
+.acc-plan-title { color: var(--text-strong); font-size: var(--text-sm); }
+.acc-plan-detail { color: var(--muted-strong); font-size: var(--text-xs); overflow-wrap: anywhere; }
+.acc-plan-item.is-none .acc-plan-title, .acc-plan-item.is-none .acc-plan-detail { color: var(--muted); }
+.acc-release { display: grid; gap: 2px; }
+.acc-check { display: flex; align-items: center; gap: var(--space-2); color: var(--text-strong); font-size: var(--text-sm); cursor: pointer; }
+.acc-check input { flex: none; width: 15px; height: 15px; margin: 0; accent-color: var(--cyan); cursor: pointer; }
+.acc-consequence { margin: 0; padding: 8px 10px; border-radius: var(--radius-md); background: var(--inset-bg); color: var(--text); font-size: var(--text-sm); line-height: 1.55; }
+/* 步骤一行：圆点 + 标题 + 结果；明细与手动命令另起一行、与标题左对齐 */
+.acc-step { display: grid; grid-template-columns: 6px minmax(0, 1fr) auto; column-gap: 10px; row-gap: 1px; align-items: baseline; font-size: var(--text-sm); }
+.acc-step::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--gray); transform: translateY(-1px); }
+.acc-step.is-ok::before { background: var(--green); }
+.acc-step.is-failed::before { background: var(--red); }
+.acc-step.is-running::before { background: var(--cyan); }
+.acc-step-title { min-width: 0; color: var(--text-strong); }
+.acc-step-state { color: var(--muted); font-size: var(--text-xs); white-space: nowrap; }
+.acc-step.is-failed .acc-step-state { color: var(--red); }
+.acc-step.is-pending .acc-step-title, .acc-step.is-not-run .acc-step-title { color: var(--muted); }
+.acc-step-detail, .acc-manual { grid-column: 2 / -1; color: var(--muted-strong); font-size: var(--text-xs); overflow-wrap: anywhere; }
+.acc-manual > summary, .acc-leftovers > summary { cursor: pointer; color: var(--muted); font-size: var(--text-xs); }
+.acc-manual .ob-code { margin: 6px 0; }
+.acc-leftover-list { margin: 6px 0 0; padding-left: 18px; display: grid; gap: 4px; color: var(--muted-strong); font-size: var(--text-xs); overflow-wrap: anywhere; }
+
+/* ==========================================================================
+   离线安装向导（#dlgBootstrap；bootstrap-panel.js）：逐步执行的步骤行
+   ========================================================================== */
+.bootstrap-hint {
+  font-size: 11px;
+  color: var(--muted);
+  margin-bottom: 12px;
+  line-height: 1.5;
+}
+
+.bootstrap-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.bs-row {
+  border: 1px solid var(--hud-border);
+  border-radius: var(--radius-md);
+  padding: 10px 12px;
+  background: var(--well-bg);
+}
+
+.bs-row-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.bs-chip {
+  font-size: var(--text-xs);
+  padding: 1px 7px;
+  border-radius: var(--radius-sm);
+  white-space: nowrap;
+  /* 着色胶囊：变体只设 --c */
+  color: var(--c);
+  background: color-mix(in srgb, var(--c) 13%, transparent);
+}
+
+.bs-chip-pending { --c: var(--gray); }
+.bs-chip-running { --c: var(--cyan); }
+.bs-chip-success { --c: var(--green); }
+.bs-chip-fail { --c: var(--red); }
+
+.bs-name {
+  font-size: var(--text-sm);
+  color: var(--text);
+  font-weight: 500;
+}
+
+.bs-kind {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--muted);
+}
+
+/* 执行 / 复制按钮是 .text-btn：悬停与禁用态都用 styles.css 的原语 */
+.bs-actions {
+  margin-left: auto;
+  display: flex;
+  gap: 12px;
+}
+
+.bs-summary {
+  margin-top: 8px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--muted);
+  word-break: break-all;
+  white-space: pre-wrap;
+  line-height: 1.5;
+}
+
+/* ---- 备份与迁移（app/settings-backup.js，v2.64）：两行动作 + 就地展开的导入预览。布局沿用「出网」的 eg-* 原语，
+   这里只补预览列表与说明的几条。 ---- */
+.settings-backup { display: grid; gap: var(--space-3); padding: 0 16px 16px; }
+.bk-panel { display: grid; gap: var(--space-2); padding: 10px 12px; border: 1px solid var(--hud-border); border-radius: var(--radius-md); background: var(--card-bg); }
+.bk-ssh { margin: 0; color: var(--muted-strong); font-size: var(--text-xs); line-height: 1.5; }
+.bk-info { display: grid; gap: 4px; }
+.bk-info .eg-note, .bk-panel .eg-note { margin: 0; line-height: 1.5; overflow-wrap: anywhere; }
+.bk-info code, .bk-done code { font: 11px var(--font-mono); color: var(--text-strong); overflow-wrap: anywhere; }
+.bk-excluded { margin: 0; padding-left: 18px; color: var(--muted); font-size: var(--text-xs); line-height: 1.6; }
+.bk-group { display: grid; gap: 6px; }
+.bk-group-title { margin: 0; color: var(--text-strong); font-size: var(--text-sm); font-weight: 600; }
+.bk-warn { margin: 0; color: var(--yellow); font-size: var(--text-xs); line-height: 1.5; }
+.bk-changes { list-style: none; margin: 0; padding: 0; border: 1px solid var(--hud-border); border-radius: var(--radius-md); }
+.bk-change { display: grid; gap: 3px; padding: 7px 10px; }
+.bk-change + .bk-change { border-top: 1px solid var(--hud-border); }
+.bk-change.is-unavailable { opacity: 0.6; }
+.bk-change-head { display: flex; align-items: center; gap: 8px; font-size: var(--text-sm); color: var(--text-strong); cursor: pointer; }
+.bk-change.is-unavailable .bk-change-head { cursor: default; }
+.bk-kind { flex: none; padding: 0 6px; border: 1px solid var(--hud-border-strong); border-radius: 999px; color: var(--muted-strong); font-size: 11px; line-height: 18px; }
+.bk-kind[data-kind="removed"] { color: var(--red); }
+.bk-change.is-ports .bk-kind { color: var(--yellow); }
+.bk-label { min-width: 0; overflow-wrap: anywhere; }
+.bk-values { display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap; padding-left: 24px; color: var(--muted); font-size: var(--text-xs); }
+.bk-values code { font: 11px var(--font-mono); color: var(--muted-strong); overflow-wrap: anywhere; }
+.bk-change-note { margin: 0; padding-left: 24px; color: var(--muted); font-size: var(--text-xs); line-height: 1.5; }
+.bk-change.is-ports .bk-change-note { color: var(--yellow); }
+.bk-empty, .bk-done { margin: 0; color: var(--text-strong); font-size: var(--text-sm); line-height: 1.5; }
+
+/* 团队缓存一行（配置浮层与引导共用的 .settings-cli） */
+.cli-cache { display: grid; gap: 6px; margin-top: var(--space-2); padding: 10px 12px; border: 1px dashed var(--hud-border); border-radius: 8px; font-size: var(--text-sm); }
+.cli-cache.has-cache { border-style: solid; border-color: color-mix(in srgb, var(--cyan) 40%, transparent); }
+.cli-cache-text { margin: 0; color: var(--muted-strong); }
+.cli-cache-admin { display: flex; flex-wrap: wrap; align-items: baseline; gap: 10px; }
+.cli-cache-admin > .cli-cache-label { color: var(--muted); font-size: var(--text-xs); }

@@ -1,0 +1,328 @@
+/* events.css —— 事件列表：事件视图（#incidentList 逐条卡片、#incidentSummary 已恢复按类型汇总）与概览
+   「需要处理的事件」摘要（#overviewIncidentSummary）共用一套语义色。实时日志流（同在事件视图）见 logs.css。
+   归属：render/incidents.js / app/incidents-controller.js。
+   断点：>=1200 桌面默认；<1200 服务器名换行；<768 头部纵排。汇总表按自身宽度（容器查询）收起次要后缀。 */
+
+.incident-list, .overview-incident-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: var(--space-3) var(--space-4) var(--space-4);
+}
+/* 空态文案（设置页「版本与更新」的读取占位也复用 .incidents-empty） */
+.incidents-empty, .overview-events-empty {
+  color: var(--muted);
+  font-size: var(--text-sm);
+  padding: 4px 0;
+}
+.incidents-overflow {
+  color: var(--muted);
+  font-size: 12px;
+  margin: 4px 0 0;
+}
+.incident-item, .overview-incident-row {
+  border: 1px solid var(--hud-border);
+  border-left-width: 3px;
+  border-radius: var(--radius-md);
+  padding: 10px 14px;
+  background: var(--card-bg);
+}
+.incident-item.sev-error, .overview-incident-row.sev-error { border-left-color: var(--red); }
+.incident-item.sev-warn, .overview-incident-row.sev-warn { border-left-color: var(--yellow); }
+.incident-item.sev-info, .overview-incident-row.sev-info { border-left-color: var(--gray); }
+.incident-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.incident-sev {
+  font-size: var(--text-xs);
+  font-weight: 500;
+  color: var(--muted-strong);
+  background: rgba(var(--surface-rgb), 0.07);
+  border-radius: var(--radius-sm);
+  padding: 0 7px;
+}
+.sev-error .incident-sev { color: var(--red); background: color-mix(in srgb, var(--red) 13%, transparent); }
+.sev-warn .incident-sev { color: var(--yellow); background: color-mix(in srgb, var(--yellow) 13%, transparent); }
+.incident-title { font-size: var(--text-base); font-weight: 600; color: var(--text-strong); }
+.incident-server { font-size: var(--text-xs); color: var(--muted); }
+/* 标题行右侧：未解决的「已持续 40 分钟」/ 事件簇的时间段。服务器名紧跟标题，不再单独占一行 */
+.incident-when { margin-left: auto; font-size: var(--text-xs); color: var(--muted-strong); font-variant-numeric: tabular-nums; }
+.incident-when-sub { color: var(--muted); }
+/* 「25 分钟内第 8 次」：同类短时间内反复发生，比次数本身更说明问题 */
+.incident-recur { color: var(--yellow); }
+.incident-meta, .incident-meta-inline {
+  display: flex;
+  gap: 14px;
+  flex-wrap: wrap;
+  font-size: var(--text-xs);
+  color: var(--muted);
+  margin-top: 4px;
+  font-variant-numeric: tabular-nums;
+}
+.incident-flag {
+  font-size: var(--text-xs);
+  color: var(--cyan);
+}
+/* 事件的一句详情（目前只有磁盘超阈值：近 24 小时作业目录的增长 + 按这个速度几天写满） */
+.incident-detail {
+  margin: 6px 0 0;
+  font-size: var(--text-sm);
+  line-height: 1.6;
+  color: var(--muted-strong);
+  overflow-wrap: anywhere;
+}
+.incident-actions {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-top: 8px;
+}
+.incident-actions .text-btn { min-height: 28px; }
+
+/* ---- 建议处置 / 处置结果（render/incidents.js 的 incidentCardHtml）----
+   一行说明 + 一个按钮；没有一键处置时只给「下一步」。颜色只用语义令牌，三套皮肤自动跟随。 */
+.incident-remedy {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 8px;
+  padding: 7px 10px;
+  border-radius: var(--radius-sm);
+  background: rgba(var(--surface-rgb), 0.05);
+  border: 1px solid var(--hud-border);
+}
+.incident-remedy p, .incident-disp {
+  margin: 0;
+  font-size: var(--text-sm);
+  line-height: 1.55;
+  color: var(--muted-strong);
+  overflow-wrap: anywhere;
+}
+.incident-remedy p { flex: 1; }
+.incident-remedy b, .incident-disp b { font-weight: 600; color: var(--text-strong); margin-right: 8px; }
+.incident-remedy .btn { flex: none; padding: 4px 12px; font-size: var(--text-sm); }
+.incident-disp { margin-top: 6px; }
+.incident-disp[data-tone="ok"] { color: var(--green); }
+.incident-disp[data-tone="warn"] { color: var(--yellow); }
+
+/* ---- 前后经过（incident-insights.js 的 incidentContextHtml）：竖排小时间轴，圆点按语气着色 ---- */
+.ev-ctx-panel {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px dashed var(--hud-border);
+}
+.ev-ctx-head, .ev-ctx-note, .ev-ctx-empty { margin: 0; font-size: var(--text-xs); color: var(--muted); }
+.ev-ctx-note { margin-top: 4px; }
+.ev-ctx {
+  list-style: none;
+  margin: 6px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 3px;
+}
+.ev-ctx li {
+  display: grid;
+  grid-template-columns: 10px 6.5em 1fr;
+  align-items: baseline;
+  gap: 8px;
+  font-size: var(--text-sm);
+  color: var(--muted-strong);
+}
+.ev-ctx li::before {
+  content: "";
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--tone, var(--gray));
+  align-self: center;
+}
+.ev-ctx li[data-tone="bad"] { --tone: var(--red); }
+.ev-ctx li[data-tone="ok"] { --tone: var(--green); }
+.ev-ctx li[data-tone="warn"] { --tone: var(--yellow); }
+.ev-ctx li[data-tone="info"] { --tone: var(--cyan); }
+.ev-ctx li[data-self="true"] span { color: var(--text-strong); font-weight: 600; }
+.ev-ctx time { font-variant-numeric: tabular-nums; color: var(--muted); font-size: var(--text-xs); }
+.ev-ctx em { font-style: normal; font-size: var(--text-xs); color: var(--muted); }
+.ev-ctx .ev-ctx-gap { display: block; padding-left: calc(6.5em + 26px); font-size: var(--text-xs); color: var(--muted); }
+.ev-ctx .ev-ctx-gap::before { display: none; }
+
+/* ---- 事件簇（已恢复「逐条」）：同类 15 分钟内接连发生的合成一张卡 ---- */
+.ev-count {
+  font-size: var(--text-xs);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-strong);
+  border: 1px solid var(--hud-border-strong);
+  border-radius: var(--radius-sm);
+  padding: 0 6px;
+}
+.ev-cluster-members {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 2px;
+}
+.ev-cluster-members li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 14px;
+  font-size: var(--text-xs);
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  padding: 3px 0;
+  border-top: 1px solid var(--hud-border);
+}
+.ev-cluster-members .ev-member-when { color: var(--muted-strong); min-width: 150px; }
+.ev-cluster-members .ev-disp { color: var(--muted-strong); }
+.ev-cluster-members .text-btn { min-height: 24px; font-size: var(--text-xs); }
+
+@container content (max-width: 719px) {
+  .incident-head { flex-direction: column; align-items: flex-start; gap: 4px; }
+  .incident-when { margin-left: 0; }
+  .incident-remedy { flex-direction: column; align-items: flex-start; }
+  .ev-ctx li { grid-template-columns: 10px 1fr; }
+  .ev-ctx time { grid-column: 2; }
+  .ev-ctx li > span { grid-column: 2; }
+  .ev-ctx .ev-ctx-gap { padding-left: 18px; }
+}
+
+/* ---- 已恢复 · 按类型汇总（#incidentSummary，render/incidents.js 的 incidentSummaryHtml）----
+   定宽表格（table-layout: fixed）+ 百分比列：分布条随列宽伸缩；文字放不下时换行，不截成省略号，
+   也不出横向滚动。表格区域窄于 900px 时收起「N 分钟前」「最长 …」这类次要后缀，把宽度让给主信息。 */
+.panel-incidents .panel-header .ev-mode { margin-left: auto; flex-shrink: 0; }
+.ev-agg {
+  container-type: inline-size;
+  padding: var(--space-3) var(--space-4);
+}
+.ev-table {
+  width: 100%;
+  table-layout: fixed;
+  border-collapse: collapse;
+  font-size: var(--text-sm);
+}
+/* 表格标题只给读屏：视觉上由面板标题与分段控件承担 */
+.ev-caption {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+.ev-col-type { width: 31%; }
+.ev-col-server { width: 10%; }
+.ev-col-count { width: 8%; }
+.ev-col-last { width: 18%; }
+.ev-col-duration { width: 19%; }
+.ev-col-strip { width: 14%; }
+.ev-table th {
+  padding: 4px 10px 6px;
+  border-bottom: 1px solid var(--hud-border);
+  color: var(--label-dim);
+  font-size: var(--text-xs);
+  font-weight: 500;
+  text-align: left;
+  white-space: nowrap;
+}
+.ev-table td {
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--hud-border);
+  color: var(--text-soft);
+  font-variant-numeric: tabular-nums;
+  vertical-align: middle;
+}
+/* 展开出来的逐条记录（子行）：缩进到标题文字的位置，底色下沉一层 */
+.ev-child td { padding: 0 10px 10px 36px; background: var(--well-bg); }
+.ev-row { cursor: pointer; }
+.ev-row:hover td { background: rgba(var(--surface-rgb), 0.03); }
+/* 严重度：行首一道状态色（与事件卡片的左色条同一语言）+ 文字标签 */
+.ev-row.sev-error td:first-child { box-shadow: inset 3px 0 0 var(--red); }
+.ev-row.sev-warn td:first-child { box-shadow: inset 3px 0 0 var(--yellow); }
+.ev-row.sev-info td:first-child { box-shadow: inset 3px 0 0 var(--gray); }
+/* 行首的展开按钮是键盘与读屏的入口；鼠标点整行都能展开 */
+.ev-toggle {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.ev-caret { flex: none; align-self: center; width: 10px; color: var(--muted-strong); font-size: 11px; line-height: 1; text-align: center; }
+.ev-row[data-open="true"] .ev-caret { transform: rotate(90deg); }
+.ev-toggle .incident-sev { flex: none; }
+/* 标题放不下时在「·」前后的空格处换行，不把词拆开；连空格都没有的超长名字才强行断开 */
+.ev-title { min-width: 0; color: var(--text-strong); font-weight: 600; word-break: keep-all; overflow-wrap: anywhere; }
+.ev-table th.ev-num, .ev-table td.ev-num { text-align: right; }
+.ev-table td.ev-num { color: var(--text-strong); font-weight: 600; white-space: nowrap; }
+.ev-table td.ev-num.is-zero { color: var(--muted); font-weight: 400; }
+/* 主信息与次要后缀各自不拆行；列宽不够时后缀整体换到下一行 */
+.ev-main, .ev-sub { white-space: nowrap; }
+.ev-sub { color: var(--muted); font-size: var(--text-xs); }
+/* 每天一格的发生分布：单一色相由浅到深；斜纹 = 记录已清理（不是没发生） */
+.ev-strip { display: flex; gap: 2px; width: 100%; max-width: 150px; }
+.ev-strip i { flex: 1 1 0; min-width: 2px; height: 14px; border-radius: 2px; background: rgba(var(--surface-rgb), 0.06); }
+.ev-strip i[data-heat="1"] { background: color-mix(in srgb, var(--cyan) 22%, var(--panel)); }
+.ev-strip i[data-heat="2"] { background: color-mix(in srgb, var(--cyan) 42%, var(--panel)); }
+.ev-strip i[data-heat="3"] { background: color-mix(in srgb, var(--cyan) 66%, var(--panel)); }
+.ev-strip i[data-heat="4"] { background: var(--cyan); }
+.ev-strip i[data-heat="none"] { background: repeating-linear-gradient(135deg, var(--hud-border-strong) 0 2px, var(--well-bg) 2px 4px); }
+.ev-strip i:hover { outline: 1px solid var(--text-soft); outline-offset: 1px; }
+.ev-children { margin: 0; padding: 0; list-style: none; }
+.ev-children li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 16px;
+  padding: 6px 0;
+  border-bottom: 1px solid rgba(var(--surface-rgb), 0.05);
+  color: var(--muted-strong);
+  font-size: var(--text-xs);
+}
+.ev-children li:last-child { border-bottom: 0; }
+.ev-when { min-width: 13em; color: var(--text-soft); }
+.ev-children .text-btn { margin-left: auto; font-size: var(--text-xs); }
+.ev-more { color: var(--muted); }
+/* 跳到别处的入口（查看这一类全部记录 / 回到全部类型）用强调色，与用量页的筛选清除一致 */
+.ev-more .text-btn, .ev-filter-note .text-btn { color: var(--cyan); }
+p.ev-more { margin: 0; padding: 8px 0 0; font-size: var(--text-xs); }
+.ev-legend {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  margin: var(--space-2) 0 0;
+  color: var(--label-dim);
+  font-size: var(--text-xs);
+}
+.ev-strip-key { width: auto; }
+.ev-strip-key i { flex: none; width: 10px; height: 10px; }
+.ev-strip-key i:hover { outline: 0; }
+.ev-legend-note { margin-left: auto; }
+/* 逐条视图只看某一类时，列表最上面的说明与「显示全部类型」 */
+.ev-filter-note {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 12px;
+  margin: 0;
+  color: var(--muted-strong);
+  font-size: var(--text-sm);
+}
+@container (max-width: 900px) {
+  .ev-sub { display: none; }
+  .ev-col-type { width: 38%; }
+  .ev-col-server { width: 11%; }
+  .ev-col-last { width: 14%; }
+  .ev-col-duration { width: 15%; }
+}

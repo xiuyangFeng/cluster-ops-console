@@ -1,0 +1,635 @@
+/* styles.css —— 全局基础层：设计令牌（深 / 浅两套主题）、reset 与排版、焦点环、减弱动画、
+   滚动条、窗口隐藏省电闸，以及跨区块共用的原语（面板、按钮、文字按钮、下拉、徽标、芯片、
+   进度条、空状态、加载骨架、数据过期弱化）。
+   各界面区块的样式在 assets/css/ 下按区块分文件，index.html 按下列顺序在本文件之后加载
+   （同权重选择器后加载者胜出，区块文件可以覆写这里的原语）：
+     shell.css        侧边栏（品牌 / 通道状态 / 搜索 / 视图 / 诊断 / 操作）/ 吸顶页头条 / 告警横幅与注意力队列 / 信号与热更新横幅
+     overview.css     活链路与体检卡、Agent 卡片、服务器简报卡
+     tiles.css        服务器视图（资源与负载面板、环境校验、连接与修复）、趋势图、设置页本地数据 tile
+     logs.css         日志行（日志浮层与实时日志流共用）、日志过滤与摘要、自动 / 远端徽标
+     events.css       事件列表（事件视图 + 概览摘要）
+     diagnostics.css  时间线复盘、端点检测、Doctor 输出、更新日志
+     dialogs.css      浮层骨架、通道控制浮层、命令面板、Toast、一键修复 runbook 与远端动作确认
+     settings.css     配置浮层（服务器管理、配置来源、版本、个人配置 JSON）、离线安装向导
+   颜色一律走下面的令牌；浅色主题只改令牌，区块文件不写主题分支。 */
+
+:root {
+  color-scheme: dark;
+  /* v2.52 外观：四级表面（画布 → 面板 → 卡片 → 浮层）+ 四档文字（对比度相对面板全部 ≥ 4.5:1）；
+     颜色只表达状态，不做发光与装饰。令牌名沿用旧名（--cyan 即强调色、--hud-* 即面板描边），各模块 CSS 无需改引用。 */
+  --bg: #0b0c0e;
+  --panel: #131418;
+  --panel-hover: #17181d;
+  --border: #24262c;
+  --text: #ececef;
+  --muted: #9a9ba5;
+  --green: #4cc38a;
+  --cyan: #86aaf5;
+  --accent-fill: #3567c8;
+  --yellow: #e2a54a;
+  --red: #f2766b;
+  --gray: #6f717b;
+  --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Segoe UI", sans-serif;
+  --font-display: "SF Pro Display", -apple-system, BlinkMacSystemFont, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Segoe UI", sans-serif;
+  --font-mono: ui-monospace, "SF Mono", Menlo, Monaco, Consolas, monospace;
+
+  /* 面板描边与圆角（旧 HUD 令牌名保留） */
+  --hud-border: #1f2126;
+  --hud-border-strong: #2e3138;
+  --radius-hud: 12px;
+  --label-dim: #81838d;
+
+  /* 4基数空间令牌 */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-7: 32px;
+
+  /* 圆角令牌 */
+  --radius-sm: 6px;
+  --radius-md: 7px;
+
+  /* 阴影：只用于浮层（对话框/toast/吸顶条）；面板只有 1px 内高光（--panel-shadow） */
+  --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --shadow-2: 0 4px 12px rgba(0, 0, 0, 0.35);
+  --panel-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.025), 0 1px 2px rgba(0, 0, 0, 0.3);
+
+  /* 字体大小令牌 */
+  --text-xs: 11.5px;
+  --text-sm: 12.5px;
+  --text-base: 13px;
+  --text-lg: 15px;
+  --text-xl: 20px;
+
+  /* 外观令牌：所有"半透明表面 / 强调文字 / 实底"都走这里，浅色主题只改令牌。
+     --surface-rgb 配合 rgba(var(--surface-rgb), a) 用，深色=白色微光叠加，浅色=墨色微光叠加。 */
+  --surface-rgb: 255, 255, 255;
+  --panel-solid-2: #0e0f12;
+  --text-strong: #f6f6f7;
+  --text-soft: #c4c5cc;
+  --text-softer: #acadb5;
+  --muted-strong: #b0b1ba;
+  --red-soft: #f6a59d;
+  --shadow-dialog: 0 24px 64px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(255, 255, 255, 0.05);
+  --shadow-toast: 0 10px 30px rgba(0, 0, 0, 0.45), 0 0 0 1px rgba(255, 255, 255, 0.05);
+  --card-bg: #17181d;
+  --btn-bg: #1a1b20;
+  --well-bg: #0f1013;
+  --control-bg: #16171c;
+  --inset-bg: #0e0f12;
+  --overlay-bg: rgba(11, 12, 14, 0.6);
+  --backdrop-bg: rgba(0, 0, 0, 0.55);
+  --backdrop-bg-2: rgba(0, 0, 0, 0.5);
+  --toast-bg: #1a1b20;
+  --card-bg-selected: #1a1f29;
+
+  /* v2.52 外壳与交互表面 */
+  --sidebar-bg: #0b0c0e;
+  --surface-raised: #1a1b20;     /* 浮层、提示、分段控件的选中项 */
+  --hairline: rgba(255, 255, 255, 0.06);
+  --hover-bg: rgba(255, 255, 255, 0.045);
+  --active-bg: rgba(255, 255, 255, 0.075);
+  --skeleton-base: #1e2026;
+  --skeleton-shine: rgba(255, 255, 255, 0.05);
+
+  /* 动效曲线：standard 用于开合 / 位移，out 用于入场（快起慢收） */
+  --ease-standard: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --ease-out: cubic-bezier(0.22, 0.8, 0.24, 1);
+}
+
+/* 外观：浅色。暖白底 + 纯白面板，状态色取深一档保证白底对比度；
+   深色 = 不带 data-theme 的默认 :root；跟随系统由 theme.js 解析成这两者之一。 */
+body[data-theme="light"] {
+  color-scheme: light;
+  --bg: #f6f6f4;
+  --panel: #ffffff;
+  --panel-hover: #fafaf9;
+  --panel-solid-2: #f7f7f5;
+  --border: #e4e4e1;
+  --text: #18181b;
+  --text-strong: #0f0f11;
+  --text-soft: #3f3f46;
+  --text-softer: #52525b;
+  --muted: #62626b;
+  --muted-strong: #4d4d55;
+  --label-dim: #76767f;
+  --surface-rgb: 20, 20, 24;
+  --cyan: #2f6bd0;
+  --accent-fill: #2f6bd0;
+  --green: #1d8048;
+  --yellow: #9a6400;
+  --red: #c9372c;
+  --red-soft: #b3261e;
+  --gray: #74747c;
+  --hud-border: #e7e7e4;
+  --hud-border-strong: #d6d6d2;
+  --shadow-1: 0 1px 2px rgba(20, 20, 24, 0.06);
+  --shadow-2: 0 4px 12px rgba(20, 20, 24, 0.08);
+  --panel-shadow: 0 1px 2px rgba(20, 20, 24, 0.04);
+  --shadow-dialog: 0 24px 64px rgba(20, 20, 24, 0.16), 0 0 0 1px rgba(20, 20, 24, 0.06);
+  --shadow-toast: 0 10px 30px rgba(20, 20, 24, 0.12), 0 0 0 1px rgba(20, 20, 24, 0.05);
+  --card-bg: #fafaf9;
+  --btn-bg: #ffffff;
+  --well-bg: #f7f7f5;
+  --control-bg: #ffffff;
+  --inset-bg: #f3f3f1;
+  --overlay-bg: rgba(246, 246, 244, 0.6);
+  --backdrop-bg: rgba(20, 20, 24, 0.28);
+  --backdrop-bg-2: rgba(20, 20, 24, 0.24);
+  --toast-bg: #ffffff;
+  --card-bg-selected: #f0f4fc;
+  --sidebar-bg: #f3f3f1;
+  --surface-raised: #ffffff;
+  --hairline: rgba(20, 20, 24, 0.07);
+  --hover-bg: rgba(20, 20, 24, 0.045);
+  --active-bg: rgba(20, 20, 24, 0.07);
+  --skeleton-base: #efefec;
+  --skeleton-shine: rgba(255, 255, 255, 0.7);
+}
+
+/* 派生令牌：值里引用了主题色的令牌声明在 body 上（与浅色块同一元素）。自定义属性按计算值继承，
+   写在 :root 会先用深色的 --cyan 算好再原样继承下来，浅色主题改了基色也跟不上。 */
+body {
+  --border-focus: color-mix(in srgb, var(--cyan) 70%, transparent);
+  /* 状态淡底：徽标 / 空状态图标 / 计数胶囊的底色，随主题的状态色走 */
+  --tint-ok: color-mix(in srgb, var(--green) 12%, transparent);
+  --tint-warn: color-mix(in srgb, var(--yellow) 13%, transparent);
+  --tint-crit: color-mix(in srgb, var(--red) 13%, transparent);
+  --tint-accent: color-mix(in srgb, var(--cyan) 13%, transparent);
+}
+
+/* ==========================================================================
+   Reset 与排版
+   ========================================================================== */
+
+/* 注意：通配 reset 会把 <dialog> 的 UA margin:auto 清零，浮层居中靠 dialogs.css 的
+   .hud-dialog { margin: auto } 显式恢复。 */
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+/* [hidden] 一律隐藏：区块样式里的 display（.panel 的 flex、表单 label 的 grid 等）会压过
+   UA 的 [hidden] 样式，JS 设了 hidden 却照样显示。全局收口，区块文件不再各写 .x[hidden]。 */
+[hidden] {
+  /* biome-ignore lint/complexity/noImportantStyles: 必须压过任意区块选择器上的 display */
+  display: none !important;
+}
+
+body {
+  background-color: var(--bg);
+  color: var(--text);
+  font-family: var(--font-sans);
+  font-size: var(--text-base);
+  line-height: 1.55;
+  min-height: 100vh;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+h1 {
+  font-size: var(--text-lg);
+  font-weight: 600;
+  color: var(--text-strong);
+}
+
+pre {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--text-soft);
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+/* 统一焦点环。outline 用 !important 压掉各处 `:focus { outline: none }`
+   （.cmd-input 等）；outline-offset 不加——它需要让
+   settings.css 的 -2px（对话框内滚动容器会把外扩焦点环裁掉）按权重生效。 */
+*:focus-visible {
+  outline: 2px solid var(--border-focus) !important;
+  outline-offset: 2px;
+}
+
+/* 可达性减弱动画（各区块的动画规则另外都包在 no-preference 守卫里，这里是全局兜底） */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* webkit 滚动条样式统一与半透明处理 */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(var(--surface-rgb), 0.12);
+  border-radius: var(--radius-sm);
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(var(--surface-rgb), 0.22);
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+
+/* 降级 / 故障 / 进行中的呼吸节奏：活链路断点标记（overview.css）与 runbook 当前步（dialogs.css）共用 */
+@keyframes chainPulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+
+/* ==========================================================================
+   面板
+   ========================================================================== */
+.panel {
+  background: var(--panel);
+  border: 1px solid var(--hud-border);
+  border-radius: var(--radius-hud);
+  box-shadow: var(--panel-shadow);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+  position: relative;
+}
+
+.panel-header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 50px;
+  padding: 10px 18px;
+  border-bottom: 1px solid var(--hairline);
+}
+.panel-header h2 { font-size: 14px; font-weight: 600; letter-spacing: 0.01em; color: var(--text-strong); }
+.panel-hint { color: var(--muted); font-size: 12px; }
+/* 面板高度随内容自适应(整页滚动);仅日志流保留固定高度的内部滚动窗口 */
+.panel > :not(.panel-header) { min-width: 0; }
+
+/* 两端对齐的面板头：左侧标题 + 徽标组，右侧动作 */
+.panel-header.flex-header { justify-content: space-between; }
+.header-left-side {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+/* ==========================================================================
+   按钮
+   ========================================================================== */
+.btn {
+  appearance: none;
+  border: 1px solid var(--hud-border-strong);
+  background: var(--btn-bg);
+  color: var(--text);
+  padding: 7px 14px;
+  border-radius: 8px;
+  font-family: var(--font-sans);
+  font-size: var(--text-base);
+  font-weight: 500;
+  line-height: 1.4;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.btn:hover {
+  background: var(--panel-hover);
+  border-color: var(--hud-border-strong);
+}
+
+.btn-primary {
+  background: var(--accent-fill);
+  border-color: var(--accent-fill);
+  color: #fff;
+}
+.btn-primary:hover {
+  background: color-mix(in srgb, var(--accent-fill) 88%, #000);
+  border-color: color-mix(in srgb, var(--accent-fill) 88%, #000);
+}
+
+.btn-warning {
+  border-color: color-mix(in srgb, var(--yellow) 45%, var(--hud-border));
+  background: color-mix(in srgb, var(--yellow) 10%, var(--btn-bg));
+  color: var(--text-strong);
+}
+.btn-warning:hover {
+  border-color: color-mix(in srgb, var(--yellow) 65%, var(--hud-border));
+  background: color-mix(in srgb, var(--yellow) 16%, var(--btn-bg));
+}
+
+.btn-danger { color: var(--red); }
+.btn-danger:hover {
+  border-color: color-mix(in srgb, var(--red) 55%, var(--hud-border));
+  background: color-mix(in srgb, var(--red) 10%, var(--btn-bg));
+}
+
+/* 次级按钮只收紧内边距（须在 .btn 之后：同权重靠顺序胜出） */
+.btn-secondary {
+  padding: 6px 12px;
+}
+
+/* 按钮限流及禁用保护态。此处不加 !important：对话框等局部若要覆写光标样式，
+   靠选择器权重即可。 */
+.btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+/* 无底色的文字按钮（面板头"查看全部"、日志导出、事件确认等） */
+.text-btn {
+  background: none;
+  border: none;
+  color: var(--muted);
+  cursor: pointer;
+  font: inherit;
+  font-size: var(--text-sm);
+  padding: 2px 0;
+  transition: color 0.15s ease;
+}
+
+.text-btn:hover {
+  color: var(--cyan);
+}
+
+/* 须在 :hover 之后：同权重靠顺序压掉悬停变色 */
+.text-btn:disabled {
+  color: var(--muted);
+  cursor: default;
+  opacity: 0.6;
+}
+
+/* 通用下拉 / 输入框外观 */
+.styled-select {
+  background: var(--control-bg);
+  border: 1px solid var(--hud-border-strong);
+  color: var(--text);
+  font: inherit;
+  font-size: var(--text-sm);
+  padding: 4px 8px;
+  border-radius: 8px;
+  outline: none;
+  cursor: pointer;
+}
+
+/* ==========================================================================
+   徽标 / 芯片 / 进度条
+   ========================================================================== */
+.badge {
+  font-size: var(--text-xs);
+  background: rgba(var(--surface-rgb), 0.06);
+  color: var(--muted-strong);
+  padding: 1px 7px;
+  border-radius: var(--radius-sm);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+/* 芯片通用类（语气色；idle 与 Agent 卡片元信息行的中性灰字同色） */
+.chip {
+  display: inline-flex;
+  align-items: center;
+  font-size: var(--text-xs);
+  font-weight: 500;
+}
+.chip-ok { color: var(--green); }
+.chip-warn { color: var(--yellow); }
+.chip-error { color: var(--red); }
+.chip-idle { color: var(--muted); }
+/* 提示性信息（不是告警），如 Agent 卡片的「可更新到 x」 */
+.chip-info { color: var(--cyan); }
+/* 可点的 chip（「可更新到 x」→ 配置 → 命令行工具）：去掉按钮外观，只留下划线提示可点 */
+.chip-action {
+  appearance: none;
+  background: none;
+  border: 0;
+  padding: 0;
+  font-family: inherit;
+  cursor: pointer;
+  text-decoration: underline dotted;
+  text-underline-offset: 2px;
+}
+.chip-action:hover { text-decoration-style: solid; }
+.chip-action:focus-visible { outline: 2px solid var(--cyan); outline-offset: 2px; border-radius: 2px; }
+
+.bar-container {
+  height: 6px;
+  background: rgba(var(--surface-rgb), 0.08);
+  border-radius: 3px;
+  overflow: hidden;
+}
+/* 进度条：JS 以 transform: scaleX 表达进度（load-panel.js updateProgressBar），过渡只走合成层；
+   不要改成 width 过渡。GPU 行等仍用内联 width 的条不设 transform，这里的过渡对它们不生效。
+   圆角继承自轨道（.bar-container / .brief-metric-bar-container）。 */
+.bar-progress {
+  height: 100%;
+  border-radius: inherit;
+  transform-origin: left center;
+  transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.bar-progress.color-green { background: var(--green); }
+.bar-progress.color-yellow { background: var(--yellow); }
+.bar-progress.color-red { background: var(--red); }
+
+/* ==========================================================================
+   状态语气：state-* 类 / data-health 属性只给颜色变量，各处圆点自己取色
+   ========================================================================== */
+/* state-*（Agent 卡片、粘性条 chip、链路节点、时间线）→ --tone，圆点写 background: var(--tone, 缺省色)。
+   账号级 revoked / banned 与 missing / down 同属故障红：这是控制台最要紧的失败，各处必须一致。 */
+.state-ready, .state-ok { --tone: var(--green); }
+.state-degraded, .state-waiting, .state-warn, .state-auth-required { --tone: var(--yellow); }
+.state-down, .state-error, .state-missing, .state-revoked, .state-banned { --tone: var(--red); }
+.state-stopped, .state-skipped, .state-setup { --tone: var(--gray); }
+/* 通道健康（body 与粘性条的 data-health）另用 --health：body 上的值会被整页继承，
+   与 --tone 共用会让没有 state-* 的圆点误染通道色；粘性条自带 data-health，不继承 body 的。 */
+[data-health] { --health: var(--gray); }
+[data-health="ready"] { --health: var(--green); }
+[data-health="degraded"], [data-health="waiting"] { --health: var(--yellow); }
+[data-health="down"] { --health: var(--red); }
+
+/* ==========================================================================
+   空状态（empty-state.js 的 emptyStateHtml）：图标 + 标题 + 正文 + 至多两个动作 + 说明。
+   语气 data-tone：ok 绿（好事）· wait 蓝（正在等）· neutral 灰（还没有）· error 红（取不到）。
+   紧凑型 .is-compact 一行排开（面板里只占一条）。
+   ========================================================================== */
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 36px 24px 40px;
+  text-align: center;
+}
+.empty-state-icon {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  margin-bottom: 8px;
+  border-radius: 12px;
+  color: var(--muted-strong);
+  background: var(--hover-bg);
+  box-shadow: inset 0 0 0 1px var(--hairline);
+}
+.empty-state-icon svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+.empty-state[data-tone="ok"] .empty-state-icon { color: var(--green); background: var(--tint-ok); }
+.empty-state[data-tone="wait"] .empty-state-icon { color: var(--cyan); background: var(--tint-accent); }
+.empty-state[data-tone="error"] .empty-state-icon { color: var(--red); background: var(--tint-crit); }
+.empty-state-title { font-size: 14px; font-weight: 600; color: var(--text-strong); }
+.empty-state-body { max-width: 46ch; font-size: var(--text-sm); line-height: 1.6; color: var(--muted); }
+.empty-state-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: var(--space-2); margin-top: 10px; }
+.empty-state-meta { margin-top: 6px; font-size: var(--text-xs); color: var(--label-dim); }
+.empty-state.is-compact { flex-direction: row; gap: var(--space-3); padding: 14px 18px; text-align: left; }
+.empty-state.is-compact .empty-state-icon { width: 32px; height: 32px; margin: 0; border-radius: 9px; flex: none; }
+.empty-state.is-compact .empty-state-icon svg { width: 16px; height: 16px; }
+.empty-state.is-compact .empty-state-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.empty-state.is-compact .empty-state-body { max-width: none; }
+.empty-state.is-compact .empty-state-actions { flex: none; margin: 0 0 0 auto; white-space: nowrap; }
+.empty-state.is-compact .empty-state-meta { display: none; }
+
+/* 列表空态占位（离线安装步骤 / 时间线 / 环境校验列表共用） */
+.bootstrap-list:empty::before,
+.timeline-list:empty::before {
+  content: "暂无数据";
+  display: block;
+  padding: var(--space-4);
+  color: var(--muted);
+  text-align: center;
+  font-size: var(--text-sm);
+}
+
+/* ==========================================================================
+   加载骨架（app/skeleton.js）：首次加载 / 切换查看的服务器时，面板先显示内容轮廓。
+   宿主 data-skeleton="loading" 时真实内容透明（仍参与布局，图表照常量尺寸），骨架绝对定位盖在面板头下方；
+   "revealing" 时内容 220ms 淡入、骨架 180ms 淡出。光带整块一道（transform），无底色的骨架改成形状呼吸。
+   ========================================================================== */
+[data-skeleton] { position: relative; }
+/* visibility 而不只是 opacity：骨架下面的旧内容（切换服务器时）点不到、Tab 不到、读屏也读不到；
+   仍参与布局，图表照常量尺寸。退场时 visibility 立即恢复、opacity 0→1 过渡。 */
+[data-skeleton="loading"] > :not(.skeleton, .panel-header) { opacity: 0; visibility: hidden; }
+[data-skeleton="revealing"] > :not(.skeleton, .panel-header) { transition: opacity 0.22s ease; }
+.skeleton {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 3;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-4) 18px;
+  overflow: hidden;
+  background: var(--panel);
+  border-radius: 0 0 var(--radius-hud) var(--radius-hud);
+  pointer-events: none;
+  transition: opacity 0.18s ease;
+}
+.skeleton.is-bare { padding: 0; background: transparent; border-radius: 0; }
+.skeleton.is-pending,
+.skeleton.is-leaving { opacity: 0; }
+@media (prefers-reduced-motion: no-preference) {
+  .skeleton::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(100deg, transparent 20%, var(--skeleton-shine) 50%, transparent 80%);
+    transform: translateX(-100%);
+    animation: skShimmer 1.5s ease-in-out infinite;
+  }
+  .skeleton.is-bare::after { display: none; }
+  .skeleton.is-bare .sk { animation: skPulse 1.5s ease-in-out infinite alternate; }
+  .skeleton.is-pending::after,
+  .skeleton.is-leaving::after,
+  .skeleton.is-bare.is-pending .sk,
+  .skeleton.is-bare.is-leaving .sk { animation: none; }
+}
+@keyframes skShimmer {
+  to { transform: translateX(100%); }
+}
+@keyframes skPulse {
+  to { opacity: 0.55; }
+}
+/* 形状（只在骨架里用） */
+.sk { display: block; flex: none; border-radius: var(--radius-sm); background: var(--skeleton-base); }
+.sk-line { height: 10px; border-radius: 5px; }
+.sk-line.is-lg { height: 14px; }
+.sk-line.is-dim { opacity: 0.6; }
+.sk-num { width: 72px; height: 26px; }
+.sk-num.is-xl { width: 64px; height: 32px; }
+.sk-pill { height: 30px; border-radius: 999px; }
+.sk-row { display: flex; align-items: center; gap: var(--space-3); }
+.sk-row.sk-end { justify-content: flex-end; }
+.sk-row.sk-top { align-items: flex-start; }
+.sk-row.sk-tr { height: 34px; border-bottom: 1px solid var(--hairline); }
+.sk-stack { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.sk-grow { flex: 1 1 auto; }
+.sk-grid { display: grid; gap: var(--space-3); }
+.sk-cols-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.sk-cols-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.sk-cols-4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.sk-cols-5 { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+.sk-cols-7 { grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 6px; }
+.sk-card { display: flex; flex-direction: column; gap: 10px; min-width: 0; padding: 14px; border: 1px solid var(--hairline); border-radius: 10px; }
+.sk-chain { gap: 0; padding: var(--space-3) 4px 0; }
+.sk-dests { margin: 56px 4px 0; gap: var(--space-2); }
+.sk-node { display: flex; flex-direction: column; align-items: center; gap: var(--space-2); width: 108px; }
+.sk-orb { width: 46px; height: 46px; border-radius: 50%; }
+.sk-link { flex: 1 1 auto; height: 2px; margin-top: -46px; }
+.sk-foot { display: flex; flex-direction: column; gap: var(--space-3); margin-top: auto; padding-top: var(--space-4); border-top: 1px solid var(--hairline); }
+.sk-seg { width: 90px; height: 20px; border-radius: 7px; }
+.sk-bar { flex: 1 1 auto; height: 10px; border-radius: 3px; }
+.sk-dot { width: 6px; height: 6px; border-radius: 50%; }
+.sk-spark { flex: 1 1 auto; height: 34px; margin-top: 18px; }
+.sk-card > .sk-spark { margin-top: 4px; }
+.sk-meter { height: 6px; }
+.sk-ring { width: 48px; height: 48px; border-radius: 50%; }
+.sk-stripe { width: 4px; height: 36px; border-radius: 2px; }
+.sk-cell { aspect-ratio: 1.4; border-radius: 5px; }
+.sk-plot { position: relative; flex: 1 1 auto; min-height: 200px; }
+.sk-gridline { position: absolute; left: 0; right: 0; height: 1px; opacity: 0.7; }
+.sk-curve { position: absolute; inset: 0; width: 100%; height: 100%; fill: none; stroke: var(--skeleton-base); stroke-width: 4; stroke-linecap: round; }
+
+/* 切换查看的服务器：受影响的面板回到骨架；服务器卡片区给出「正在切换」的指针与弱化 */
+body.is-switching-server { cursor: progress; }
+body.is-switching-server #serverBriefsContainer { opacity: 0.7; transition: opacity 0.15s ease; }
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+/* 数据通信阻断时的视觉过期弱化处理(statusbar/alert-banner 保持可交互，仅弱化面板内容)。
+   只降 opacity：此前叠加的 filter: blur 会让所有面板每帧走滤镜重绘，断网期间 GPU 空烧。 */
+body.data-stale .panel {
+  opacity: 0.45;
+  pointer-events: none;
+  transition: opacity 0.4s ease;
+}
+
+/* ---- 后台省电闸（v2.17）----
+   窗口隐藏（最小化/整窗遮挡/托盘收起）时 app.js 经 render/visibility.js 给 body 打
+   data-console-hidden 属性：暂停全部 CSS 动画（链路脉冲 / 转圈 / 日志淡入 / toast 等
+   各区块 keyframes 的所有引用处）并关掉过渡，隐藏期动画开销归零。
+   恢复可见移除属性后动画原地续播、过渡恢复，无视觉残留；唯一已知边界是 toast 的
+   隐匿动画（animationend 驱动移除）会顺延到恢复可见后自然播完再移除，属自愈行为。 */
+body[data-console-hidden] *,
+body[data-console-hidden] *::before,
+body[data-console-hidden] *::after {
+  animation-play-state: paused !important;
+  transition: none !important;
+}

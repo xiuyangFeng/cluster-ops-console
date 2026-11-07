@@ -1,0 +1,53 @@
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Node dependencies
+node_modules/
+# package-lock.json 必须入库：electron 虽已在 package.json 精确锁定 "43.2.0"，但锁文件
+# 还负责固定传递依赖与 registry 元数据。本项目的场景（离线安装、多人同集群、macOS 签名
+# 对 Electron 版本敏感）最经不起漂移，CI 也需要它才能 npm ci。
+
+# Local runtime status and logs
+*.log
+*.log.*
+*.pid
+work/*.log
+work/*.pid
+work/runtime/
+.codex-myserver-proxy/
+.codex-operations-console.log
+.codex-operations-console.pid
+
+# Build output (backups, checksums, build metadata)
+dist/
+
+# App packages and offline archives
+*.app/
+Codex Operations Console.app/
+codex-offline-*/
+node-offline/
+*.tar.gz
+*.zip
+*.tgz
+
+# 头脑风暴可视化伴侣临时文件
+.superpowers/
+
+# MCP 浏览器自动化的页面快照临时产物
+.playwright-mcp/
+work/codex-cli-offline-build/
+
+# 个人配置覆盖层(每人不同,不入库)
+config.local.json
+config.local.json.bak
+# 个人配置的写前备份（v2.64，源码运行时在仓库根，最近 5 份）
+config-backups/
+
+# Claude Code 子智能体的隔离 worktree（含嵌套 biome.json，绝不入库）
+.claude/worktrees/

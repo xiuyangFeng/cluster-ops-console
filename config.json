@@ -1,0 +1,68 @@
+{
+  "_comment": "公开版默认配置（导出公开快照时替换 config.json）。不预填任何服务器地址：首次打开时按引导填写服务器地址、SSH 端口和账号；之后都写在本机个人层 config.local.json，不改这个文件。",
+  "activeServerId": "server-01",
+  "activeAgentId": "codex",
+  "adminUsers": [],
+  "autoRepair": {
+    "enabled": true,
+    "observeOnly": false
+  },
+  "agents": [
+    {
+      "id": "codex",
+      "name": "Codex",
+      "command": "codex",
+      "diagnosticLabel": "Codex Doctor",
+      "endpointLabel": "ChatGPT Codex API",
+      "switchLabel": "Doctor",
+      "kind": "codex"
+    },
+    {
+      "id": "claude-code",
+      "name": "Claude Code",
+      "command": "claude",
+      "diagnosticLabel": "Claude Code 状态",
+      "endpointLabel": "Anthropic API",
+      "switchLabel": "Claude",
+      "kind": "claude-code"
+    },
+    {
+      "id": "claude-codewing",
+      "name": "Claude CodeWing",
+      "command": "reclaude",
+      "diagnosticLabel": "ReClaude 状态",
+      "endpointLabel": "Claude API",
+      "switchLabel": "ReClaude",
+      "kind": "reclaude",
+      "defaultEnabled": false
+    },
+    {
+      "id": "zcode",
+      "name": "Zcode",
+      "command": "zcode",
+      "diagnosticLabel": "Zcode 代理配置",
+      "endpointLabel": "Zcode 模型代理",
+      "switchLabel": "Server",
+      "kind": "zcode",
+      "defaultEnabled": false
+    }
+  ],
+  "servers": [
+    {
+      "id": "server-01",
+      "name": "我的服务器",
+      "host": "myserver",
+      "sshPort": 22,
+      "localPort": 8888,
+      "description": "首次打开按引导填写地址与账号",
+      "validationProfile": {
+        "remoteProxyTest": "curl -s -o /dev/null -w '%{http_code}' --max-time 8 -x http://127.0.0.1:{{remotePort}} https://api.openai.com/v1/models",
+        "agentVersionCommands": {
+          "codex": "codex --version",
+          "claude-codewing": "reclaude --version"
+        },
+        "workspaceSmokeCommand": "echo 'workspace ready'"
+      }
+    }
+  ]
+}
