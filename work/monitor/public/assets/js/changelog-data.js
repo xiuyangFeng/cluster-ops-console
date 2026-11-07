@@ -13,6 +13,11 @@
 //      找到且日期一致、两边都按日期降序、首条版本等于 package.json 当前版本。
 export const changelogData = [
   {
+    version: "v2.94.1", date: "2026-11-07", changes: [
+      { type: "fix", text: "测试在 Linux 与 Windows 上也全部通过，安装包可以由公开仓库的流水线正常构建。功能没有变化。" },
+    ],
+  },
+  {
     version: "v2.94.0", date: "2026-11-07", changes: [
       { type: "feat", text: "准备开源：另有一份不带任何服务器信息的公开版配置，首次打开按引导填写地址与账号；仓库里的集群地址与真实账号都换成了示例值。团队现有用法不变。" },
       { type: "feat", text: "Windows 上没有 OpenSSH 客户端时，接入引导里一键安装（确认一次管理员权限），装好后自动继续，不用重启；安装包也会在缺它时默认勾选安装。" },

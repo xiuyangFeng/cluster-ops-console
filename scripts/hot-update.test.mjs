@@ -587,7 +587,7 @@ test("smoke CLI: usage errors exit 2, smoke failure exits 1, pass exits 0 with a
   assert.match(lines.join("\n"), /冒烟失败：staged monitor 提前退出/);
 });
 
-test("--app：热更新指定位置的 .app，只认以应用名结尾的绝对路径", () => {
+test("--app：热更新指定位置的 .app，只认以应用名结尾的绝对路径", { skip: process.platform === "win32" ? "热更新 .app 只在 macOS 上用，路径按 POSIX 校验" : false }, () => {
   const app = "/Applications/Codex Operations Console.app";
   assert.equal(parseArgs(["--app", app]).opts.app, app);
   assert.equal(parseArgs([]).opts.app, "");

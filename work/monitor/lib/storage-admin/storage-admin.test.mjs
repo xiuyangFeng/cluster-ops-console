@@ -15,7 +15,8 @@ import { createStorageAdminStore } from "./store.mjs";
 
 const SOURCE = readFileSync(REMOTE_SCRIPT_FILE, "utf8");
 const PUB = `ssh-ed25519 ${"A".repeat(68)} someone@mac`;
-const hasPython = spawnSync("python3", ["--version"]).status === 0;
+// 服务器端脚本只跑在 Linux 上（fork / setsid / O_DIRECT）：Windows 的 CI 不跑它。
+const hasPython = process.platform !== "win32" && spawnSync("python3", ["--version"]).status === 0;
 
 function sandbox() {
   const base = realpathSync(mkdtempSync(path.join(os.tmpdir(), "sa-")));
@@ -129,12 +130,12 @@ test("配置：targets 逐条校验，坏条目丢弃；密钥路径展开 ~", (
   ]);
   assert.equal(isSafeRoot("/mnt/data1"), true);
   assert.equal(isSafeRoot("/mnt/$(id)"), false);
-  assert.equal(resolveIdentityFile({}, { homeDir: "/Users/x" }), "/Users/x/.ssh/id_ed25519_storage_admin");
-  assert.equal(resolveIdentityFile({ storageAdmin: { identityFile: "~/.ssh/k" } }, { homeDir: "/Users/x" }), "/Users/x/.ssh/k");
+  assert.equal(resolveIdentityFile({}, { homeDir: "/Users/x" }), path.join("/Users/x", ".ssh", "id_ed25519_storage_admin"));
+  assert.equal(resolveIdentityFile({ storageAdmin: { identityFile: "~/.ssh/k" } }, { homeDir: "/Users/x" }), path.join("/Users/x", ".ssh/k"));
 });
 
 test("SSH 参数：固定 root、禁用转发与复用、子命令白名单", () => {
-  const args = buildRootSshArgs({ host: "h", port: 22 }, "/k", "info");
+  const args = buildRootSshArgs({ host: "h", port: 22 }, "/k", "info", { platform: "darwin" });
   assert.deepEqual(args.slice(-4), ["-l", "root", "h", "info"]);
   assert.ok(args.includes("BatchMode=yes") && args.includes("StrictHostKeyChecking=yes") && args.includes("ControlPath=none"));
   assert.throws(() => buildRootSshArgs({ host: "h" }, "/k", "sh"));
@@ -333,7 +334,8 @@ test("读 inode 表：小 ext4 镜像（meta_bg、1K 块、uid_high）按 uid �
 test("远端脚本：usage-start 只认允许范围内的 ext 挂载点", { skip: !hasPython }, () => {
   const s = sandbox();
   try {
-    assert.equal(JSON.parse(s.run("usage-start", { mount: "/" })).code, "bad-mount");
+    // 允许范围外的挂载点（沙箱根所在的那块盘在 Linux 上是允许的，不能拿 / 当反例）
+    assert.equal(JSON.parse(s.run("usage-start", { mount: "/proc" })).code, "bad-mount");
     assert.equal(JSON.parse(s.run("usage-start", { mount: 5 })).code, "bad-mount");
     // 自测入口只在非 root 且直接调用时可用；经 SSH（SSH_ORIGINAL_COMMAND）不认
     assert.equal(JSON.parse(s.run(null, null, { original: "--test-inode-usage /etc/passwd" })).code, "bad-command");
