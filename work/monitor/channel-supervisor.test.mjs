@@ -1319,8 +1319,8 @@ function makeOrphanScenario({
   remoteListening = false,
   rateLimiter,
   tunnelOwnerId = null,
-  // 孤儿认领只在 POSIX 成立（win32 没有 ps，一律退回重试）。默认按 linux 跑，
-  // 让这组用例在任何 CI 宿主上断言同一套行为；win32 侧由下方专门的用例覆盖。
+  nativeWindowsList = false,
+  // 默认按 linux 跑，Windows 侧另验原生 CIM 清单路径。
   platform = "linux",
 } = {}) {
   const children = [];
@@ -1341,16 +1341,21 @@ function makeOrphanScenario({
     },
     // 第一次是冷启动的远端端口探测（必须失败才会走到 spawn）；之后每一次都是
     // 孤儿判定或下一拍 ensure 的复核，由 remoteListening 决定。
-    execFileImpl: async () => {
+    execFileImpl: async (command) => {
+      if (command === "powershell") {
+        scanned.push(true);
+        const rows = typeof sshProcesses === "function" ? sshProcesses(scanned.length) : sshProcesses;
+        return { code: 0, stdout: JSON.stringify(rows.map((p) => ({ ProcessId: p.pid, CommandLine: p.command }))) };
+      }
       probeCalls += 1;
       const failed = probeCalls === 1 || !remoteListening;
       return { code: failed ? 1 : 0, stdout: "", stderr: "", timedOut: false };
     },
-    listSshProcesses: async () => {
+    ...(nativeWindowsList ? {} : { listSshProcesses: async () => {
       scanned.push(true);
       // 允许按调用次序给不同清单：认领后再扫一次时模拟 pid 被复用 / 进程已退出。
       return typeof sshProcesses === "function" ? sshProcesses(scanned.length) : sshProcesses;
-    },
+    } }),
     killProcess: (pid, signal) => kills.push({ pid, signal }),
     getAutoRepair: () => autoRepair,
     ...(rateLimiter ? { rateLimiter } : {}),
@@ -1580,16 +1585,16 @@ test("孤儿接管: 认领的 pid 已被别的进程复用时拒绝杀（只放�
   assert.ok(scene.hasEvent("tunnel-adopted-skip-kill"));
 });
 
-test("孤儿接管: win32 一律不认领——没有 ps 就没有认领依据，猜着认比不认危险", async () => {
-  // 同一份"本机确实有一条签名完全吻合的孤儿 ssh"的场景，只把平台换成 win32：
-  // 必须退回普通失败退避，绝不写注册表、不发任何信号。
-  const scene = makeOrphanScenario({ platform: "win32" });
+test("孤儿接管: Windows 从 CIM 中认领已服务同一端口的 ssh.exe，不重启它", async () => {
+  const scene = makeOrphanScenario({ platform: "win32", nativeWindowsList: true,
+    sshProcesses: [{ pid: 5150, command: `"C:\\Windows\\System32\\OpenSSH\\ssh.exe" -N ${orphanSignature}` }],
+  });
   await scene.failForwardOnce();
 
-  assert.deepEqual(scene.adoptions(), [], "win32 不得把任何 pid 登记成自己的隧道");
+  assert.equal(scene.adoptions()[0].pid, 5150);
+  assert.equal(scene.scanned.length, 1);
   assert.deepEqual(scene.kills, []);
-  assert.equal(scene.controller.getState().adoptedPid, null);
-  assert.ok(scene.controller.getState().tunnelNextRetryTime > 0, "认领不成立时必须照常退避");
+  assert.equal(scene.controller.getState().adoptedPid, 5150);
 });
 
 async function coldIdentityFixture(t) {

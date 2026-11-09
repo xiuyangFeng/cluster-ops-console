@@ -8,6 +8,57 @@ import { createChannelLifecycle, matchesManagedProcess } from "./channel-lifecyc
 
 const FIXED_NOW = 1_700_000_000_000;
 
+test("spawnSupervisor: 在册存活进程直接复用；无法验证时拒绝再 spawn 或覆写登记", async () => {
+  const h = createHarness();
+  h.deps.registry.verifyProcess = async () => ({ verified: true, meta: { pid: 41376 } });
+  assert.deepEqual(await h.create().spawnSupervisor(), { pid: 41376, reused: true });
+  assert.equal(h.spawnCalls.length, 0);
+  assert.equal(h.recordCalls.length, 0);
+  h.deps.registry.verifyProcess = async () => ({ verified: false, indeterminate: true, meta: { pid: 41376 } });
+  await assert.rejects(() => h.create().spawnSupervisor(), /无法校验/);
+  assert.equal(h.spawnCalls.length, 0);
+});
+
+test("spawnSupervisor: 恢复登记丢失的存活进程；并发调用只起一个子进程且父进程不登记", async () => {
+  const h = createHarness();
+  h.deps.toolkit.getProcesses = async () => ({ supervisor: [{ pid: "42856", command: "node work/monitor/channel-supervisor.mjs" }] });
+  const adopted = await h.create().spawnSupervisor();
+  assert.deepEqual(adopted, { pid: 42856, reused: true });
+  assert.equal(h.recordCalls[0].pid, 42856);
+  assert.equal(h.spawnCalls.length, 0);
+  h.deps.toolkit.getProcesses = async () => ({ supervisor: [] });
+  const lifecycle = h.create();
+  const results = await Promise.all(Array.from({ length: 4 }, () => lifecycle.spawnSupervisor()));
+  assert.equal(h.spawnCalls.length, 1);
+  assert.equal(h.recordCalls.length, 1, "唯一记录来自收养；未提前登记新 PID");
+  assert(results.every((r) => r.pid === 4242));
+});
+
+test("Windows 热交接：退场同一安装目录的所有旧 supervisor，保留 SSH、代理和其它安装的进程", async () => {
+  const table = new Map([
+    [41376, '"C:\\Console\\Codex Operations Console.exe" work/monitor/channel-supervisor.mjs'],
+    [42856, '"C:\\Console\\Codex Operations Console.exe" work\\monitor\\channel-supervisor.mjs'],
+    [43000, '"C:\\Console\\Codex Operations Console.exe" work/local_http_connect_proxy.mjs'],
+    [44000, '"C:\\Other\\Codex Operations Console.exe" work/monitor/channel-supervisor.mjs'],
+    [45000, 'ssh.exe -N -R 127.0.0.1:7895:127.0.0.1:8888 cluster.example'],
+  ]);
+  const killed = [];
+  const h = createHarness({ platform: "win32", rootDir: 'C:\\Console\\resources\\app',
+    ensurePidExitedImpl: async () => true,
+    killImpl: (pid) => { killed.push(pid); table.delete(pid); },
+  });
+  h.deps.registry.readMeta = () => ({ pid: 41376 });
+  h.deps.registry.stopProcess = async () => { killed.push(41376); table.delete(41376); return { stopped: true }; };
+  h.deps.toolkit.execFile = async (cmd) => {
+    assert.equal(cmd, "powershell");
+    return { code: 0, stdout: JSON.stringify([...table].map(([ProcessId, CommandLine]) => ({ ProcessId, CommandLine }))) };
+  };
+  await h.create().spawnSupervisor({ replaceExisting: true });
+  assert.deepEqual(killed, [41376, 42856]);
+  assert.equal(h.spawnCalls.length, 1);
+  assert.deepEqual([...table.keys()], [43000, 44000, 45000]);
+});
+
 function createHarness(overrides = {}) {
   const logs = [];
   const spawnCalls = [];
@@ -70,6 +121,7 @@ function createHarness(overrides = {}) {
     killImpl: (pid, signal) => killCalls.push({ pid, signal }),
     selfPid: 999,
     env: {},
+    platform: "darwin",
     now: () => FIXED_NOW,
     ...overrides,
   };
@@ -139,25 +191,21 @@ test("autoRepairChannel: force 且 supervisor 已存活 → 跳过重复 spawn�
   assert.ok(h.logs.some((l) => l.message.includes("channel supervisor already running, skipping duplicate spawn")));
 });
 
-test("autoRepairChannel: supervisor 未存活 → 正常拉起、登记注册表", async () => {
+test("autoRepairChannel: supervisor 未存活 → 正常拉起，登记由取得所有权的子进程完成", async () => {
   const h = createHarness();
   const lifecycle = h.create();
 
   await lifecycle.autoRepairChannel();
 
   // 缓存缺失（getResult undefined）时回落到真实扫描。
-  assert.equal(h.getProcessesCalls(), 1);
+  assert.equal(h.getProcessesCalls(), 2);
   assert.equal(h.spawnCalls.length, 1);
   assert.deepEqual(h.spawnCalls[0].args, ["work/monitor/channel-supervisor.mjs"]);
   assert.equal(h.spawnCalls[0].options.cwd, "/repo");
   assert.equal(h.spawnCalls[0].options.detached, true);
   assert.equal(h.spawnCalls[0].options.stdio, "ignore");
   assert.equal(h.spawnCalls[0].options.env.CODEX_MONITOR_APP_ROOT, "/repo");
-  assert.equal(h.recordCalls.length, 1);
-  assert.equal(h.recordCalls[0].name, "channel-supervisor");
-  assert.equal(h.recordCalls[0].pid, 4242);
-  assert.equal(h.recordCalls[0].meta.parentPid, 999);
-  assert.equal(h.recordCalls[0].meta.signature, "work/monitor/channel-supervisor.mjs");
+  assert.equal(h.recordCalls.length, 0, "父进程不得覆写 PID 注册表");
   assert.ok(h.logs.some((l) => l.message === "auto starting channel supervisor"));
 });
 

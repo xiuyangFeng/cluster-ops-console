@@ -60,7 +60,7 @@ export function createRunners({
     readSnapshot: snapshots.readFresh,
     getBundleComponents,
     afterSettled: () => snapshots.poll(),
-    spawnSupervisor: () => channel.spawnSupervisor(),
+    spawnSupervisor: (options) => channel.spawnSupervisor(options),
     holdAutoRepair: () => channel.holdAutoRepair(),
     shouldBeRunning: () => channel.getShouldBeRunning(),
     fixtureMode,

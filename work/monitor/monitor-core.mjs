@@ -1,4 +1,5 @@
 import { assertSafeServerId } from "./lib/validators.mjs";
+import { normalizeProcessCommand } from "./lib/processes/query.mjs";
 
 // v2.18 多隧道命名收口。放在 monitor-core（零副作用模块）：channel-lifecycle / supervisor /
 // 桌面退出路径都要用这个名字。前缀单独导出：退出路径按 pid 文件名反推记录名要用它。
@@ -74,7 +75,7 @@ export function parseProcessList(output, activeServerConfig, options) {
       result.reverseTunnel.push({ pid, command });
     }
 
-    if (command.includes("work/monitor/channel-supervisor.mjs")) {
+    if (normalizeProcessCommand(command).includes("work/monitor/channel-supervisor.mjs")) {
       result.supervisor.push({ pid, command });
     }
   }
@@ -573,7 +574,9 @@ function agentSummary(agent, status) {
 }
 
 function extractCommand(line) {
-  const markers = ["node ", "node.exe ", "ssh ", "/bin/sh ", "bash "];
+  const windows = /^\S+\s+\d+\s+((?:"[A-Za-z]:\\|[A-Za-z]:\\).*)$/.exec(line);
+  if (windows) return windows[1];
+  const markers = ["node ", "node.exe ", "ssh ", "ssh.exe ", '"ssh.exe" ', "/bin/sh ", "bash "];
   const index = markers
     .map((marker) => line.indexOf(marker))
     .filter((value) => value >= 0)

@@ -115,10 +115,10 @@ test("tunnel-orphan: 签名为空或形状不对时不认领（不能凭空匹�
   );
 });
 
-test("tunnel-orphan: win32 一律 retry（没有 ps，本期不做认领）", () => {
+test("tunnel-orphan: win32 有明确命令行依据时可认领", () => {
   const verdict = classify({ platform: "win32", localSshProcesses: [{ pid: 5150, command: orphanCommand }] });
-  assert.equal(verdict.verdict, "retry");
-  assert.ok(verdict.reason.includes("win32"));
+  assert.equal(verdict.verdict, "adopt");
+  assert.equal(verdict.pid, 5150);
 });
 
 test("tunnel-orphan: parseSshProcessList 只留 ssh 进程，丢掉非 ssh 行与坏行", () => {
@@ -138,4 +138,12 @@ test("tunnel-orphan: parseSshProcessList 只留 ssh 进程，丢掉非 ssh 行�
   ]);
   assert.deepEqual(parseSshProcessList(""), []);
   assert.deepEqual(parseSshProcessList(undefined), []);
+});
+
+
+test("Windows 孤儿 SSH 清单接受 ssh.exe 的绝对路径与引号，不把 PowerShell/sshd 当 SSH", () => {
+  const command = '"C:\\Windows\\System32\\OpenSSH\\ssh.exe" -N -R 127.0.0.1:7891:127.0.0.1:8888 myserver';
+  const rows = parseSshProcessList(`42 ${command}\n43 powershell -Command ${command}\n44 sshd.exe user`);
+  assert.deepEqual(rows, [{ pid: 42, command }]);
+  assert.equal(classify({ platform: "win32", localSshProcesses: rows }).verdict, "adopt");
 });

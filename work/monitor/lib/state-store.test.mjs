@@ -1482,3 +1482,18 @@ test("state-store: 重新打开 Agent → 私有状态按 createInitialState 重
     store.dispose();
   }
 });
+
+
+test("Windows CIM 暂时不可用时状态为等待确认，不误报代理停止或通道断开", () => {
+  const store = createStateStore({ config: baseConfig() });
+  try {
+    feedHealthyChannel();
+    emit("processes", "channel", probeResult("waiting", { processQueryIndeterminate: true }, "CIM unavailable"));
+    assert.equal(store.getLegacyStatus().health, "waiting");
+    assert.equal(store.getLiteStatus().health, "waiting");
+    assert.equal(store.getLayers().channel.level, "waiting");
+    assert.equal(store.getLegacyStatus().localProxyUp, true, "保留上一份已知进程事实");
+    emit("processes", "channel", probeResult("ok", { processes: FULL_PROCESSES }));
+    assert.notEqual(store.getLegacyStatus().health, "waiting");
+  } finally { store.dispose(); }
+});

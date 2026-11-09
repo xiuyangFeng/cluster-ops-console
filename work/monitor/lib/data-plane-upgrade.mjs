@@ -285,7 +285,7 @@ export function createDataPlaneUpgrader({
       } else {
         let spawned = null;
         try {
-          spawned = await spawnSupervisor();
+          spawned = await spawnSupervisor({ replaceExisting: true });
         } catch (err) {
           steps.push({ name: "supervisor-start", ok: false, detail: `spawn failed: ${err.message}` });
           aborted = true;

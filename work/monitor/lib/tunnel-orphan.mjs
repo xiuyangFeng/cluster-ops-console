@@ -51,7 +51,7 @@ function isOwnedOrUnmarked(command, ownerId) {
 // stderr 命中 → 三选一：
 //   adopt  本机有一条跑着同一条 -R 的受管 ssh：登记它，当健康隧道（数据面本来就归它）
 //   foreign 远端端口确实在监听，但本机没有对应进程：端口被异己占用，长退避 + 提示人工，不杀
-//   retry  其它（没命中正则 / 远端也没监听 / win32）：交给既有的快速失败退避
+//   retry  其它（没命中正则 / 远端也没监听）：交给既有的快速失败退避
 //
 // 注意 adopt 不要求 remoteListening：远端探测要再开一条 SSH，可能超时；
 // "本机有一条跑着同一条 -R 的 ssh 进程"这件事本身已经比远端探测更硬。
@@ -63,15 +63,9 @@ export function classifyForwardFailure({
   // 本机识别码（owner-id.mjs）；为空时任何带标记的候选都不是自己的。
   ownerId = null,
   supervisorPid = null,
-  platform = process.platform,
 } = {}) {
   if (!FORWARD_FAILED_RE.test(String(stderr || ""))) {
     return { verdict: "retry", reason: "stderr 未出现 remote port forwarding failed，不是远端端口被占" };
-  }
-  // Windows 没有 POSIX 的 ps，扫不出本机 ssh 进程清单就没有认领的依据；
-  // 猜着认领比不认领危险得多（会把异己进程登记成自己的隧道），本期一律退回重试。
-  if (platform === "win32") {
-    return { verdict: "retry", reason: "win32 没有 ps，本期不做孤儿认领，按普通失败退避" };
   }
 
   const config = parseTunnelSignature(signature);
@@ -113,7 +107,7 @@ export function classifyForwardFailure({
 // 这条过滤同时挡掉 sshd（`sshd: user@notty`）与恰好把 "ssh" 写进参数的无关进程
 // （`grep ssh`）——它们进不了候选集，签名比对也就不必替它们兜底。
 function isSshCommand(command) {
-  return command.startsWith("ssh ") || command.includes("/ssh ");
+  return /^\s*(?:"[^"\r\n]*[\\/]ssh(?:\.exe)?"|(?:[^\s"\r\n]*[\\/])?ssh(?:\.exe)?)\s/i.test(command);
 }
 
 // 输入是 `ps -axo pid=,command=` 的输出（行解析与注册表批量校验共用 parseCmdlineRows）。

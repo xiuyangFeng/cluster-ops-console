@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { promisify } from "node:util";
 
 import { writePrivateFileAtomicSync } from "./atomic-file.mjs";
+import { normalizeProcessCommand, windowsCommandArgs } from "./processes/query.mjs";
 
 const defaultExecFile = promisify(execFile);
 
@@ -73,7 +74,7 @@ export function shouldYieldToExisting({ meta, selfPid, alive, cmdline, expect } 
   if (!meta || !Number.isInteger(meta.pid) || meta.pid <= 0) return false;
   if (meta.pid === selfPid) return false;
   if (!alive) return false;
-  return typeof cmdline === "string" && Boolean(expect) && cmdline.includes(expect);
+  return typeof cmdline === "string" && Boolean(expect) && normalizeProcessCommand(cmdline).includes(normalizeProcessCommand(expect));
 }
 
 // D1：平台感知的 cmdline 查询构造。win32 没有 POSIX 的 ps，硬编码 ps 会让
@@ -88,7 +89,7 @@ function buildCmdlineQuery(platformName, pid) {
         "-NoProfile",
         "-NonInteractive",
         "-Command",
-        `(Get-CimInstance Win32_Process -Filter "ProcessId=${pid}").CommandLine`,
+        `[Console]::OutputEncoding = New-Object System.Text.UTF8Encoding($false); $ErrorActionPreference = 'Stop'; (Get-CimInstance Win32_Process -Filter "ProcessId=${pid}").CommandLine`,
       ],
     };
   }
@@ -200,6 +201,10 @@ function isWeakFlagArg(arg) {
 export function cmdlineMatches(cmdline, meta) {
   if (!cmdline || !meta) return false;
   if (meta.configIdentity) {
+    if (/^[A-Za-z]:[\\/]/.test(meta.cwd || "") && Array.isArray(meta.args) && meta.args.length) {
+      const [exe, ...args] = windowsCommandArgs(cmdline);
+      return /(?:^|[\\/])ssh(?:\.exe)?$/i.test(exe || "") && args.length === meta.args.length && args.every((arg, i) => arg === meta.args[i]);
+    }
     // New tunnel records contain the complete argv used at spawn. A reused PID
     // or another user's ssh with only the same -R substring is not ownership.
     const canonicalSsh = (value) => {
@@ -211,13 +216,13 @@ export function cmdlineMatches(cmdline, meta) {
     return expected != null && canonicalSsh(cmdline) === expected;
   }
   if (typeof meta.signature === "string" && meta.signature.trim()) {
-    const segments = meta.signature.split(/\s+/).filter(Boolean);
-    return segments.length > 0 && segments.every((seg) => cmdline.includes(seg));
+    const segments = normalizeProcessCommand(meta.signature).split(/\s+/).filter(Boolean);
+    return segments.length > 0 && segments.every((seg) => normalizeProcessCommand(cmdline).includes(seg));
   }
   if (meta.command && cmdline.includes(meta.command)) return true;
   if (Array.isArray(meta.args)) {
     const strongArgs = meta.args.filter((arg) => arg && !isWeakFlagArg(arg));
-    if (strongArgs.some((arg) => cmdline.includes(arg))) return true;
+    if (strongArgs.some((arg) => normalizeProcessCommand(cmdline).includes(normalizeProcessCommand(arg)))) return true;
   }
   return false;
 }
@@ -237,7 +242,7 @@ export function createProcessRegistry({ runtimeDir, execFileImpl = defaultExecFi
 
   // 每次现算（而非构造时冻结）：env 由调用方进程决定，测试里也能按需改 process.env。
   function execOptions() {
-    return platform === "win32" ? {} : { env: utf8LocaleEnv(platform, process.env) };
+    return platform === "win32" ? { windowsHide: true, timeout: 10000 } : { env: utf8LocaleEnv(platform, process.env) };
   }
 
   function recordProcess(name, pid, { command, args, cwd, parentPid, signature, configIdentity, adopted } = {}) {

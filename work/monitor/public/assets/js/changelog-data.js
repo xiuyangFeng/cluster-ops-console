@@ -13,6 +13,12 @@
 //      找到且日期一致、两边都按日期降序、首条版本等于 package.json 当前版本。
 export const changelogData = [
   {
+    version: "v2.97.1", date: "2026-11-10", changes: [
+      { type: "fix", text: "Windows 使用原生进程查询与内核独占锁，修复 supervisor 并发启动和每分钟重复累积；活进程登记不再被误删，父进程不再覆写当前 PID。" },
+      { type: "fix", text: "热升级清理同一安装目录的旧守护进程并保留代理和 SSH，补齐孤儿 SSH 接管与带空格私钥验证；代理状态结合真实健康接口核对。" },
+    ],
+  },
+  {
     version: "v2.97.0", date: "2026-11-09", changes: [
       { type: "feat", text: "本次安装包同时包含 Windows 一键热更新与 root 自动管理入口：旧版需先手动安装一次，后续兼容版本可点击更新；root 连接自动显示团队管理和存储管理。" },
       { type: "feat", text: "所有页面顶部都可选择和添加服务器连接：master、node04 等不同 IP 分别保存账号、端口与可选私钥；接入完成后可继续添加。切换不影响其它隧道，root 管理入口跟随当前连接。" },

@@ -633,3 +633,25 @@ test("ensurePidExited: 无 pid 视为已退出，且不做任何等待或信号"
   assert.equal(await ensurePidExited(undefined, 10, options), true);
   assert.equal(waited, false);
 });
+
+
+test("Windows 活进程登记在 GC 后保留：中文/空格路径与反斜杠签名不丢失", async () => {
+  const dir = mkTmp("pr-win-native-path-");
+  const command = '"C:\\应用 程序\\Codex Operations Console.exe" work\\monitor\\channel-supervisor.mjs';
+  const registry = createProcessRegistry({ runtimeDir: dir, platform: "win32", execFileImpl: async () => ({ stdout: command }) });
+  registry.recordProcess("channel-supervisor", 41376, { signature: "work/monitor/channel-supervisor.mjs" });
+  for (let minute = 0; minute < 4; minute++) {
+    assert.equal((await registry.verifyProcess("channel-supervisor")).verified, true);
+    await registry.listRuntimeProcesses();
+    assert.equal(registry.readMeta("channel-supervisor").pid, 41376);
+  }
+});
+
+test("Windows SSH 带空格私钥路径：按原始 argv 验证，换用户/密钥和 PID 复用仍拒绝", () => {
+  const meta = { cwd: 'C:\\应用\\resources\\app', configIdentity: "same", args: ["-i", 'C:\\用户 名\\id key', "-l", "root", "-N", "-R", "127.0.0.1:7895:127.0.0.1:8888", "cluster.example"] };
+  const command = '"C:\\Windows\\System32\\OpenSSH\\ssh.exe" -i "C:\\用户 名\\id key" -l root -N -R 127.0.0.1:7895:127.0.0.1:8888 cluster.example';
+  assert.equal(cmdlineMatches(command, meta), true);
+  assert.equal(cmdlineMatches(command.replace("root", "someone"), meta), false);
+  assert.equal(cmdlineMatches(command.replace("id key", "other key"), meta), false);
+  assert.equal(cmdlineMatches(`powershell -Command ${command}`, meta), false);
+});

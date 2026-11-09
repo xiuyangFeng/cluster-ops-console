@@ -14,6 +14,7 @@ import { classifySshFailure } from "../ssh-args.mjs";
 import { createPasswordSshSession } from "../ssh-askpass.mjs";
 import { ensureWindowsOpenSshOnPath } from "../platform.mjs";
 import { classifyForwardFailure, FORWARD_FAILED_RE, ORPHAN_RULE_ID, parseSshProcessList } from "../tunnel-orphan.mjs";
+import { readWindowsProcesses } from "../processes/query.mjs";
 import { isSshStderrNoise } from "./log-policy.mjs";
 import { createMutationQueue } from "./mutation-queue.mjs";
 import { readTunnelPassword, remotePortOpen, runRemoteCommand } from "./remote-probe.mjs";
@@ -151,7 +152,7 @@ export function createTunnelController({
   // 生产里也与探测 SSH 共用同一套超时/输出上限封装。用 `ps -axo pid=,command=` 一次取全，
   // 而不是 pgrep ssh：pgrep 的匹配语义各平台不一致，且本来就要拿完整命令行做签名比对。
   listSshProcesses = async () => {
-    if (platform === "win32") return []; // win32：没有 ps，classifyForwardFailure 也会一律判 retry
+    if (platform === "win32") return parseSshProcessList((await readWindowsProcesses(execFileImpl)).map((p) => `${p.pid} ${p.command}`).join("\n"));
     const result = await execFileImpl("ps", ["-axo", "pid=,command="], { timeoutMs: 3000, cwd: controllerRootDir });
     return result.code === 0 ? parseSshProcessList(result.stdout) : [];
   },
@@ -163,7 +164,7 @@ export function createTunnelController({
   // 与策略层的口径逐字一致。生产里所有 controller 共用一个实例，见 createTunnelControllerFor。
   rateLimiter = createRateLimiter({ now }),
   selfPid = process.pid,
-  // 孤儿认领是 POSIX 专有路径（win32 没有 ps，classifyForwardFailure 一律判 retry）。
+  // POSIX 用 ps，Windows 用 CIM；两端使用相同的命令行归属与签名复核。
   // 与本模块其它依赖一样做成可注入，测试才能在任一宿主上覆盖两侧行为。
   platform = process.platform,
   // 本机识别码（每台 Mac 一个，持久化在 runtimeDir）。有它才给隧道挂会话标记、才能回收残留会话；

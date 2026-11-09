@@ -177,7 +177,8 @@ export function createStateStore({ config, now = Date.now, logSource = "ops", ge
       return !sample ? "waiting" : sample.level === "ok" ? "ready" : "degraded";
     }
     // v1.5.2 初始态：首个进程探针到达前保持 waiting。
-    if (shouldBeRunning && !probeResults.get(PROCESSES_PROBE_ID)) return "waiting";
+    if (shouldBeRunning && (!probeResults.get(PROCESSES_PROBE_ID)
+      || probeResults.get(PROCESSES_PROBE_ID)?.data?.processQueryIndeterminate === true)) return "waiting";
     const f = channelFlags(main);
     // 同理（与 deriveChannelLevel 同一判据）：本地两段都在、远端端口首个样本未到 → 仍是 waiting，不报 down。
     if (shouldBeRunning && f.localProxyUp && f.tunnelUp && !hasPortEvidence(main)) return "waiting";
@@ -209,7 +210,7 @@ export function createStateStore({ config, now = Date.now, logSource = "ops", ge
       main,
       shouldBeRunning,
       stopNote,
-      hasProcessesResult: Boolean(procResult),
+      hasProcessesResult: Boolean(procResult) && procResult.data?.processQueryIndeterminate !== true,
       hasPortEvidence: hasPortEvidence(main),
       flags,
     });

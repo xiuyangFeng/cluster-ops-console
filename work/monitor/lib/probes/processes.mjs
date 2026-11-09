@@ -1,7 +1,9 @@
 import { isActiveTunnelUp, parseProcessList } from "../../monitor-core.mjs";
 import { resolveProxyPort, resolveTunnelTargets } from "../config-loader.mjs";
 import { queryCmdlines } from "../process-registry.mjs";
+import { readWindowsProcesses } from "../processes/query.mjs";
 import { isPort } from "../validators.mjs";
+import { probeProxyHealth } from "../supervisor/proxy-health.mjs";
 
 // 本机受管进程探针（supervisor / 本地代理 / 各服务器隧道），processes 探针与
 // channel-lifecycle 的守护巡检共用 getProcesses。
@@ -48,7 +50,7 @@ function sameEntries(a, b) {
   return true;
 }
 
-export function createProcessProbe({ getConfig, execFileCmd, getMainServerConfig, getConnectionTargets, platform, now }) {
+export function createProcessProbe({ getConfig, execFileCmd, getMainServerConfig, getConnectionTargets, platform, now, readProxyHealth = probeProxyHealth }) {
   let processParseCache = { key: "", value: null };
   let processScanState = null; // { at, configKey, value, known: Map<pid, command> }
 
@@ -91,6 +93,7 @@ export function createProcessProbe({ getConfig, execFileCmd, getMainServerConfig
     const main = getMainServerConfig(parsed);
     const legacy = tunnels.length === 0;
     return {
+      proxyPort,
       parse: (text) => (legacy ? parseProcessList(text, main) : parseProcessList(text, main, { proxyPort, tunnels })),
       configKey: legacy
         ? `legacy\n${JSON.stringify([main?.host, main?.remotePort, main?.localPort])}`
@@ -101,7 +104,7 @@ export function createProcessProbe({ getConfig, execFileCmd, getMainServerConfig
 
   async function getProcesses() {
     const parsed = await getConfig();
-    const { parse, configKey, cacheKeyFor } = resolveParsePlan(parsed);
+    const { parse, configKey, cacheKeyFor, proxyPort } = resolveParsePlan(parsed);
 
     const state = processScanState;
     if (platform !== "win32" && state && state.configKey === configKey
@@ -113,16 +116,27 @@ export function createProcessProbe({ getConfig, execFileCmd, getMainServerConfig
       }
     }
 
-    const { stdout } = await execFileCmd("ps", ["-ef"]);
+    const { stdout } = platform === "win32"
+      ? { stdout: (await readWindowsProcesses(execFileCmd)).map((p) => `- ${p.pid} ${p.command}`).join("\n") }
+      : await execFileCmd("ps", ["-ef"]);
     const cacheKey = cacheKeyFor(stdout);
-    const value = processParseCache.key === cacheKey ? processParseCache.value : parse(stdout);
+    const value = platform !== "win32" && processParseCache.key === cacheKey ? processParseCache.value : parse(stdout);
+    if (platform === "win32" && value.localProxy.length === 0) {
+      const health = await readProxyHealth(proxyPort);
+      if (health?.ok && health.proxy?.pid) value.localProxy.push({ pid: String(health.proxy.pid), command: "local_http_connect_proxy.mjs [verified /proxy-health]" });
+    }
     processParseCache = { key: cacheKey, value };
     processScanState = { at: now(), configKey, value, known: managedProcessEntries(value) };
     return value;
   }
 
   async function runProcessesProbe() {
-    const processes = await getProcesses();
+    let processes;
+    try { processes = await getProcesses(); }
+    catch (error) {
+      if (platform !== "win32") throw error;
+      return { level: "waiting", reason: error.message, data: { processQueryIndeterminate: true } };
+    }
     const supervisorUp = processes.supervisor.length > 0;
     const localProxyUp = processes.localProxy.length > 0;
     // 探针自身的结论描述的是**主链路**，与 layers.channel 同口径：reverseTunnel 现在是

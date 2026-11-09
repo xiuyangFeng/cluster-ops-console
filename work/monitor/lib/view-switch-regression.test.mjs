@@ -27,7 +27,7 @@ const ps = [
 test('switching view retains all process matches, port evidence, and emits no outage; real process loss still alarms', async () => {
  let config = { servers, agents: [], activeServerId: servers[0].id };
  let processText = ps;
- const toolkit = createChannelToolkit({ rootDir:'/tmp', getConfig:async()=>config, execFileImpl:async()=>({code:0,stdout:processText}), getConnectionTargets:()=>({source:'supervisor-snapshot',freshness:'fresh',effectiveProxyPort:{value:28888}}) });
+ const toolkit = createChannelToolkit({ platform:'darwin', rootDir:'/tmp', getConfig:async()=>config, execFileImpl:async()=>({code:0,stdout:processText}), getConnectionTargets:()=>({source:'supervisor-snapshot',freshness:'fresh',effectiveProxyPort:{value:28888}}) });
  const store = createStateStore({config});
  let time=Date.now();
  const emit = (id,data,level='ok') => bus.emit(EVENTS.PROBE_UPDATED,{id,layer:'channel',result:{level,data,checkedAt:++time,nextCheckAt:time+60000,probeContext:{serverId:config.activeServerId}}});

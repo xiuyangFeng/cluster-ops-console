@@ -14,7 +14,7 @@ export function createProbeContext({ rootDir, dataDir, getConfig, execFileImpl }
     if (execFileImpl) return execFileImpl(command, args, options);
     // input（v2.62）：要带代理口令的探测把它经标准输入交给远端，不进命令行。没给时与以前一样不开标准输入。
     if (options.input != null) return execFileWithInput(command, args, { cwd: rootDir, timeoutMs: options.timeoutMs || 20000, input: options.input });
-    return execFileWithTimeout(command, args, { cwd: rootDir, timeoutMs: options.timeoutMs || 20000 });
+    return execFileWithTimeout(command, args, { cwd: rootDir, ...options, timeoutMs: options.timeoutMs || 20000 });
   }
 
   // 采集脚本经 stdin 送达（远端零残留）。走 execFileImpl 同一注入点，测试里

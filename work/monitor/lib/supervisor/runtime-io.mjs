@@ -6,6 +6,7 @@ import path from "node:path";
 
 import { execFileWithTimeout } from "../exec.mjs";
 import { utf8LocaleEnv } from "../process-registry.mjs";
+import { readWindowsProcesses } from "../processes/query.mjs";
 import { DRAINING_PROXY_RECORD_NAME, proxyReleaseRequestPath } from "../proxy/protocol.mjs";
 
 // rootDir：应用根（子进程 cwd）；runtimeDir：注册表与控制文件目录。
@@ -27,6 +28,7 @@ export function createRuntimeIo({ rootDir, runtimeDir, registry } = {}) {
   }
 
   async function readPidCommand(pid) {
+    if (process.platform === "win32") return (await readWindowsProcesses()).find((p) => p.pid === pid)?.command || "";
     const result = await execFileWithTimeout("ps", ["-o", "command=", "-p", String(pid)], { timeoutMs: 3000, cwd: rootDir, env: utf8LocaleEnv() });
     return result.code === 0 ? result.stdout.trim() : "";
   }

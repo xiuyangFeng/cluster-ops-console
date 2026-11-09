@@ -26,6 +26,7 @@ import { createRuntimeIo } from "./lib/supervisor/runtime-io.mjs";
 import { loadOrCreateTunnelOwnerId } from "./lib/supervisor/owner-id.mjs";
 import { sanitizeMachineLabel } from "./lib/supervisor/sibling-tunnel.mjs";
 import { createSupervisorService } from "./lib/supervisor/service.mjs";
+import { acquireSupervisorLease } from "./lib/supervisor/singleton.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const sourceRoot = path.resolve(__dirname, "../..");
@@ -56,6 +57,9 @@ const log = createSupervisorLog({
 });
 
 if (isMain) {
+  const lease = await acquireSupervisorLease(runtimeDir);
+  if (!lease) process.exit(3);
+  process.once("exit", () => lease.release());
   // 构建元信息：启动时读入一次并冻结（运行快照只取 version / gitCommit）。
   const supervisorBuildInfo = await freezeBuildInfo(sourceRoot);
 

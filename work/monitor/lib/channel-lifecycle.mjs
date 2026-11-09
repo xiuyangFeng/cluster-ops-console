@@ -8,7 +8,8 @@ import {
 } from "../monitor-core.mjs";
 import { resolveProxyPort, resolveTunnelTargets } from "./config-loader.mjs";
 import { collectSlowProbeId, LOG_SIGNALS_PROBE_ID, PROCESSES_PROBE_ID } from "./probe-ids.mjs";
-import { cmdlineMatches } from "./process-registry.mjs";
+import { cmdlineMatches, ensurePidExited } from "./process-registry.mjs";
+import { normalizeProcessCommand, readWindowsProcesses, windowsCommandArgs } from "./processes/query.mjs";
 import { buildTunnelSignature } from "./supervisor/tunnel-spec.mjs";
 
 // ---- 命名常量（值与历史行为一致）----
@@ -39,7 +40,7 @@ function matchesTunnelForward(cmdline, target) {
 export function matchesManagedProcess(cmdline, { role, config } = {}) {
   if (typeof cmdline !== "string" || !cmdline) return false;
   if (role === "supervisor" || role === "localProxy") {
-    return cmdline.includes(MANAGED_PROCESS_SIGNATURES[role]);
+    return normalizeProcessCommand(cmdline).includes(MANAGED_PROCESS_SIGNATURES[role]);
   }
   if (role === "tunnel") return matchesTunnelForward(cmdline, config);
   return false;
@@ -67,6 +68,8 @@ export function createChannelLifecycle({
   selfPid = process.pid,
   env = process.env,
   now = Date.now,
+  platform = process.platform,
+  ensurePidExitedImpl = ensurePidExited,
   // 执行器（单隧道操作 / 数据面热升级）在飞时挡下通道重启——两者都在动同一批
   // 隧道/进程，并发会互踩。迟绑定闭包，装配顺序上 runner 后创建也成立。
   isBlocked = () => false,
@@ -83,6 +86,7 @@ export function createChannelLifecycle({
   // 守护巡检绝不能抢先拉起第二个 supervisor（它会覆写注册表并与交接流程互踩）。
   // 计数而非布尔：嵌套持有安全。
   let autoRepairHolds = 0;
+  let supervisorSpawn = null;
 
   // ---- 通道启停 ----
 
@@ -235,7 +239,35 @@ export function createChannelLifecycle({
   }
 
   async function stopTarget(target, context) {
-    if (await stopViaRegistry(target, context)) return;
+    const stopped = await stopViaRegistry(target, context);
+    if (platform === "win32") {
+      // 注册表最多只有一条记录，仍需找出同一安装目录里的旧孤儿 supervisor。
+      // 只停止当前包的进程；不按 exe 名全局 taskkill，也不递归杀子进程树。
+      const root = normalizeProcessCommand(rootDir).replace(/\/$/, "").toLowerCase();
+      const belongs = (command) => {
+        const argv = windowsCommandArgs(command);
+        const exe = normalizeProcessCommand(argv[0]).toLowerCase();
+        const relative = target.role === "supervisor" ? "work/monitor/channel-supervisor.mjs"
+          : target.role === "localProxy" ? "work/local_http_connect_proxy.mjs" : null;
+        const script = normalizeProcessCommand(argv[1]).toLowerCase();
+        if (!relative || (script !== relative && script !== `${root}/${relative}`)) return false;
+        return (script === `${root}/${relative}` && /(?:^|\/)node(?:\.exe)?$/.test(exe))
+          || (root.endsWith("/resources/app") && exe === `${root.slice(0, -14)}/codex operations console.exe`);
+      };
+      const candidates = (await readWindowsProcesses(toolkit.execFile)).filter((p) => p.pid !== selfPid
+        && belongs(p.command) && matchesManagedProcess(p.command, { role: target.role, config: target.config }));
+      if (candidates.length) {
+        const current = new Map((await readWindowsProcesses(toolkit.execFile)).map((p) => [p.pid, p.command]));
+        for (const p of candidates) {
+          if (current.get(p.pid) !== p.command) continue;
+          killImpl(p.pid, "SIGTERM");
+          if (!(await ensurePidExitedImpl(p.pid, 1500, { killImpl }))) throw new Error(`无法确认旧 ${target.name} pid ${p.pid} 已退出`);
+          appendLog(`stop ${target.name}: Windows orphan pid ${p.pid} stopped`, context);
+        }
+      }
+      return;
+    }
+    if (stopped) return;
     await stopViaPgrep(target);
   }
 
@@ -255,9 +287,7 @@ export function createChannelLifecycle({
     // 停止次序：必须先确认 channel-supervisor 已死，再动 proxy/tunnel——
     // 否则 supervisor 的保活循环会在停止窗口内把刚杀掉的子进程重新拉起。
     // 两个子进程互不依赖，随后并行停止。
-    await stopTarget(supervisorTarget, context).catch((err) => {
-      appendLog(`stop ${supervisorTarget.name} failed: ${err.message}`);
-    });
+    await stopTarget(supervisorTarget, context);
     await Promise.all(childTargets.map((target) => stopTarget(target, context).catch((err) => {
       appendLog(`stop ${target.name} failed: ${err.message}`);
     })));
@@ -287,7 +317,30 @@ export function createChannelLifecycle({
   // 拉起一个 supervisor（守护巡检自愈与热更新交接共用同一条 spawn 路径）：
   // 用当前 process.execPath（打包模式即新 .app 的 Electron 二进制）+ appRoot 下的
   // work/monitor/channel-supervisor.mjs，detached + stdio ignore，登记注册表。
-  async function spawnSupervisor() {
+  function spawnSupervisor(options = {}) {
+    if (supervisorSpawn) return supervisorSpawn;
+    supervisorSpawn = spawnSupervisorOnce(options).finally(() => { supervisorSpawn = null; });
+    return supervisorSpawn;
+  }
+
+  async function spawnSupervisorOnce({ replaceExisting = false } = {}) {
+    // Windows 热升级需退场同一安装目录的全部旧 supervisor，兼容旧版留下的未登记实例。
+    // 不使用 taskkill /T：现役代理与 SSH 交由新 supervisor 收养。
+    if (replaceExisting && platform === "win32") {
+      await stopTarget({ name: "channel-supervisor", role: "supervisor" });
+    }
+    const existing = await registry.verifyProcess("channel-supervisor");
+    if (existing.verified) return { pid: existing.meta.pid, reused: true };
+    if (existing.indeterminate) throw new Error("无法校验现有守护进程，暂停重复启动");
+    // 实时清单而非缓存：恢复在册信息丢失的存活进程，避免覆盖成新 spawn 的必死 PID。
+    const live = (await toolkit.getProcesses()).supervisor?.find((p) => Number(p.pid) > 0);
+    if (live) {
+      registry.recordProcess("channel-supervisor", Number(live.pid), {
+        command: live.command, args: [], cwd: rootDir, signature: "work/monitor/channel-supervisor.mjs", adopted: true,
+      });
+      appendLog(`adopted existing channel supervisor pid ${live.pid}`, { event: "supervisor-repair" });
+      return { pid: Number(live.pid), reused: true };
+    }
     const spec = getSupervisorCommand(rootDir, {
       dataRoot: paths.dataRoot,
       runtimeDir: paths.runtimeDir,
@@ -304,15 +357,8 @@ export function createChannelLifecycle({
       stdio: "ignore",
     });
     child.unref();
-    if (child.pid) {
-      registry.recordProcess("channel-supervisor", child.pid, {
-        command: "node work/monitor/channel-supervisor.mjs",
-        args: spec.args,
-        cwd: spec.cwd,
-        parentPid: selfPid,
-        signature: "work/monitor/channel-supervisor.mjs",
-      });
-    }
+    child.once?.("error", (error) => appendLog(`supervisor spawn failed: ${error.message}`, { event: "supervisor-repair", level: "error" }));
+    // 只有取得单实例所有权的子进程才能登记自己。父进程不能提前覆写现役 PID。
     return { pid: child.pid ?? null };
   }
 
@@ -367,9 +413,9 @@ export function createChannelLifecycle({
         attempt: repairFailures + 1,
         nextAction: "若反复失败，查看 work/runtime/logs/supervisor.ndjson 中的 ssh 失败原因与 nextAction",
       });
-      await spawnSupervisor();
-      repairFailures += 1;
-      repairLastAttemptAt = now();
+      const started = await spawnSupervisor();
+      repairFailures = started.reused ? 0 : repairFailures + 1;
+      repairLastAttemptAt = started.reused ? 0 : now();
     } catch (error) {
       appendLog(`auto repair failed: ${error.message}`, { level: "error", event: "supervisor-repair" });
       repairFailures += 1;

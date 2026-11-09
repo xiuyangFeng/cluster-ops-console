@@ -993,6 +993,7 @@ function multiTunnelConfig(overrides = {}) {
 
 test("getProcesses: 两条不同 -R 的 ssh 各归到自己的 serverId，tunnel:false 的条目不建桶", async () => {
   const toolkit = createChannelToolkit({
+    platform: "darwin", // 本组注入 POSIX ps 夹具；Windows 原生查询另测。
     rootDir: "/tmp",
     getConfig: async () => multiTunnelConfig(),
     execFileImpl: async () => ({ code: 0, stdout: MULTI_TUNNEL_PS, stderr: "" }),
@@ -1013,6 +1014,7 @@ test("getProcesses: 所有 -R 的本地端口都按 resolveProxyPort 匹配，�
   // server-tengxun 配的是 localPort 8890，但隧道实际落在活跃服务器的代理端口 8888 上。
   // 拿 8890 去匹配命令行会让这台服务器永远"隧道未开启"。
   const toolkit = createChannelToolkit({
+    platform: "darwin", // 本组注入 POSIX ps 夹具；Windows 原生查询另测。
     rootDir: "/tmp",
     getConfig: async () => multiTunnelConfig(),
     execFileImpl: async () => ({ code: 0, stdout: MULTI_TUNNEL_PS, stderr: "" }),
@@ -1028,6 +1030,7 @@ test("getProcesses: 只有次要服务器的隧道在时，活跃服务器那格
     "  501 22 1 0 ??  0:00.01 ssh -N -R 127.0.0.1:7893:127.0.0.1:8888 tengxunserver",
   ].join("\n");
   const toolkit = createChannelToolkit({
+    platform: "darwin", // 本组注入 POSIX ps 夹具；Windows 原生查询另测。
     rootDir: "/tmp",
     getConfig: async () => multiTunnelConfig(),
     execFileImpl: async () => ({ code: 0, stdout: onlySecondary, stderr: "" }),
@@ -1045,6 +1048,7 @@ test("getProcesses: 只有次要服务器的隧道在时，活跃服务器那格
 
 test("getProcesses: 服务器配置为空时退化为旧形状（不出现 tunnelsByServer 键）", async () => {
   const toolkit = createChannelToolkit({
+    platform: "darwin", // 本组注入 POSIX ps 夹具；Windows 原生查询另测。
     rootDir: "/tmp",
     getConfig: async () => ({ activeServerId: "", servers: [] }),
     execFileImpl: async () => ({ code: 0, stdout: MULTI_TUNNEL_PS, stderr: "" }),
@@ -1060,6 +1064,7 @@ test("processes 探针: tunnel 结论按活跃服务器判，不因次要隧道�
     "  501 22 1 0 ??  0:00.01 ssh -N -R 127.0.0.1:7893:127.0.0.1:8888 tengxunserver",
   ].join("\n");
   const toolkit = createChannelToolkit({
+    platform: "darwin", // 本组注入 POSIX ps 夹具；Windows 原生查询另测。
     rootDir: "/tmp",
     getConfig: async () => multiTunnelConfig(),
     execFileImpl: async () => ({ code: 0, stdout: onlySecondary, stderr: "" }),
@@ -1073,6 +1078,7 @@ test("processes 探针: tunnel 结论按活跃服务器判，不因次要隧道�
 
 test("processes 探针: 活跃服务器隧道在时报 ok（多隧道下的正常态）", async () => {
   const toolkit = createChannelToolkit({
+    platform: "darwin", // 本组注入 POSIX ps 夹具；Windows 原生查询另测。
     rootDir: "/tmp",
     getConfig: async () => multiTunnelConfig(),
     execFileImpl: async () => ({ code: 0, stdout: MULTI_TUNNEL_PS, stderr: "" }),
@@ -1254,7 +1260,7 @@ test("getProcesses 快路径：进程集不完整时每拍全量（尽快发现�
   assert.equal(periodic.tunnelsByServer["server-01"].length, 2, "周期全量把重复隧道找出来");
 });
 
-test("getProcesses 快路径：配置变化（隧道目标）立即全量；win32 永远走旧路径", async () => {
+test("getProcesses 快路径：配置变化（隧道目标）立即全量", async () => {
   const config = multiTunnelConfig();
   const { toolkit, ps, clock } = fastPathToolkit(healthyTable(), { config });
   await toolkit.getProcesses();
@@ -1264,11 +1270,6 @@ test("getProcesses 快路径：配置变化（隧道目标）立即全量；win3
   await toolkit.getProcesses();
   assert.deepEqual(ps.calls, ["ps -ef"]);
 
-  const win = fastPathToolkit(healthyTable(), { platform: "win32" });
-  await win.toolkit.getProcesses();
-  win.clock.t = 5000;
-  await win.toolkit.getProcesses();
-  assert.deepEqual(win.ps.calls, ["ps -ef", "ps -ef"]);
 });
 
 // v2.33：slow 采集的 slurm 段里有直连节点时，toolkit 注入的 appendLog 在断开 / 恢复时各收到一条，
