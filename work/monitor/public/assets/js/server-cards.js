@@ -56,6 +56,7 @@ export function serverFormValues(server) {
     address: server?.address || server?.host || "",
     sshPort: server?.sshPort || 22,
     sshUser: server?.sshUser || "",
+    sshIdentityFile: server?.sshIdentityFile || "",
     remotePort: server?.remotePort ?? "",
     tunnel: server ? server.tunnel !== false : false,
     monitor: server?.monitorEnabled !== false && server?.disabled !== true,
@@ -68,6 +69,7 @@ export function applyServerFormValues(form, values) {
   if (form.elements.address) form.elements.address.value = values.address;
   if (form.elements.sshPort) form.elements.sshPort.value = values.sshPort;
   if (form.elements.sshUser) form.elements.sshUser.value = values.sshUser;
+  if (form.elements.sshIdentityFile) form.elements.sshIdentityFile.value = values.sshIdentityFile;
   if (form.elements.remotePort) form.elements.remotePort.value = values.remotePort;
   if (form.elements.tunnel) form.elements.tunnel.checked = values.tunnel;
   if (form.elements.monitor) form.elements.monitor.checked = values.monitor;
@@ -361,6 +363,7 @@ export function initServerRegistryUi({ getJson, postJson, patchJson, deleteJson,
     if (form.elements.password) form.elements.password.value = "";
     const body = {
       name: data.name, address: data.address, sshPort: data.sshPort || 22, sshUser: data.sshUser,
+      ...(form.elements.sshIdentityFile ? { sshIdentityFile: data.sshIdentityFile || "" } : {}),
       ...(data.remotePort ? { remotePort: data.remotePort } : {}),
       tunnel: data.tunnel === "on", monitorEnabled: data.monitor === "on",
       expectedRevision: editingId ? editRevision : revision,
@@ -393,6 +396,23 @@ export function initServerRegistryUi({ getJson, postJson, patchJson, deleteJson,
   applyPlatform();
   return {
     refresh, refreshLocal, applyPlatform, confirmHostKey: async (id) => { await confirmHostKey(id); await refresh(); },
+    beginAdd: async () => {
+      if (busy) return false;
+      resetForm();
+      setBusy(true);
+      const section = form.closest?.("details");
+      if (section) section.open = true;
+      form.scrollIntoView?.({ block: "center" });
+      form.elements.name?.focus?.();
+      try {
+        await refresh();
+        setHint("分别保存不同服务器的连接，例如 master 和 node04；每个连接独立设置 IP、端口和账号。");
+        return true;
+      } catch (error) {
+        fail(error);
+        return false;
+      } finally { setBusy(false); }
+    },
     // 配置浮层据此判断列表是否落后于个人层的最新版本，以及此刻能不能重读（提交在飞时由提交自己刷新）。
     getRevision: () => revision, isBusy: () => busy,
   };

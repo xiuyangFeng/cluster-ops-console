@@ -29,6 +29,7 @@ import { smokeBinary } from "./hot-update/smoke.mjs";
 import { isMainModule } from "./lib/is-main.mjs";
 import { createZip } from "./lib/zip.mjs";
 import { scanRelease } from "./release-scan.mjs";
+import { buildUpdatePackage } from "./build-update-package.mjs";
 
 export const APP_NAME = "Codex Operations Console";
 export const EXE_NAME = `${APP_NAME}.exe`;
@@ -38,8 +39,9 @@ export const MAX_APP_SIZE_MB = 450;
 const ROOT_DIR = path.resolve(import.meta.dirname, "..");
 
 // 与 build-macos-app.sh 第 3 步同一份白名单：只带运行所需文件；work/monitor 内排除测试、运行状态、日志与 PID。
-const TOP_FILES = ["electron-main.mjs", "preload.js", "package.json", "config.json"];
+const TOP_FILES = ["electron-bootstrap.mjs", "electron-main.mjs", "preload.js", "package.json", "config.json"];
 const REQUIRED = [
+  "electron-bootstrap.mjs",
   "electron-main.mjs",
   "preload.js",
   "package.json",
@@ -271,6 +273,9 @@ export async function buildWindowsApp(argv = [], { rootDir = ROOT_DIR, log = con
     const scan = scanRelease({ artifactDir: resourcesApp });
     if (!scan.ok) throw new Error(`包内容扫描失败：${JSON.stringify(scan.findings)}`);
     log("  入口语法检查与包内容扫描通过");
+    // 与完整安装包发布同一份、通过相同扫描的小更新包，不含 Electron 运行时。
+    const updateName = buildUpdatePackage({ resourcesApp, outDir, arch: opts.arch });
+    log(`→ 热更新包：${updateName}`);
 
     if (opts.smoke) {
       if (process.platform !== "win32") throw new Error("--smoke 只能在 Windows 上跑（要执行包里的 exe）");
@@ -280,7 +285,7 @@ export async function buildWindowsApp(argv = [], { rootDir = ROOT_DIR, log = con
       log("  冒烟通过");
     }
 
-    const outputs = [];
+    const outputs = [path.join(outDir, updateName), path.join(outDir, `${updateName}.sha256`)];
     if (opts.zip) {
       const zipPath = path.join(outDir, names.zip);
       log(`→ 便携 zip：${names.zip}`);

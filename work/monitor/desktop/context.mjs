@@ -17,8 +17,9 @@ import os from "node:os";
 import path from "node:path";
 
 import { resolveRuntimePaths } from "../lib/runtime-paths.mjs";
+import { PACKAGE_APP_NAME } from "../lib/self-update/package-recovery.mjs";
 
-export const APP_DISPLAY_NAME = "Codex Tunnel Operations Console";
+export const APP_DISPLAY_NAME = PACKAGE_APP_NAME;
 export const MONITOR_PORT = 8877;
 // Windows 的应用身份（AppUserModelID）：原生通知要靠它认出发送方，必须与安装器开始菜单快捷方式上写的一致
 // （scripts/windows-installer.iss）。取值与 macOS 的 CFBundleIdentifier 相同。

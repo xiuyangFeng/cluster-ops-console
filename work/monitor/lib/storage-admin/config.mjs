@@ -61,3 +61,16 @@ export function resolveTargets(config) {
   }
   return out;
 }
+
+// 配置表单只预填当前连接，不保存、不发 SSH；扫描范围由管理员选择。
+export function storageTargetDraft(config) {
+  const servers = (config?.servers || []).filter((s) => s && s.disabled !== true);
+  const active = servers.find((s) => s.id === config.activeServerId) || servers[0];
+  if (!active) return { id: "storage-01", label: "存储服务器", host: "", port: 22 };
+  return {
+    id: active.id,
+    label: active.name || active.id,
+    host: active.sshHostName || active.address?.host || active.host || "",
+    port: active.sshPort || 22,
+  };
+}

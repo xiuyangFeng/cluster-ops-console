@@ -11,12 +11,13 @@ import { listImportClosure } from "../work/monitor/lib/component-version.mjs";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const ENTRIES = [
+  "electron-bootstrap.mjs",
   "electron-main.mjs",
   "work/monitor/monitor-server.mjs",
   "work/monitor/channel-supervisor.mjs",
   "work/local_http_connect_proxy.mjs",
 ];
-const ROOT_FILES = new Set(["electron-main.mjs", "preload.js", "package.json", "config.json"]);
+const ROOT_FILES = new Set(["electron-bootstrap.mjs", "electron-main.mjs", "preload.js", "package.json", "config.json"]);
 
 function isBundled(rel) {
   if (ROOT_FILES.has(rel) || rel === "work/local_http_connect_proxy.mjs") return true;

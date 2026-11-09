@@ -478,7 +478,8 @@ const hhmm = (ms) => {
 // 纯函数：GET /api/self-update 的载荷 → 一句现状。
 export function describeSelfUpdate(su) {
   if (!su) return "";
-  if (su.supported === false) return su.unsupportedReason || "当前安装方式不支持自动更新";
+  if (su.supported === false && su.kind !== "packaged") return su.unsupportedReason || "当前安装方式不支持自动更新";
+  if (su.packageUpdate?.running) return "正在下载、检查并应用更新…";
   if (su.applying) return "正在更新…";
   if (su.checking) return "正在检查…";
   const local = su.localVersion ? `v${su.localVersion}` : "版本未知";
@@ -496,11 +497,13 @@ export function describeSelfUpdate(su) {
 // 「检查更新」只在不是 git 仓库（只能重新 clone）时不给；其余不能更新的情况——git 不信任目录归属、
 // 没有 origin、找不到 git、这一次没读出状态——处理完点它就能接上，不用重启工作台。
 export function buildSelfUpdateRowHtml(su) {
-  if (!su || su.kind === "packaged" || (su.supported == null && !su.error?.message)) return "";
+  if (!su || (su.supported == null && !su.error?.message)) return "";
   const deadEnd = su.supported === false && su.kind === "plain";
   const button = deadEnd ? "" : ' <button type="button" class="btn btn-secondary" id="selfUpdateCheckBtn">检查更新</button>';
   // 跟的是哪个分支写在下面「更新通道」那一行，这里不重复。
-  const note = deadEnd
+  const note = su.kind === "packaged"
+    ? "检查 GitHub 正式发布版本；支持热更新时可直接更新并重启界面，也可下载完整安装包。"
+    : deadEnd
     ? "自动更新只支持 git clone 出来的安装目录"
     : `从 GitHub 取新版本${su.remote ? `（${su.remote}）` : ""}；发现新版本只提示，点了才更新，更新时隧道不断`;
   return `

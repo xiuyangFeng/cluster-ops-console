@@ -313,6 +313,13 @@ const settings = createSettingsDialog({
   initRegistryUi: initServerRegistryUi, getClientVersion: () => loadedClientVersion,
   loadServers: serverSwitch.loadServers, refresh, fetchIncidents: (options) => incidents.fetch(options),
 });
+function openAddConnection() {
+  doc.getElementById("dlgOnboarding")?.close();
+  dialogs.openDialog("dlgSettings");
+  settings.registry.beginAdd?.();
+}
+doc.getElementById("connectionAddBtn")?.addEventListener("click", openAddConnection);
+doc.getElementById("onboardingAddConnection")?.addEventListener("click", openAddConnection);
 // 配置浮层「监控模块」「界面面板」两段（app/settings-modules.js）。面板勾选先乐观应用：
 // 用改过 hiddenPanels 的状态重渲一次。两种保存成功后都立即全量刷新（关掉 Agent 不是级别变化，后端不推 SSE），
 // Agent 状态带 / 诊断入口 / 用量页 / 简报格随之对齐。

@@ -38,6 +38,7 @@ import { createSystemProxyDetector } from "../lib/proxy/system-proxy.mjs";
 import { isPackagedApp } from "../lib/runtime-paths.mjs";
 import { RESTART_EXIT_CODE } from "../lib/self-update/restart-code.mjs";
 import { fetchLatestRelease } from "../lib/self-update/release-check.mjs";
+import { createPackageUpdater } from "../lib/self-update/package-update.mjs";
 import { createSelfUpdateService } from "../lib/self-update/service.mjs";
 import { buildPinnedProbeSshArgs } from "../lib/ssh-args.mjs";
 import { createTunnelStabilityService } from "../lib/tunnel-stability-service.mjs";
@@ -175,6 +176,7 @@ export async function startMonitorServer({ env = process.env } = {}) {
     incidentSync: null,
     operationsRunner: null,
     dataPlaneUpgrader: null,
+    packageUpdater: null,
     shutdown: null,
   };
   // 「查看处置日志」：处置操作（通道级重启 / 单隧道重启）一经受理即关联它处置的未解决事件。
@@ -273,6 +275,7 @@ export async function startMonitorServer({ env = process.env } = {}) {
     snapshots,
     getBundleComponents: async () => (await getBuildInfo()).dataPlane?.bundle ?? null,
     onOperationAccepted: linkOperation,
+    isPackageUpdating: () => ["backup", "install"].includes(late.packageUpdater?.status()?.phase),
   });
   Object.assign(late, runners);
   const { operationsRunner, dataPlaneUpgrader } = runners;
@@ -513,13 +516,21 @@ export async function startMonitorServer({ env = process.env } = {}) {
   const updateProxyDetector = createSystemProxyDetector({});
   const packagedApp = isPackagedApp(rootDir);
   const releaseRepo = packagedApp && !fixtureMode ? await readPackageRepo(rootDir) : null;
+  const updateEgress = async () => resolveEgressUpstream({ egress: (await getConfig())?.egress, detector: updateProxyDetector });
+  const updateUpstream = async () => (await updateEgress())?.url ?? null;
+  const packageUpdater = releaseRepo ? createPackageUpdater({
+    rootDir, runtimeDir, repo: releaseRepo, getUpstream: updateEgress, log: appendLog,
+    busy: () => dataPlaneUpgrader.isInFlight() || operationsRunner.isInFlight() || channel.getRepairInFlight(),
+  }) : null;
+  late.packageUpdater = packageUpdater;
   const selfUpdate = fixtureMode ? null : createSelfUpdateService({
     rootDir,
     runtimeDir,
     packaged: packagedApp,
-    releaseLookup: releaseRepo ? () => fetchLatestRelease(releaseRepo) : null,
+    releaseLookup: releaseRepo ? async () => fetchLatestRelease(releaseRepo, { upstream: await updateEgress() }) : null,
+    packageUpdater,
     // git fetch 跟随个人层的出网设置（跟随系统代理 / 手动上游时带 -c http.proxy）。
-    getUpstream: async () => (await resolveEgressUpstream({ egress: (await getConfig())?.egress, detector: updateProxyDetector }))?.url ?? null,
+    getUpstream: updateUpstream,
     env,
     log: appendLog,
   });
@@ -620,6 +631,10 @@ export async function startMonitorServer({ env = process.env } = {}) {
   const storageAdminDir = path.join(runtimeDir, STORAGE_ADMIN_DIR);
   const storageAdmin = createStorageAdminService({
     getConfig,
+    savePersonalConfig: async (patch) => {
+      await configManager.savePersonalConfig(patch);
+      await refreshConfigIntoKernel();
+    },
     isAdmin: (config) => teamAdminService.getAdminRole(config).isAdmin,
     store: createStorageAdminStore({ dir: storageAdminDir }),
     exec: (cmd, args, options = {}) => (fixtureMode && cmd === "ssh"

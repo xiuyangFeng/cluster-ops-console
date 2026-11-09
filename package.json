@@ -1,13 +1,13 @@
 {
   "name": "codex-tunnel-monitor",
-  "version": "2.94.1",
+  "version": "2.97.0",
   "description": "Codex Tunnel Desktop Monitor with macOS Dynamic Island Style",
   "repository": {
     "type": "git",
     "url": "https://github.com/xiuyangFeng/cluster-ops-console.git"
   },
   "license": "MIT",
-  "main": "electron-main.mjs",
+  "main": "electron-bootstrap.mjs",
   "type": "module",
   "scripts": {
     "start": "node scripts/launch.mjs",

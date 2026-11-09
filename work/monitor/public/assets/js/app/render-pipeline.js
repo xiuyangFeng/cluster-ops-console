@@ -205,6 +205,7 @@ export function createRenderPipeline({
     if (versionBadge && status.version) versionBadge.textContent = `v${status.version}`;
     renderAgentSelect(status);
     syncServerSelect(getEl("serverSelect"), status.activeServerId);
+    syncServerSelect(getEl("connectionProfileSelect"), status.activeServerId);
     // 页头「Doctor」入口只在 Codex 监控开着时出现（status.doctor 随 Codex 门控一起消失）。
     const doctorBtn = getEl("doctorToolBtn");
     if (doctorBtn) doctorBtn.hidden = !hasDoctorAgent(status);

@@ -230,17 +230,31 @@ function targetTabsHtml(targets, selected) {
   }).join("")}</div>`;
 }
 
+export function buildStorageTargetForm(data, busy = {}) {
+  if (!data?.setup) return "";
+  const draft = data.setup;
+  const field = (name, label, value, extra = "") => `<label>${label}<input name="${name}" value="${attr(String(value ?? ""))}" ${extra} /></label>`;
+  return `<details class="sa-setup"${data.targets?.length ? "" : " open"}><summary>配置存储服务器</summary>` +
+    '<p class="sa-note">已预填当前连接。选择允许查看的目录并保存，然后按接入步骤配置只读扫描。也可填写另一台服务器。</p>' +
+    '<div class="sa-target-form" data-sa-target-form>' +
+    field("id", "服务器标识", draft.id, 'maxlength="64"') + field("label", "显示名称", draft.label, 'maxlength="64"') +
+    field("host", "服务器地址或 SSH 别名", draft.host, 'autocomplete="off"') + field("port", "SSH 端口", draft.port || 22, 'type="number" min="1" max="65535"') +
+    `<label class="sa-target-roots">允许查看的目录<input name="roots" value="${attr(draft.roots || "")}" placeholder="例如 /home /public /mnt（空格分隔）" /></label>` +
+    `<button type="button" class="btn btn-secondary" data-sa-save-target${busy.target ? " disabled" : ""}>${busy.target ? "正在保存…" : "保存存储服务器"}</button></div></details>`;
+}
+
 export function buildOverviewHtml(data, { installers = {}, busy = {}, error = "", loading = false, now = Date.now(), activity, fold = null, selected = null } = {}) {
   if (loading && !data) return '<p class="sa-note">正在读取…</p>';
   if (!data) return error ? `<p class="sa-note" data-level="warn">${escapeHtml(error)}</p>` : "";
   if (!data.targets?.length) {
-    return '<p class="sa-note">个人配置 config.local.json 里还没有 storageAdmin.targets（要查看的机器与允许扫描的目录）。</p>';
+    return buildStorageTargetForm(data, busy) || '<p class="sa-note">个人配置 config.local.json 里还没有 storageAdmin.targets（要查看的机器与允许扫描的目录）。</p>';
   }
   const err = error ? `<p class="sa-note" data-level="warn">${escapeHtml(error)}</p>` : "";
   const opts = { now, fold, ...(activity ? { activity } : {}) };
-  if (data.targets.length === 1) return `${err}${buildSetupHtml(data, { installers, busy })}${buildTargetHtml(data.targets[0], opts)}`;
+  const setup = buildStorageTargetForm(data, busy);
+  if (data.targets.length === 1) return `${err}${setup}${buildSetupHtml(data, { installers, busy })}${buildTargetHtml(data.targets[0], opts)}`;
   const pick = data.targets.find((t) => t.id === selected) || data.targets[0];
-  return `${err}${buildSetupHtml(data, { installers, busy })}${targetTabsHtml(data.targets, pick.id)}${buildTargetHtml(pick, opts)}`;
+  return `${err}${setup}${buildSetupHtml(data, { installers, busy })}${targetTabsHtml(data.targets, pick.id)}${buildTargetHtml(pick, opts)}`;
 }
 
 // 扫描结果的某一层。

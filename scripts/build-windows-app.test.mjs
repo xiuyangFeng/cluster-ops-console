@@ -67,7 +67,7 @@ test("组装：外壳改名、去掉 default_app.asar、只注入白名单、带
   assert.ok(!fs.existsSync(path.join(appDir, "resources", "default_app.asar")));
   assert.ok(fs.existsSync(path.join(appDir, "resources", "app-icon.ico")));
   assert.equal(resourcesApp, path.join(appDir, "resources", "app"));
-  for (const rel of ["electron-main.mjs", "preload.js", "package.json", "config.json", "work/local_http_connect_proxy.mjs", "work/monitor/monitor-server.mjs"]) {
+  for (const rel of ["electron-bootstrap.mjs", "electron-main.mjs", "preload.js", "package.json", "config.json", "work/local_http_connect_proxy.mjs", "work/monitor/monitor-server.mjs"]) {
     assert.ok(fs.existsSync(path.join(resourcesApp, rel)), rel);
   }
   // 不带测试、不带 scripts/、不带个人配置。

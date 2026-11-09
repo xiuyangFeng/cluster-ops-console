@@ -55,6 +55,7 @@ test("summarizeServer: 凭据只投影成 authMethod，不回传引用", () => {
   assert.equal(summarizeServer({ ...base, authRef: "vault:1" }).authMethod, "keychain");
   assert.equal(summarizeServer({ ...base, authRef: "mem:1" }).authMethod, "session-password");
   assert.equal(summarizeServer({ ...base, sshIdentityFile: "/k" }).authMethod, "identity-file");
+  assert.equal(summarizeServer({ ...base, sshIdentityFile: "/k" }).sshIdentityFile, "/k", "编辑连接时回填路径，避免普通保存清掉原密钥配置");
   const plain = summarizeServer(base, { runtime: { state: "online" }, revision: 3 });
   assert.equal(plain.authMethod, "agent");
   assert.equal(plain.state, "online");

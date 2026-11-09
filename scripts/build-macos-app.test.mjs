@@ -17,6 +17,7 @@ const script = fs.readFileSync(scriptPath, "utf8").replace(/\r\n/g, "\n");
 // 各平台照跑；真正 spawn 它的用例在 win32 跳过——Windows 同事走网页模式，从不构建 .app。
 
 const requiredPaths = [
+  "electron-bootstrap.mjs",
   "electron-main.mjs",
   "preload.js",
   "package.json",
@@ -281,6 +282,7 @@ function makeFakeBuildRoot({ validSources = false } = {}) {
   for (const [relative, body] of Object.entries(STAGED_SOURCES)) write(relative, body);
   if (validSources) {
     // 能一路走到签名步骤：入口语法合法 + 图标在位（组件指纹算不出来只告警、写空串）。
+    write("electron-bootstrap.mjs", "// fixture\n");
     write("electron-main.mjs", "// fixture\n");
     write("scripts/assets/app-icon.icns", "icns-fixture\n");
     write("node_modules/electron/dist/Electron.app/Contents/Resources/electron.icns", "electron-icns-fixture\n");

@@ -10,7 +10,8 @@ import { createOperationsRunner } from "../lib/operations-runner.mjs";
 // T04b：单隧道操作在飞时同样挡下通道重启（保守串行化，M1 不扩大并发）。
 export function isAnyRunnerInFlight(late) {
   return late.operationsRunner?.isInFlight() === true
-    || late.dataPlaneUpgrader?.isInFlight() === true;
+    || late.dataPlaneUpgrader?.isInFlight() === true
+    || ["backup", "install"].includes(late.packageUpdater?.status()?.phase);
 }
 
 // 数据面升级的拒绝原因（空串 = 可以升级）。
@@ -33,6 +34,7 @@ export function createRunners({
   getBundleComponents = async () => null,
   // 单隧道操作受理回调（start.mjs 接到事件关联：「查看处置日志」）。
   onOperationAccepted,
+  isPackageUpdating = () => false,
 }) {
   // ---- T04b 单隧道操作（preview → run → query；结果经本机控制信箱）----
   const operationsRunner = createOperationsRunner({
@@ -42,7 +44,7 @@ export function createRunners({
     getSnapshot: snapshots.getUsableSnapshot,
     log: appendLog,
     timeline: writeTimeline,
-    isChannelBusy: () => channel.getRepairInFlight(),
+    isChannelBusy: () => isPackageUpdating() || channel.getRepairInFlight(),
     onAccepted: onOperationAccepted,
   });
 
@@ -62,7 +64,7 @@ export function createRunners({
     holdAutoRepair: () => channel.holdAutoRepair(),
     shouldBeRunning: () => channel.getShouldBeRunning(),
     fixtureMode,
-    isBusy: () => dataPlaneBusyReason({ channel, operationsRunner }),
+    isBusy: () => isPackageUpdating() ? "workbench update in progress" : dataPlaneBusyReason({ channel, operationsRunner }),
     log: appendLog,
   });
 

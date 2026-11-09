@@ -463,3 +463,30 @@ test("authorized_keys：两台电脑各装各的互不踢掉；重装只替换�
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test("存储配置：root 不依赖管理员名单，可在页面保存；普通账号被拒绝且不写入", async () => {
+  const { isAdminUser, resolveEffectiveSshUser } = await import("../team-admin/protocol.mjs");
+  let user = "root";
+  let config = { activeServerId: "s1", adminUsers: [], servers: [{ id: "s1", name: "当前集群", host: "myserver", sshHostName: "cluster.example.org", sshPort: 2222 }], storageAdmin: { identityFile: "~/.ssh/special" } };
+  const writes = [];
+  const svc = createStorageAdminService({
+    getConfig: async () => ({ ...config, sshUser: user }),
+    isAdmin: (c) => isAdminUser(c, resolveEffectiveSshUser(c)),
+    store: createStorageAdminStore({ dir: null }),
+    exec: () => { throw new Error("保存配置不应发 SSH"); },
+    dir: os.tmpdir(),
+    savePersonalConfig: async (patch) => { writes.push(patch); config = { ...config, ...patch }; },
+  });
+  const view = await svc.overview();
+  assert.deepEqual(view.setup, { id: "s1", label: "当前集群", host: "cluster.example.org", port: 2222 });
+  const target = { ...view.setup, roots: ["/public", "/mnt"] };
+  assert.equal((await svc.configureTarget(target)).saved, true);
+  assert.equal(writes[0].storageAdmin.identityFile, "~/.ssh/special");
+  assert.deepEqual(writes[0].storageAdmin.targets, [target]);
+  await assert.rejects(svc.configureTarget({ ...target, roots: ["/"] }), (e) => e.status === 400);
+  await assert.rejects(svc.configureTarget({ ...target, host: "-oProxyCommand=x" }), (e) => e.status === 400);
+  user = "lin";
+  await assert.rejects(svc.configureTarget(target), (e) => e.status === 403);
+  await assert.rejects(svc.overview(), (e) => e.status === 403);
+  assert.equal(writes.length, 1);
+});

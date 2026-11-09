@@ -29,6 +29,26 @@ const reply = (status, body) => async (url, init) => {
   return { status, ok: status >= 200 && status < 300, json: async () => body };
 };
 
+test("安装版查版本沿用用户的出网代理，私有仓库 404 仍静默", async () => {
+  const upstream = { host: "127.0.0.1", port: 8880 };
+  const found = await fetchLatestRelease("a/b", { upstream, readJson: async (url, options) => {
+    assert.equal(options.upstream, upstream);
+    assert.match(url, /api.github.com/);
+    return { tag_name: "v2.95.0" };
+  } });
+  assert.equal(found.version, "2.95.0");
+  assert.equal(await fetchLatestRelease("a/b", { upstream: null, readJson: async () => { throw Object.assign(new Error("missing"), { statusCode: 404 }); } }), null);
+});
+
+test("Windows 热更新：只接受本仓库同版本同架构、带 SHA-256 和大小的资产", async () => {
+  const name = "CodexOperationsConsole-2.95.0-windows-x64-update.json.gz";
+  const asset = { name, browser_download_url: `https://github.com/a/b/releases/download/v2.95.0/${name}`, digest: `sha256:${"a".repeat(64)}`, size: 1234 };
+  const lookup = (a, options = {}) => fetchLatestRelease("a/b", { platform: "win32", arch: "x64", fetchImpl: reply(200, { tag_name: "v2.95.0", assets: [a] }), ...options });
+  assert.deepEqual((await lookup(asset)).update, { url: asset.browser_download_url, sha256: "a".repeat(64), size: 1234 });
+  for (const change of [{ digest: null }, { size: 100_000_000 }, { browser_download_url: "https://evil.example/update" }, { name: name.replace("x64", "arm64") }]) assert.equal((await lookup({ ...asset, ...change })).update, undefined);
+  assert.equal((await lookup(asset, { platform: "darwin" })).update, undefined);
+});
+
 test("fetchLatestRelease：正式版 → { version, url }；404（没有 Release / 私有仓库）、草稿、预发布 → null；其它状态码抛出", async () => {
   const ok = await fetchLatestRelease("a/b", { fetchImpl: reply(200, { tag_name: "v2.94.0", html_url: "https://github.com/a/b/releases/tag/v2.94.0" }) });
   assert.deepEqual(ok, { version: "2.94.0", url: "https://github.com/a/b/releases/tag/v2.94.0" });

@@ -80,6 +80,7 @@ export function resolveEffectiveSshUser(config, server = null, { resolveSshUser 
 export function isAdminUser(config, sshUser) {
   if (!isSafeClusterUser(sshUser)) return false;
   const user = sshUser.trim();
+  if (user === "root") return true;
   const list = Array.isArray(config?.adminUsers) ? config.adminUsers : [];
   return list.some((item) => typeof item === "string" && item.trim() === user);
 }
@@ -90,7 +91,8 @@ export function isAdminUser(config, sshUser) {
 export function buildHubAdminInitCommand(baseDir = DEFAULT_AGENT_HUB_DIR, adminUser = "") {
   const b = assertHubBaseDir(baseDir);
   const u = isSafeClusterUser(adminUser) ? adminUser.trim() : "admin";
-  return `sudo install -d -o ${u} -m 1777 ${b} ${b}/ports ${b}/pubkeys ${b}/heartbeats && sudo install -d -o ${u} -m 0755 ${b}/admin ${b}/assigned && sudo chown -R ${u} ${b}/admin ${b}/assigned`;
+  const prefix = u === "root" ? "" : "sudo ";
+  return `${prefix}install -d -o ${u} -m 1777 ${b} ${b}/ports ${b}/pubkeys ${b}/heartbeats && ${prefix}install -d -o ${u} -m 0755 ${b}/admin ${b}/assigned && ${prefix}chown -R ${u} ${b}/admin ${b}/assigned`;
 }
 
 // 生成在集群 root 终端一键粘贴执行的完整赋权脚本：
@@ -185,18 +187,20 @@ export function buildAdminSurveyCommand(baseDir = DEFAULT_AGENT_HUB_DIR) {
     "printf 'ME=%s\\n' \"$me\"",
     "printf 'NOW=%s\\n' \"$now\"",
     "hlp=/usr/local/bin/codex-team-admin-helper",
+    "run_root() { if [ \"$(id -u)\" = 0 ]; then \"$@\"; else sudo -n \"$@\"; fi; }",
     "sudo_ok=0",
-    "if command -v sudo >/dev/null 2>&1; then",
+    "if [ \"$(id -u)\" = 0 ]; then sudo_ok=1",
+    "elif command -v sudo >/dev/null 2>&1; then",
     "  if [ -x \"$hlp\" ] && sudo -n \"$hlp\" check >/dev/null 2>&1; then sudo_ok=1",
     "  elif sudo -n true 2>/dev/null; then sudo_ok=1; fi",
     "fi",
     "printf 'SUDO_READY=%d\\n' \"$sudo_ok\"",
     "if [ ! -d \"$b\" ] || [ ! -w \"$b\" ] || [ ! -d \"$b/admin\" ] || [ ! -w \"$b/admin\" ]; then",
     "  if [ \"$sudo_ok\" = \"1\" ]; then",
-    "    if [ -x \"$hlp\" ]; then sudo -n \"$hlp\" init \"$b\" \"$me\" 2>/dev/null || true",
+    "    if [ -x \"$hlp\" ]; then run_root \"$hlp\" init \"$b\" \"$me\" 2>/dev/null || true",
     "    else",
-    "      sudo -n install -d -o \"$me\" -m 1777 \"$b\" \"$b/ports\" \"$b/pubkeys\" \"$b/heartbeats\" 2>/dev/null || true",
-    "      sudo -n install -d -o \"$me\" -m 0755 \"$b/admin\" \"$b/assigned\" 2>/dev/null || true",
+    "      run_root install -d -o \"$me\" -m 1777 \"$b\" \"$b/ports\" \"$b/pubkeys\" \"$b/heartbeats\" 2>/dev/null || true",
+    "      run_root install -d -o \"$me\" -m 0755 \"$b/admin\" \"$b/assigned\" 2>/dev/null || true",
     "    fi",
     "  fi",
     "fi",
@@ -307,7 +311,7 @@ export function buildAdminSurveyCommand(baseDir = DEFAULT_AGENT_HUB_DIR) {
     "    : > \"$rtmp\" 2>/dev/null || true",
     "    for u in $users; do",
     "      [ ! -f \"$b/heartbeats/$u.json\" ] || continue",
-    "      sudo -n \"$hlp\" scan-user \"$u\" >> \"$rtmp\" 2>/dev/null || true",
+    "      run_root \"$hlp\" scan-user \"$u\" >> \"$rtmp\" 2>/dev/null || true",
     "    done",
     "    mv -f \"$rtmp\" \"$rcache\" 2>/dev/null || rm -f \"$rtmp\" 2>/dev/null || true",
     "    cat \"$rcache\" 2>/dev/null || true",

@@ -101,6 +101,7 @@
     <link rel="modulepreload" href="/assets/js/render/log-stream.js" />
     <link rel="modulepreload" href="/assets/js/render/signal-banner.js" />
     <link rel="modulepreload" href="/assets/js/render/update-banner.js" />
+    <link rel="modulepreload" href="/assets/js/render/package-update.js" />
     <link rel="modulepreload" href="/assets/js/render/repair-runbook.js" />
     <link rel="modulepreload" href="/assets/js/render/incidents.js" />
     <link rel="modulepreload" href="/assets/js/render/incident-insights.js" />
@@ -225,6 +226,13 @@
           <div class="agent-strip" id="agentOverviewGrid"></div>
         </div>
       </div>
+
+      <section class="connection-profiles" aria-label="服务器连接配置">
+        <label for="connectionProfileSelect">服务器连接</label>
+        <select id="connectionProfileSelect" class="styled-select server-select-dropdown" aria-label="选择已保存的服务器连接" disabled></select>
+        <button type="button" id="connectionAddBtn" class="btn btn-secondary">添加连接</button>
+        <span class="server-selector-hint">可保存多个 IP，分别配置账号</span>
+      </section>
 
       <!-- 横幅区：注意力队列 / 卡顿信号 / 热更新 / Agent 详情。都隐藏时只剩 16px 下边距（shell.css）。
            注意：本 header 位于 <main> 内，按 HTML-AAM 其隐式角色是 generic，不允许再显式声明 role="banner"。 -->
@@ -814,14 +822,15 @@
         <button type="button" class="btn btn-secondary" data-dialog="dlgBootstrap">打开安装向导</button>
       </div>
     </div>
-    <details class="config-option" open><summary><span>服务器管理<small>添加、测试、禁用或删除个人服务器</small></span></summary>
+    <details class="config-option" open><summary><span>服务器连接配置<small>可分别保存 master、node04 等多个连接，添加、测试、编辑或切换</small></span></summary>
         <div class="server-registry" id="serverRegistry">
           <div id="serverRegistryList" class="server-registry-list"></div>
           <form id="serverRegistryForm" class="server-registry-form">
-            <label>名称<input name="name" autocomplete="off" placeholder="腾讯云"></label>
+            <label>连接名称<input name="name" autocomplete="off" placeholder="例如 master 或 node04"></label>
             <label>地址<input name="address" required autocomplete="off" placeholder="10.0.0.8 或 hostname"></label>
             <label>SSH 端口<input name="sshPort" type="number" min="1" max="65535" value="22"></label>
             <label>用户名<input name="sshUser" required autocomplete="username" placeholder="ubuntu"></label>
+            <label>SSH 私钥路径（可选）<input name="sshIdentityFile" autocomplete="off" placeholder="留空使用默认密钥"></label>
             <label>反向端口（建隧道时填写）<input name="remotePort" type="number" min="1" max="65535" disabled></label>
             <label>SSH 密码（可选）<input name="password" type="password" autocomplete="new-password" placeholder="留空则使用 ssh-agent / 私钥"></label>
             <label class="server-registry-check"><input type="checkbox" name="monitor" checked>监控</label>
@@ -1167,6 +1176,7 @@
         </section>
       </div>
       <footer class="ob-footer" id="onboardingFooter" hidden>
+        <button type="button" class="btn btn-secondary" id="onboardingAddConnection">再添加一个连接</button>
         <button type="button" class="btn btn-primary" id="onboardingFinish">进入工作台</button>
       </footer>
     </dialog>

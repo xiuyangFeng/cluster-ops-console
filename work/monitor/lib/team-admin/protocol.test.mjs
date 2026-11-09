@@ -34,6 +34,13 @@ test("resolveAgentHubBaseDir 与 resolveEffectiveSshUser / isAdminUser：正确�
   assert.equal(sshUser, "kai");
   assert.equal(isAdminUser(config, sshUser), true);
   assert.equal(isAdminUser(config, "zhangsan"), false);
+  assert.equal(isAdminUser({ adminUsers: [] }, "root"), true);
+  assert.equal(isAdminUser({}, " root "), true);
+  assert.equal(isAdminUser({}, "ROOT"), false);
+  assert.equal(isAdminUser({}, "root-admin"), false);
+  assert.equal(isAdminUser({}, ""), false);
+  assert.doesNotMatch(buildHubAdminInitCommand("/shared/hub", "root"), /sudo/);
+  assert.equal(resolveEffectiveSshUser({ sshUser: "root" }, { host: "h", sshUser: "lin" }), "lin");
   assert.equal(isSafeClusterUser("kai"), true);
   assert.equal(isSafeClusterUser("-bad"), false);
   assert.equal(isSafeClusterUser("a/b"), false);

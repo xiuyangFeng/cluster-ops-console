@@ -17,7 +17,7 @@ test("现状的一句话：没检查过 / 已是最新 / 有新版本 / 不能�
   assert.equal(describeSelfUpdate(null), "");
 });
 
-test("「更新」一行：git 安装给「检查更新」按钮；不是 git 仓库只说明；打包安装与取不到状态时不出这一行", () => {
+test("「更新」一行：源码与打包安装可检查更新；不是 git 仓库只说明；取不到状态时隐藏", () => {
   const row = buildSelfUpdateRowHtml(base);
   assert.match(row, /id="selfUpdateCheckBtn"/);
   assert.match(row, /id="selfUpdateStatus">当前 v2\.58\.1，还没检查过</);
@@ -37,7 +37,7 @@ test("「更新」一行：git 安装给「检查更新」按钮；不是 git �
   const unknown = buildSelfUpdateRowHtml({ supported: null, kind: "unknown", error: { code: "inspect-failed", message: "读不到这个目录的 git 状态（git 没有在限定时间内返回），稍后会自动再查" } });
   assert.match(unknown, /id="selfUpdateStatus">读不到这个目录的 git 状态/);
   assert.match(unknown, /selfUpdateCheckBtn/);
-  assert.equal(buildSelfUpdateRowHtml({ supported: false, kind: "packaged", unsupportedReason: "x" }), "");
+  assert.match(buildSelfUpdateRowHtml({ supported: false, kind: "packaged", unsupportedReason: "x" }), /selfUpdateCheckBtn/);
   assert.equal(buildSelfUpdateRowHtml(null), "");
   assert.equal(buildSelfUpdateRowHtml({ error: "self-update unavailable" }), "", "503 的载荷不当成状态");
   // 远端地址来自 git 配置：转义后才进 HTML。
