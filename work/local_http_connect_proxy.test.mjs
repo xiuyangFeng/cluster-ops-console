@@ -674,9 +674,15 @@ async function spawnProxyProcess(configPath, extraEnv = {}) {
     },
     stdio: ["ignore", "pipe", "pipe"],
   });
+  const closed = new Promise((resolve) => child.once("close", resolve));
+  const stop = async () => {
+    if (child.exitCode === null && child.signalCode === null) child.kill("SIGKILL");
+    await closed; // Windows 必须等句柄释放后再删除临时目录。
+  };
   let stderr = "";
   child.stderr.on("data", (c) => (stderr += c));
-  const port = await new Promise((resolve, reject) => {
+  let port;
+  try { port = await new Promise((resolve, reject) => {
     let stdout = "";
     const timer = setTimeout(() => reject(new Error(`proxy 未在 5s 内就绪，stdout=${stdout} stderr=${stderr}`)), 5000);
     child.stdout.on("data", (c) => {
@@ -687,22 +693,28 @@ async function spawnProxyProcess(configPath, extraEnv = {}) {
         resolve(Number(m[1]));
       }
     });
+    child.once("error", (error) => { clearTimeout(timer); reject(error); });
     child.on("exit", (code) => {
       clearTimeout(timer);
       reject(new Error(`proxy 提前退出 code=${code}，stderr=${stderr}`));
     });
   });
-  return { child, port, getStderr: () => stderr };
+  } catch (error) { await stop(); throw error; }
+  return { child, port, stop, getStderr: () => stderr };
 }
 
-test("e2e：config.json 的 proxyAllowedTargets 生效——配置条目放行、旧内置条目被配置覆盖后拒绝", async (t) => {
+test("e2e：config.json 的 proxyAllowedTargets 生效——配置条目放行、旧内置条目被配置覆盖后拒绝", { timeout: 60000 }, async (t) => {
   const dir = await mkdtemp(path.join(os.tmpdir(), "proxy-allowlist-"));
-  t.after(() => rm(dir, { recursive: true, force: true }));
+  let stopProxy = async () => {};
+  t.after(async () => {
+    await stopProxy();
+    await rm(dir, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
+  });
   const configPath = path.join(dir, "config.json");
   await writeFile(configPath, JSON.stringify({ proxyAllowedTargets: ["allowed-e2e.invalid:9443"] }));
 
-  const { child, port } = await spawnProxyProcess(configPath);
-  t.after(() => child.kill("SIGTERM"));
+  const { port, stop } = await spawnProxyProcess(configPath);
+  stopProxy = stop;
 
   // 真实子进程无法注入 lookup，且本地 DNS 可能对任意域名做 NXDOMAIN 劫持（返回真实 IP），
   // 拨号结果（200/502/504）不可控——但"被策略拒绝"必然是 403 且互斥，用"非 403"判放行。
@@ -714,15 +726,19 @@ test("e2e：config.json 的 proxyAllowedTargets 生效——配置条目放行�
   assert.match(overridden.response, /HTTP\/1\.1 403 Forbidden/, `配置覆盖后内置条目应被拒，实际: ${overridden.response}`);
 });
 
-test("e2e：config.json 整个烂掉（JSON 解析失败）代理仍能启动，且私网/未白名单目标照拒", async (t) => {
+test("e2e：config.json 整个烂掉（JSON 解析失败）代理仍能启动，且私网/未白名单目标照拒", { timeout: 60000 }, async (t) => {
   const dir = await mkdtemp(path.join(os.tmpdir(), "proxy-badconf-"));
-  t.after(() => rm(dir, { recursive: true, force: true }));
+  let stopProxy = async () => {};
+  t.after(async () => {
+    await stopProxy();
+    await rm(dir, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
+  });
   const configPath = path.join(dir, "config.json");
   await writeFile(configPath, "{definitely not json");
 
   // 关键断言就在 spawnProxyProcess 内部：能解析出监听端口 = 没有因配置烂而起不来。
-  const { child, port, getStderr } = await spawnProxyProcess(configPath);
-  t.after(() => child.kill("SIGTERM"));
+  const { port, stop, getStderr } = await spawnProxyProcess(configPath);
+  stopProxy = stop;
 
   assert.match(getStderr(), /proxyAllowedTargets|config/i, "应有一条配置回落告警（含上下文），方便排障");
 
@@ -743,9 +759,13 @@ async function waitFor(check, { timeoutMs = 8000, stepMs = 200 } = {}) {
   }
 }
 
-test("e2e：改个人层白名单与出网方式，运行中的代理几秒内热载（同一进程，不重启）", async (t) => {
+test("e2e：改个人层白名单与出网方式，运行中的代理几秒内热载（同一进程，不重启）", { timeout: 60000 }, async (t) => {
   const dir = await mkdtemp(path.join(os.tmpdir(), "proxy-hot-reload-"));
-  t.after(() => rm(dir, { recursive: true, force: true }));
+  let stopProxy = async () => {};
+  t.after(async () => {
+    await stopProxy();
+    await rm(dir, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
+  });
   const configPath = path.join(dir, "config.json");
   const localConfigPath = path.join(dir, "config.local.json");
   await writeFile(configPath, JSON.stringify({}));
@@ -753,7 +773,10 @@ test("e2e：改个人层白名单与出网方式，运行中的代理几秒内�
 
   // 假上游 HTTP 代理：记下 CONNECT 目标，回 200 后当 echo。
   const upstreamRequests = [];
+  const upstreamSockets = new Set();
   const upstream = net.createServer((socket) => {
+    upstreamSockets.add(socket);
+    socket.once("close", () => upstreamSockets.delete(socket));
     socket.on("error", () => {});
     socket.once("data", (buf) => {
       upstreamRequests.push(String(buf).split("\r\n")[0]);
@@ -762,13 +785,16 @@ test("e2e：改个人层白名单与出网方式，运行中的代理几秒内�
     });
   });
   await new Promise((r) => upstream.listen(0, "127.0.0.1", r));
-  t.after(() => new Promise((r) => upstream.close(r)));
+  t.after(async () => {
+    for (const socket of upstreamSockets) socket.destroy();
+    await new Promise((r) => upstream.close(r));
+  });
 
-  const { child, port, getStderr } = await spawnProxyProcess(configPath, {
+  const { child, port, stop, getStderr } = await spawnProxyProcess(configPath, {
     CODEX_MONITOR_LOCAL_CONFIG_PATH: localConfigPath,
     CODEX_MONITOR_DATA_DIR: path.join(dir, "data"),
   });
-  t.after(() => child.kill("SIGTERM"));
+  stopProxy = stop;
   const pid = child.pid;
 
   const before = await rawConnect(port, "hot-reload.invalid:9443");

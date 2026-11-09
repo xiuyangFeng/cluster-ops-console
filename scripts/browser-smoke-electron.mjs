@@ -118,6 +118,9 @@ async function runSmoke() {
       : { level: detailsOrLevel, message: oldMessage };
     if (details.level >= 3) pageErrors.push(details.message);
   });
+  // 这些步骤验证可见工作台的自动同步；隐藏窗口按产品设计会跳过全量刷新。
+  // showInactive 保持真实可见性语义，同时不抢用户焦点。
+  win.showInactive();
   await win.loadURL(baseUrl);
   await waitFor(() => win.webContents.executeJavaScript(
     `document.getElementById("versionBadge")?.textContent === "v${packageVersion}" && document.getElementById("serverSelect")?.options.length > 0`,
