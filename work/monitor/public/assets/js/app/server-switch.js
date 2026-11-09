@@ -22,8 +22,9 @@ export function createServerSwitch({
       state.setConfig(config);
       const visibleServers = config.servers.filter((s) => s.disabled !== true && s.monitorEnabled !== false);
       if (previousServerId && !visibleServers.some((s) => s.id === previousServerId)) resetCharts();
-      const select = getEl("serverSelect");
-      if (select) {
+      for (const id of ["serverSelect", "connectionProfileSelect"]) {
+        const select = getEl(id);
+        if (!select) continue;
         select.innerHTML = visibleServers.map((s) => `<option value="${escapeHtml(s.id)}">${escapeHtml(s.displayName || s.name || s.id)}</option>`).join("");
         select.value = config.activeServerId || visibleServers[0]?.id || "";
         select.disabled = visibleServers.length === 0;

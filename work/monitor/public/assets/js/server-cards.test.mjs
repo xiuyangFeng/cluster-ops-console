@@ -59,6 +59,7 @@ test("团队卡隐藏编辑；编辑回填用完整对象", () => {
     disabled: true,
   });
   assert.deepEqual(values, {
+    sshIdentityFile: "",
     name: "腾讯云",
     address: "10.0.0.8",
     sshPort: 2222,
@@ -128,7 +129,7 @@ function uiHarness(t, overrides = {}) {
   const handlers = {};
   const element = id => ({ innerHTML: "", textContent: "", hidden: false, disabled: false, querySelectorAll: () => [], addEventListener: (name, fn) => { handlers[`${id}:${name}`] = fn; } });
   const form = element("form");
-  form.elements = Object.fromEntries(["name", "address", "sshPort", "sshUser", "remotePort", "password", "monitor", "tunnel"].map(name => [name, { value: "", checked: false, addEventListener() {} }]));
+  form.elements = Object.fromEntries(["name", "address", "sshPort", "sshUser", "sshIdentityFile", "remotePort", "password", "monitor", "tunnel"].map(name => [name, { value: "", checked: false, addEventListener() {} }]));
   form.elements.address.value = "box.invalid";
   form.elements.sshUser.value = "me";
   form.elements.monitor.checked = true;
@@ -151,6 +152,21 @@ function uiHarness(t, overrides = {}) {
   const submit = () => handlers["form:submit"]({ preventDefault() {} });
   return { ui, form, nodes, notices, calls, click, submit, setPayload: value => { payload = value; } };
 }
+
+test("添加连接先取得最新配置版本，保存该连接自己的密钥路径", async t => {
+  const h = uiHarness(t);
+  h.setPayload({ revision: 12, servers: [] });
+  assert.equal(await h.ui.beginAdd(), true);
+  assert.equal(h.ui.getRevision(), 12);
+  h.form.elements.name.value = "node04";
+  h.form.elements.address.value = "node04.example.org";
+  h.form.elements.sshUser.value = "root";
+  h.form.elements.sshIdentityFile.value = "/keys/node04";
+  await h.submit();
+  assert.equal(h.calls[0][0], "/api/servers");
+  assert.equal(h.calls[0][1].expectedRevision, 12);
+  assert.equal(h.calls[0][1].sshIdentityFile, "/keys/node04");
+});
 
 test("编辑版本冻结，后台刷新不覆盖expectedRevision", async t => {
   const h = uiHarness(t);

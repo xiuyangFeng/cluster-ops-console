@@ -1,4 +1,4 @@
-// 管理员存储视图（lib/storage-admin/service.mjs）。仅 adminUsers 可用，非管理员一律 403（服务内判定）。
+// 管理员存储视图（lib/storage-admin/service.mjs）。root 或 adminUsers 可用，其余一律 403（服务内判定）。
 //
 //   GET  /api/storage-admin                                 → 概览（只读本机，不发 SSH）
 //   POST /api/storage-admin/refresh    { targetId }         → 连 root 刷新容量 / 配额 / 任务
@@ -33,6 +33,7 @@ export function createStorageAdminRoutes({ storageAdmin }) {
       await respondOrError(res, async () => sendJson(res, await storageAdmin.overview()), sendError);
     },
     "POST /api/storage-admin/refresh": post((d) => storageAdmin.refresh(d.targetId)),
+    "POST /api/storage-admin/targets": post((d) => storageAdmin.configureTarget(d)),
     "POST /api/storage-admin/key": post(() => storageAdmin.ensureKey()),
     "POST /api/storage-admin/installer": post((d) => storageAdmin.installer(d.targetId)),
     "POST /api/storage-admin/scan": post((d) => {

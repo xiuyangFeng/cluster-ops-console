@@ -42,7 +42,7 @@ export function createSelfUpdateRoutes({ selfUpdate = null, requestRestart = nul
       if (!selfUpdate) return unavailable(res);
       await respondOrError(res, async () => {
         const result = await selfUpdate.apply();
-        appendLog(`self-update applied: v${result.fromVersion} -> v${result.toVersion}`, { ...operationContext, event: "self-update" });
+        appendLog(result.pending ? `package-update started: v${result.toVersion}` : `self-update applied: v${result.fromVersion} -> v${result.toVersion}`, { ...operationContext, event: "self-update" });
         sendJson(res, result);
       }, (r, err) => {
         appendLog(`self-update not applied: ${err.code || err.status || "error"}`, { ...operationContext, event: "self-update", level: "warn" });

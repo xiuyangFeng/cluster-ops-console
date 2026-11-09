@@ -1317,7 +1317,7 @@ test("重启后：还没跑到新版本 → 留着下次；记录太旧 → 作�
   assert.equal(await stuck, "timeout");
 });
 
-test("安装包版本：到 GitHub Releases 查新版本，有就给发布页（不给一键更新）；查不到不冲掉上一次的结论", async (t) => {
+test("安装包没有热更新包时保留下载入口；查不到不冲掉上一次的结论", async (t) => {
   const ctx = setup(t);
   let calls = 0;
   let latest = { version: "99.0.0", url: "https://github.com/a/b/releases/tag/v99.0.0" };
@@ -1353,4 +1353,32 @@ test("安装包版本：到 GitHub Releases 查新版本，有就给发布页（
   const st = await settled(scheduled);
   assert.deepEqual([calls - before, st.available], [1, true], "定时那一轮也问一次发布页");
   scheduled.stop();
+});
+
+test("安装包有热更新包：点击更新异步启动任务，进度可查询，重复点击被拒绝", async (t) => {
+  const ctx = setup(t);
+  let job = null;
+  let stopped = false;
+  const latest = { version: "99.0.0", url: "https://github.com/a/b/releases/tag/v99.0.0", update: { url: "asset", sha256: "a".repeat(64), size: 100 } };
+  const packageUpdater = {
+    supported: true,
+    status: () => job,
+    start: (release) => {
+      assert.equal(release, latest);
+      job = { running: true, phase: "download" };
+      return { ok: true, pending: true, toVersion: release.version };
+    },
+    stop: () => { stopped = true; },
+  };
+  const service = ctx.make({ packaged: true, releaseLookup: async () => latest, packageUpdater });
+  const found = await service.check({ force: true });
+  assert.equal(found.canApply, true);
+  assert.equal(found.supported, true);
+  assert.equal((await service.apply()).pending, true);
+  const running = await service.status();
+  assert.equal(running.packageUpdate.phase, "download");
+  assert.equal(running.canApply, false);
+  await assert.rejects(service.apply(), (e) => e.status === 409 && e.code === "busy");
+  service.stop();
+  assert.equal(stopped, true);
 });

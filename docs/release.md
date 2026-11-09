@@ -150,3 +150,11 @@ npm run start   # Windows 也可直接双击 start-console.cmd
   - *App size 超限* —— `build-macos-app.sh` 有 350 MB 硬上限门禁，`build-windows-app.mjs` 有 450 MB（解压后），Electron 大版本升级后需关注；
   - *ISCC 编译失败* —— 多为 runner 上的 Inno Setup 版本低于 6.5（语言文件里有新版才认的条目），看 `Install Inno Setup` 一步装上的版本；
   - *Release 停在草稿* —— macOS 已上传、Windows 那一步失败；修好后重跑 workflow（上传是 `--clobber`，幂等），最后一步会转为正式发布。
+
+## Windows 小更新包（v2.95.0 起）
+
+`build-windows-app.mjs` 在白名单、语法与包内容扫描后，同时生成 `CodexOperationsConsole-<版本>-windows-<架构>-update.json.gz` 与 `.sha256`。它只包含运行文件，不包含 Electron、个人配置或运行数据；Release 流水线为它生成来源证明并随完整安装包发布。应用只接受同一仓库、同一正式版本与架构且 GitHub API 提供有效 SHA-256 摘要的资产。
+
+客户端通过 `/api/self-update/apply` 启动异步更新，`/api/self-update` 的 `packageUpdate` 报阶段和结果。自检成功后备份并原子替换单个文件，保留固定引导和现有 `config.json`；失败恢复旧文件。应用启动时固定引导先恢复中断事务，再加载主进程；监控服务和主窗口就绪后确认。重启沿用 `restartControlPlane`，保留 supervisor、proxy 与 SSH。
+
+需要在 Windows 上实测一次“安装 v2.95.0 → 发布兼容的新正式版 → 点击更新”，检查窗口重新打开、版本变化、隧道 PID 保持、配置保留；再验证断网、SHA 不符、写入失败与启动失败。底层 Electron 或固定引导变化时下载完整安装包。旧客户端没有这套协议，首次升级必须手动安装；不要把仅推送源码或 tag 当成发布。

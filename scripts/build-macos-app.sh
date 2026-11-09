@@ -151,6 +151,7 @@ validate_app_bundle() {
   local app_resources="$1"
   local required
 
+  # Required: electron-bootstrap.mjs
   # Required: electron-main.mjs
   # Required: preload.js
   # Required: package.json
@@ -160,6 +161,7 @@ validate_app_bundle() {
   # Required: work/monitor/remote/usage-scan.py
   # Required: work/local_http_connect_proxy.mjs
   for required in \
+    "electron-bootstrap.mjs" \
     "electron-main.mjs" \
     "preload.js" \
     "package.json" \
@@ -429,7 +431,7 @@ fi
 
 if [ "$DRY_RUN" = 1 ]; then
   echo "[dry-run] Would ditto Electron.app -> $APP_DIR and rename MacOS/Electron -> MacOS/$APP_NAME"
-  echo "[dry-run] Would copy only electron-main.mjs, preload.js, package.json, config.json, work/monitor/, and work/local_http_connect_proxy.mjs into $APP_RESOURCES"
+  echo "[dry-run] Would copy only electron-bootstrap.mjs, electron-main.mjs, preload.js, package.json, config.json, work/monitor/, and work/local_http_connect_proxy.mjs into $APP_RESOURCES"
   echo "[dry-run] Would validate required/forbidden bundle paths and enforce MAX_APP_SIZE_MB=$MAX_APP_SIZE_MB using du -sm"
   echo "[dry-run] Would replace Contents/Resources/electron.icns with scripts/assets/app-icon.icns"
   echo "[dry-run] Would rewrite Info.plist (CFBundleShortVersionString/CFBundleVersion = $VERSION)"
@@ -453,6 +455,7 @@ cp "$ROOT_DIR/scripts/assets/app-icon.icns" "$APP_DIR/Contents/Resources/electro
 rm -rf "$APP_RESOURCES"
 mkdir -p "$APP_RESOURCES"
 rsync -a \
+  "$ROOT_DIR/electron-bootstrap.mjs" \
   "$ROOT_DIR/electron-main.mjs" \
   "$ROOT_DIR/preload.js" \
   "$ROOT_DIR/package.json" \

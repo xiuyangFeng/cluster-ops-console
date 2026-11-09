@@ -201,13 +201,15 @@ jobs:
             dist/windows/CodexOperationsConsole-${{ env.VERSION }}-windows-x64-setup.exe.sha256
             dist/windows/CodexOperationsConsole-${{ env.VERSION }}-windows-x64.zip
             dist/windows/CodexOperationsConsole-${{ env.VERSION }}-windows-x64.zip.sha256
+            dist/windows/CodexOperationsConsole-${{ env.VERSION }}-windows-x64-update.json.gz
+            dist/windows/CodexOperationsConsole-${{ env.VERSION }}-windows-x64-update.json.gz.sha256
 
       - name: Upload Windows assets and publish the release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           BASE="dist/windows/CodexOperationsConsole-${VERSION}-windows-x64"
-          ASSETS=("${BASE}-setup.exe" "${BASE}-setup.exe.sha256" "${BASE}.zip" "${BASE}.zip.sha256")
+          ASSETS=("${BASE}-setup.exe" "${BASE}-setup.exe.sha256" "${BASE}.zip" "${BASE}.zip.sha256" "${BASE}-update.json.gz" "${BASE}-update.json.gz.sha256")
           gh release upload "$GITHUB_REF_NAME" --clobber "${ASSETS[@]}"
           # notes 里补上 Windows 产物的 SHA-256（重跑时先去掉上一次补的那段，不重复）。
           NOTES="$RUNNER_TEMP/release-notes.md"
@@ -216,7 +218,7 @@ jobs:
             echo
             echo '**Windows 产物 SHA-256**'
             echo '```'
-            cat "${BASE}-setup.exe.sha256" "${BASE}.zip.sha256"
+            cat "${BASE}-setup.exe.sha256" "${BASE}.zip.sha256" "${BASE}-update.json.gz.sha256"
             echo '```'
           } >> "$NOTES"
           gh release edit "$GITHUB_REF_NAME" --notes-file "$NOTES" --draft=false

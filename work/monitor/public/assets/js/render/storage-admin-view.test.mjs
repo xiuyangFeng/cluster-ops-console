@@ -19,6 +19,15 @@ const target = (over = {}) => ({
   ...over,
 });
 
+test("无存储配置时在页面预填当前服务器，可保存目录范围；预填内容转义", () => {
+  const html = buildOverviewHtml({ targets: [], setup: { id: "server-01", label: '<img src=x>', host: "cluster.example.org", port: 2222 } });
+  assert.match(html, /配置存储服务器/);
+  assert.match(html, /value="cluster.example.org"/);
+  assert.match(html, /value="2222"/);
+  assert.match(html, /data-sa-save-target/);
+  assert.doesNotMatch(html, /<img src=x>/);
+});
+
 test("接入步骤：没有密钥时给「生成密钥」，全部就绪后默认收起", () => {
   const html = buildSetupHtml({ key: { exists: false }, targets: [target({ status: { state: "error", message: "专用密钥还没有装到 root@h" } })] });
   assert.match(html, /<details class="sa-setup" open>/);

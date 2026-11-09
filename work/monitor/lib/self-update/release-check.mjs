@@ -4,6 +4,8 @@
 // 仓库从 package.json 的 repository 读（公开快照导出时改写成公开仓库，见 scripts/export-public.mjs）。
 // 私有仓库匿名访问是 404，那就当作没有新版本：不报错、不打扰。
 import { parseNodeVersion } from "../platform.mjs";
+import { MAX_PACKAGE_BYTES, packageAssetName } from "./package-bundle.mjs";
+import { fetchJson } from "../cli/net.mjs";
 
 const REPO_RE = /^[A-Za-z0-9-]{1,39}\/[A-Za-z0-9._-]{1,100}$/;
 export const RELEASE_TIMEOUT_MS = 10_000;
@@ -35,18 +37,37 @@ export function isNewerVersion(remote, local) {
 }
 
 // → { version, url } | null（没有正式版 / 仓库不存在或私有）。网络错误、限流照常抛出，由调用方记一笔后下次再问。
-export async function fetchLatestRelease(repo, { fetchImpl = globalThis.fetch, timeoutMs = RELEASE_TIMEOUT_MS } = {}) {
+export async function fetchLatestRelease(repo, { fetchImpl = globalThis.fetch, timeoutMs = RELEASE_TIMEOUT_MS, platform = process.platform, arch = process.arch, upstream, readJson = fetchJson } = {}) {
   if (!REPO_RE.test(String(repo || ""))) return null;
-  const res = await fetchImpl(`https://api.github.com/repos/${repo}/releases/latest`, {
-    headers: { Accept: "application/vnd.github+json", "User-Agent": "codex-operations-console" },
-    signal: AbortSignal.timeout(timeoutMs),
-  });
-  if (res.status === 404) return null;
-  if (!res.ok) throw new Error(`GitHub 返回 ${res.status}`);
-  const body = await res.json();
+  const url = `https://api.github.com/repos/${repo}/releases/latest`;
+  const options = { headers: { Accept: "application/vnd.github+json", "User-Agent": "codex-operations-console" }, signal: AbortSignal.timeout(timeoutMs) };
+  let body;
+  if (upstream !== undefined) {
+    try {
+      body = await readJson(url, { ...options, upstream, timeoutMs, maxBytes: 512 * 1024 });
+    } catch (err) {
+      if (err.statusCode === 404) return null;
+      throw err;
+    }
+  } else {
+    const res = await fetchImpl(url, options);
+    if (res.status === 404) return null;
+    if (!res.ok) throw new Error(`GitHub 返回 ${res.status}`);
+    body = await res.json();
+  }
   if (body?.draft || body?.prerelease) return null;
   const version = releaseVersionOf(body?.tag_name);
   if (!version) return null;
   const pageUrl = typeof body.html_url === "string" && body.html_url.startsWith(`https://github.com/${repo}/releases/`) ? body.html_url : `https://github.com/${repo}/releases/latest`;
-  return { version: version.join("."), url: pageUrl };
+  const text = version.join(".");
+  const result = { version: text, url: pageUrl };
+  if (platform === "win32") {
+    const name = packageAssetName(text, arch);
+    const assetUrl = `https://github.com/${repo}/releases/download/v${text}/${name}`;
+    const asset = Array.isArray(body.assets) ? body.assets.find((a) => a?.name === name && a.browser_download_url === assetUrl) : null;
+    if (asset && /^sha256:[a-f0-9]{64}$/.test(asset.digest) && Number.isSafeInteger(asset.size) && asset.size > 0 && asset.size <= MAX_PACKAGE_BYTES) {
+      result.update = { url: assetUrl, sha256: asset.digest.slice(7), size: asset.size };
+    }
+  }
+  return result;
 }

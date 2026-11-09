@@ -232,6 +232,7 @@ export function createSelfUpdateService({
   getUpstream = async () => null,
   // 打包安装时查新版本：async () => { version, url } | null（见 ./release-check.mjs）；不给就不查。
   releaseLookup = null,
+  packageUpdater = null,
   git = createGit({ root: rootDir }),
   smoke = smokeSourceTree,
   env = process.env,
@@ -299,12 +300,13 @@ export function createSelfUpdateService({
       available: s.available === true,
       // 安装包版本的新版本发布页（只在有新版本时给）：界面给「去下载」而不是「更新」。
       releaseUrl: s.releaseUrl ?? null,
-      canApply: s.canApply === true && !applying,
+      canApply: s.canApply === true && !applying && !packageUpdater?.status()?.running && !packageUpdater?.status()?.ready,
       blockers: s.blockers ?? [],
       checkedAt: s.checkedAt ?? null,
       error: s.error ?? null,
       checking: Boolean(checking),
       applying,
+      packageUpdate: packageUpdater?.status() ?? null,
       // 网页模式下有没有人会把监控服务重新拉起来（launch.mjs 起的才有）；桌面壳用它自己的「重启界面」。
       respawn,
       ...extra,
@@ -340,13 +342,16 @@ export function createSelfUpdateService({
         try {
           const latest = await releaseLookup();
           const newer = Boolean(latest && isNewerVersion(latest.version, install.version));
+          const hotUpdate = newer && packageUpdater?.supported && Boolean(latest.update);
           state = {
             ...unsupported,
+            supported: hotUpdate || false,
             available: newer,
             remoteVersion: latest?.version ?? null,
             releaseUrl: newer ? latest.url : null,
-            canApply: false,
-            blockers: newer ? [{ code: "packaged", message: PACKAGED_UPDATE_TEXT }] : [],
+            canApply: hotUpdate,
+            releaseUpdate: latest,
+            blockers: newer && !hotUpdate ? [{ code: "packaged", message: PACKAGED_UPDATE_TEXT }] : [],
           };
         } catch (err) {
           const previous = state?.kind === "packaged" ? state : unsupported;
@@ -474,6 +479,12 @@ export function createSelfUpdateService({
   // 「跳过」随之作废；没装成（自检没过等）则原样留着。
   async function apply({ ignoreSkip = false } = {}) {
     if (applying) throw statusError("更新正在进行，请稍候", 409, { code: "busy" });
+    if (packaged && packageUpdater?.supported) {
+      if (packageUpdater.status()?.running || packageUpdater.status()?.ready) throw statusError("更新正在进行或等待重启", 409, { code: "busy" });
+      await check({ force: true });
+      if (!state?.canApply || state.error) throw statusError(state?.error?.message || PACKAGED_UPDATE_TEXT, 409, { code: "unsupported" });
+      return packageUpdater.start(state.releaseUpdate);
+    }
     applying = true;
     let tmp = null;
     let tree = null;
@@ -724,6 +735,7 @@ export function createSelfUpdateService({
   }
 
   function stop() {
+    packageUpdater?.stop();
     if (firstTimer) timers.clearTimeout(firstTimer);
     if (intervalTimer) timers.clearInterval(intervalTimer);
     firstTimer = null;

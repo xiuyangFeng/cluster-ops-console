@@ -15,6 +15,7 @@ import { runLogReadbackBrowserSmoke } from "./lib/log-readback-browser-smoke.mjs
 import { runSubrunBrowserSmoke } from "./lib/subrun-browser-smoke.mjs";
 import { runJobHistoryLookupBrowserSmoke } from "./lib/job-history-lookup-browser-smoke.mjs";
 import { assertViewportWidth, sizedWindowClass } from "./lib/smoke-window.mjs";
+import { runRootAdminBrowserSmoke } from "./lib/root-admin-browser-smoke.mjs";
 
 // 所有冒烟窗口（含子冒烟自己开的）都经它创建：屏幕比请求的窗口小（CI 的 macos runner）时也拿到请求的尺寸。
 const SmokeWindow = sizedWindowClass(BrowserWindow);
@@ -544,6 +545,7 @@ async function runSmoke() {
   await runLogReadbackBrowserSmoke({ BrowserWindow: SmokeWindow, baseUrl, screenshotDir: process.env.BROWSER_SMOKE_SCREENSHOTS });
   await runSubrunBrowserSmoke({ BrowserWindow: SmokeWindow, baseUrl, screenshotDir: process.env.BROWSER_SMOKE_SCREENSHOTS });
   await runJobHistoryLookupBrowserSmoke({ BrowserWindow: SmokeWindow, baseUrl, screenshotDir: process.env.BROWSER_SMOKE_SCREENSHOTS });
+  await runRootAdminBrowserSmoke({ win, baseUrl, waitFor, screenshotDir: process.env.BROWSER_SMOKE_SCREENSHOTS });
   assert.equal(await win.webContents.executeJavaScript('document.getElementById("dlgSettings").scrollWidth <= document.getElementById("dlgSettings").clientWidth + 2'), true);
   const overflow = await win.webContents.executeJavaScript('document.documentElement.scrollWidth - document.documentElement.clientWidth');
   assert.ok(overflow <= 2, `主页面不得横向溢出（超出 ${overflow}px）`);

@@ -335,7 +335,8 @@ export function createWindowManager({
       );
       return;
     }
-    state.mainWindow.loadURL(monitorBaseUrl);
+    await state.mainWindow.loadURL(monitorBaseUrl);
+    return true;
   }
 
   return { showMainWindow, createIslandWindow, toggleIslandWindow, isIslandPinned: islandPinned, setIslandPinned, resizeIslandWindow, createMainWindow };

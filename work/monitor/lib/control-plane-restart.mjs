@@ -13,10 +13,11 @@
 // 本模块零副作用，便于 node:test 直接覆盖状态机。
 
 import { computeBuildCompatibility } from "./build-info.mjs";
+import { PACKAGE_RELAUNCH_ENV } from "./self-update/package-recovery.mjs";
 
 export const DESKTOP_MAIN_RECORD = "desktop-main";
 // 重启时写入环境变量（relaunch 出来的新实例继承），新实例据此在单实例锁暂未释放时短暂重试。
-export const RELAUNCH_MARKER_ENV = "CODEX_CONSOLE_RELAUNCHED_AT";
+export const RELAUNCH_MARKER_ENV = PACKAGE_RELAUNCH_ENV;
 const RELAUNCH_MARKER_WINDOW_MS = 60_000;
 export const BUNDLE_UPDATE_CHECK_MS = 30_000;
 

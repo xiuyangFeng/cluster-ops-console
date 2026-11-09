@@ -1,4 +1,4 @@
-// 管理员存储视图服务：只给 adminUsers 里的账号用；远端一律以 root 经专用受限密钥执行只读脚本。
+// 管理员存储视图服务：root 或 adminUsers 里的账号可用；远端以 root 经专用受限密钥执行只读脚本。
 //
 //   overview()                    读本机已存的一切（不发 SSH）：每台机器的挂载点容量、按用户占用、扫描任务、安装状态
 //   refresh(targetId)             发 SSH：info + 开了配额的挂载点各一次 repquota
@@ -16,7 +16,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { writeFileAtomic } from "../atomic-file.mjs";
-import { resolveIdentityFile, resolveTargets } from "./config.mjs";
+import { isSafeRoot, MAX_TARGETS, resolveIdentityFile, resolveTargets, storageTargetDraft } from "./config.mjs";
 import { buildInstallCommand, buildInstallScript, buildUninstallScript, parsePublicKey, scriptVersion } from "./install.mjs";
 import { buildScanView, buildUsersView, mergeListWithScan, pickMounts } from "./model.mjs";
 import {
@@ -53,6 +53,7 @@ export function classifySshFailure(res, target) {
 
 export function createStorageAdminService({
   getConfig, isAdmin, store, exec, acquireSshSlot = null, dir, log = null, platform = process.platform,
+  savePersonalConfig = null,
   now = Date.now, homeDir, scriptFile = REMOTE_SCRIPT_FILE,
   setTimer = (fn, ms) => { const t = setTimeout(fn, ms); t.unref?.(); return t; },
   clearTimer = (t) => clearTimeout(t),
@@ -64,7 +65,7 @@ export function createStorageAdminService({
 
   async function context() {
     const config = (await getConfig()) || {};
-    if (!isAdmin(config)) throw fail("只有团队管理员（adminUsers）可以使用存储管理", 403, "forbidden");
+    if (!isAdmin(config)) throw fail("只有 root 或团队管理员（adminUsers）可以使用存储管理", 403, "forbidden");
     return { config, targets: resolveTargets(config), identityFile: resolveIdentityFile(config, homeDir ? { homeDir } : {}) };
   }
 
@@ -132,12 +133,25 @@ export function createStorageAdminService({
   }
 
   async function overview() {
-    const { targets, identityFile } = await context();
+    const { config, targets, identityFile } = await context();
     return {
       key: await keyStatus(identityFile),
       expectedVersion: scriptVersion(await script()),
       targets: await Promise.all(targets.map(targetView)),
+      setup: typeof savePersonalConfig === "function" ? storageTargetDraft(config) : null,
     };
+  }
+
+  async function configureTarget(input) {
+    const { config, targets } = await context();
+    if (typeof savePersonalConfig !== "function") throw fail("当前环境不支持保存存储配置", 503);
+    if (!input || !Array.isArray(input.roots) || !input.roots.length || input.roots.length > 8 || !input.roots.every(isSafeRoot)) throw fail("请输入 1 至 8 个允许查看的绝对目录，例如 /home、/public；不支持根目录 /", 400);
+    const target = resolveTargets({ storageAdmin: { targets: [input] } })[0];
+    if (!target) throw fail("服务器标识、地址或 SSH 端口无效", 400);
+    const rest = targets.filter((t) => t.id !== target.id);
+    if (rest.length >= MAX_TARGETS) throw fail(`最多配置 ${MAX_TARGETS} 台存储服务器`, 400);
+    await savePersonalConfig({ storageAdmin: { ...config.storageAdmin, targets: [...rest, target] } });
+    return { saved: true, target };
   }
 
   async function refresh(targetId) {
@@ -380,5 +394,5 @@ export function createStorageAdminService({
     pollers.clear();
   }
 
-  return { overview, refresh, ensureKey, installer, startScan, startUsage, stopScan, scanView, list, resume, stop };
+  return { overview, configureTarget, refresh, ensureKey, installer, startScan, startUsage, stopScan, scanView, list, resume, stop };
 }

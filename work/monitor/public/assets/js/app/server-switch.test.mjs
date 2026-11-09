@@ -6,7 +6,7 @@ import { createAppState } from "./state.js";
 import { deferred, fakeDocument, fakeElement, flush, spy } from "./test-support.mjs";
 
 function setup({ postJson = spy(async () => ({})), getStatus = spy(async () => ({ activeServerId: "b" })), config } = {}) {
-  const elements = { serverSelect: fakeElement(), agentOverviewGrid: fakeElement(), serverBriefsContainer: fakeElement(), agentSelect: fakeElement() };
+  const elements = { serverSelect: fakeElement(), connectionProfileSelect: fakeElement(), agentOverviewGrid: fakeElement(), serverBriefsContainer: fakeElement(), agentSelect: fakeElement() };
   const doc = fakeDocument(elements);
   const state = createAppState();
   const pending = { show: spy(), hide: spy() };
@@ -82,6 +82,8 @@ test("loadServers: 只列启用且监控中的服务器（转义），记下 con
   assert.equal(select.innerHTML, '<option value="a">&lt;b&gt;A&lt;/b&gt;</option><option value="b">B 显示名</option>');
   assert.equal(select.value, "b");
   assert.equal(select.disabled, false);
+  assert.equal(ctx.elements.connectionProfileSelect.innerHTML, select.innerHTML);
+  assert.equal(ctx.elements.connectionProfileSelect.value, "b");
   assert.equal(ctx.state.getConfig(), config);
   assert.equal(ctx.deps.resetCharts.calls.length, 1);
   assert.equal(ctx.deps.renderServerBriefs.calls[0][1], "b");
@@ -89,6 +91,20 @@ test("loadServers: 只列启用且监控中的服务器（转义），记下 con
   select.onchange();
   await flush();
   assert.deepEqual(ctx.deps.postJson.calls[0], ["/api/config/active", { activeServerId: "a" }]);
+});
+
+test("顶部连接选择可切换 master 和 node04，分别保存的用户名与密钥留在各自配置", async () => {
+  const config = { activeServerId: "master", servers: [
+    { id: "master", name: "master", host: "master.example", sshUser: "root", sshIdentityFile: "/keys/master" },
+    { id: "node04", name: "node04", host: "node04.example", sshUser: "lin", sshIdentityFile: "/keys/node04" },
+  ] };
+  const ctx = setup({ config });
+  await ctx.switcher.loadServers();
+  ctx.elements.connectionProfileSelect.value = "node04";
+  ctx.elements.connectionProfileSelect.onchange();
+  await flush();
+  assert.deepEqual(ctx.deps.postJson.calls[0], ["/api/config/active", { activeServerId: "node04" }]);
+  assert.deepEqual(config.servers.map((s) => [s.sshUser, s.sshIdentityFile]), [["root", "/keys/master"], ["lin", "/keys/node04"]]);
 });
 
 test("bindSwitchers: Agent 卡与服务器卡点击切换；点当前服务器不重复切换", async () => {

@@ -12,6 +12,7 @@
 //   - POST /api/data-plane/upgrade {components:[id]}；接口 404（旧后端）→ 提示后隐藏该横幅。
 
 import { escapeHtml } from "../store.js";
+import { PACKAGE_UPDATE_PHASES, waitForPackageUpdate } from "./package-update.js";
 
 export const PROXY_UPGRADE_NOTE = "切换代理时监听端口有亚秒级交接；已建立的连接在旧进程上自然排空，不会被强行断开。";
 export const LEGACY_HANDOFF_MESSAGE = "当前后台组件版本较旧，不支持无缝交接：请在方便时重启一次通道（会短暂断开），之后的升级都不中断";
@@ -55,6 +56,9 @@ export const SELF_UPDATE_BODY = "更新只重启界面：守护进程、本地�
 // GET /api/self-update 的载荷 → 「有新版本」横幅模型；没有可提示的 → null。
 // 能一键更新才给按钮；不能时把原因（本地有改动 / 要先 npm install 等）写在正文里，不给点不了的按钮。
 export function buildSelfUpdateModel(selfUpdate) {
+  if (selfUpdate?.packageUpdate?.running) {
+    return { kind: "available", key: "package-update-running", title: "正在更新工作台", body: PACKAGE_UPDATE_PHASES[selfUpdate.packageUpdate.phase] || "正在更新…", actions: [] };
+  }
   if (selfUpdate?.available !== true || !selfUpdate.remoteVersion) return null;
   const remote = `v${String(selfUpdate.remoteVersion).replace(/^v/, "")}`;
   const local = selfUpdate.localVersion ? `（当前 v${String(selfUpdate.localVersion).replace(/^v/, "")}）` : "";
@@ -75,8 +79,11 @@ export function buildSelfUpdateModel(selfUpdate) {
     kind: "available",
     key: `available|${selfUpdate.remoteVersion}|${canApply ? "ok" : blockers.map((b) => b?.code || "").join(",")}`,
     title: `有新版本 ${remote}${local}`,
-    body: canApply ? SELF_UPDATE_BODY : String(blockers[0]?.message || "现在不能自动更新，稍后再试").slice(0, 400),
-    actions: canApply ? [{ id: "self-update", label: "更新（隧道不中断）", toVersion: String(selfUpdate.remoteVersion) }] : [],
+    body: selfUpdate.packageUpdate?.error || (canApply ? SELF_UPDATE_BODY : String(blockers[0]?.message || "现在不能自动更新，稍后再试").slice(0, 400)),
+    actions: canApply ? [
+      { id: "self-update", label: selfUpdate.kind === "packaged" ? "更新并重启界面" : "更新（隧道不中断）", toVersion: String(selfUpdate.remoteVersion) },
+      ...(selfUpdate.kind === "packaged" && /^https:\/\/github\.com\/[^\s"'<>]+$/.test(String(selfUpdate.releaseUrl || "")) ? [{ id: "open-release", label: "下载安装包", url: selfUpdate.releaseUrl }] : []),
+    ] : [],
   };
 }
 
@@ -84,6 +91,7 @@ export function buildSelfUpdateModel(selfUpdate) {
 // suppressDataPlane：刚升级成功的短暂窗口内不出数据面横幅。selfUpdate：/api/self-update 的载荷（可为 null）。
 // 返回 null（不显示）或 { kind: "control" | "available" | "data", key, title, body, actions:[...] }。
 export function buildUpdateBannerModel(info, { desktop = false, desktopUpdate = null, dataPlaneUnsupported = false, suppressDataPlane = false, selfUpdate = null } = {}) {
+  if (selfUpdate?.packageUpdate?.running) return buildSelfUpdateModel(selfUpdate);
   const reasons = Array.isArray(info?.compatibility?.reasons) ? info.compatibility.reasons : [];
   const bundle = info?.bundleOnDisk && !info.bundleOnDisk.unknown ? info.bundleOnDisk : null;
   if (reasons.includes("restart-monitor") || desktopUpdate) {
@@ -274,6 +282,7 @@ export function initUpdateBanner({ root, getJson, postJson, electronAPI = null, 
       let result = null;
       try {
         result = await postJson("/api/self-update/apply", {});
+        if (result?.pending) await waitForPackageUpdate({ getJson, onProgress: setBody });
       } catch (err) {
         busy = false;
         toast({ type: "error", title: "更新", message: err?.serverMessage || err?.message || "请求失败" });

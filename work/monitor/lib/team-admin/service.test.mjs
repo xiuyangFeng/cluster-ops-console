@@ -223,6 +223,9 @@ test("team-admin service：权限门禁、名册维护、无公钥暂存与公�
     currentUser = "bob";
     assert.equal(service.getAdminRole().isAdmin, false);
     await assert.rejects(() => service.getOverview(), /不在团队管理员名单/);
+    currentUser = "root";
+    assert.equal(service.getAdminRole({ activeServerId: "s", adminUsers: [], servers: [{ id: "s", host: "cluster", sshUser: "root" }] }).isAdmin, true);
+    await service.getOverview();
     currentUser = "kai";
 
     // 2. 添加新成员 bob 并预分配端口 7892

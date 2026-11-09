@@ -38,6 +38,7 @@ import { RELAUNCH_MARKER_ENV, shouldRetrySingleInstanceLock } from "./work/monit
 import { DESKTOP_LOG_SOURCE } from "./work/monitor/lib/diagnostics/log-sources.mjs";
 import { createLogger } from "./work/monitor/lib/logger.mjs";
 import { createProcessRegistry } from "./work/monitor/lib/process-registry.mjs";
+import { confirmPackageUpdate } from "./work/monitor/lib/self-update/package-recovery.mjs";
 
 const ctx = createDesktopContext({ rootDir: import.meta.dirname });
 const { state } = ctx;
@@ -158,7 +159,7 @@ app.whenReady().then(async () => {
     return;
   }
   // 启动时直接打开大窗口；createMainWindow 内部会轮询就绪探测后再 loadURL（不再用固定 setTimeout 竞态）。
-  windows.createMainWindow();
+  if (await windows.createMainWindow()) confirmPackageUpdate(ctx.rootDir);
 
   app.on("activate", () => {
     if (state.controlPlaneRestarting) return;

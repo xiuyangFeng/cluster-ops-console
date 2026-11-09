@@ -290,7 +290,7 @@ export function createTeamAdminService({
     }
     const sshUser = resolveEffectiveSshUser(config, server, { resolveSshUser });
     if (!isAdminUser(config, sshUser)) {
-      throw statusError(`当前账号 (${sshUser || "未配置"}) 不在团队管理员名单 (adminUsers) 中`, 403, { code: "forbidden" });
+      throw statusError(`当前账号 (${sshUser || "未配置"}) 不是 root，且不在团队管理员名单 (adminUsers) 中`, 403, { code: "forbidden" });
     }
     const hubDir = resolveAgentHubBaseDir(config);
     return { config, server, sshUser, hubDir };

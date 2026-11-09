@@ -1,5 +1,5 @@
 // storage-admin-controller.js —— 「存储管理（管理员）」页的接线层，外加服务器页磁盘卡片里的入口。
-// 只有 status.teamAdmin.isAdmin 为真时显示（整页由 app.js 的 syncHiddenViews 藏起）；后端同样只认 adminUsers（非管理员 403）。
+// 只有 status.teamAdmin.isAdmin 为真时显示（root 或 adminUsers）；非管理员前端隐藏、后端 403。
 // 进入存储管理页或服务器页时读一次本机概览（GET /api/storage-admin，不发 SSH）；「刷新 / 检测」才连 root。
 // 服务器上有扫描在跑时，存储管理页可见期间每 5 秒重读概览（后端自己在问服务器进度，这里只读本机）。
 // 磁盘卡片：管理员看到一行入口摘要（这台服务器那块盘谁占得最多 + 容量构成小条），点卡片或这一行 → onOpen()。
@@ -20,6 +20,7 @@ export function createStorageAdminController({
 }) {
   const $ = createElementLookup(doc);
   let admin = false;
+  let activeServerId = null;
   let data = null;
   let loading = false;
   let error = "";
@@ -283,7 +284,21 @@ export function createStorageAdminController({
     render();
   }
 
+  async function saveTarget(button) {
+    const form = button.closest("[data-sa-target-form]");
+    if (!form) return;
+    const value = (name) => form.querySelector(`[name="${name}"]`)?.value?.trim() || "";
+    const target = { id: value("id"), label: value("label"), host: value("host"), port: Number(value("port")), roots: value("roots").split(/[\s,，]+/).filter(Boolean) };
+    data = { ...data, setup: { ...target, roots: target.roots.join(" ") } };
+    const saved = await act("target", () => postJson("/api/storage-admin/targets", target), { okToast: { title: "存储服务器已保存", message: "继续按接入步骤配置只读扫描。" } });
+    if (saved) {
+      delete installers[saved.target.id];
+      await load();
+    }
+  }
+
   const BODY_ACTIONS = [
+    ["[data-sa-save-target]", saveTarget],
     ["[data-sa-fold]", toggleFold],
     ["[data-sa-target-tab]", (b) => {
       prefs.target = b.dataset.saTargetTab;
@@ -398,10 +413,14 @@ export function createStorageAdminController({
       if (admin) renderEntry();
     }
     const next = Boolean(status?.teamAdmin?.isAdmin);
-    if (next === admin) return;
+    const serverChanged = activeServerId !== status?.activeServerId;
+    activeServerId = status?.activeServerId;
+    if (next === admin && !serverChanged) return;
+    seq += 1;
     admin = next;
     data = null;
     browser = null;
+    for (const key of Object.keys(installers)) delete installers[key];
     render();
     if (admin && visible()) load();
   }
