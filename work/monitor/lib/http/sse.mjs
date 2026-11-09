@@ -51,6 +51,10 @@ export function createSseHub({ maxConnections, heartbeatMs, statusPayload }) {
   function onStatusChanged({ layers, lite }) {
     broadcast("status", statusPayload.statusFrame({ layers, lite }));
   }
+  function onLevelsRebased() {
+    // 切换查看对象不是故障变迁，但配置版本和管理角色仍须即时同步到已打开的窗口。
+    broadcast("status", statusPayload.initialStatusFrame());
+  }
   function onProbeUpdated({ id, layer, result }) {
     // 缺 result 时直接返回：监听器抛错会沿 bus.emit 冒泡回探针归并路径。
     if (!result) return;
@@ -70,6 +74,7 @@ export function createSseHub({ maxConnections, heartbeatMs, statusPayload }) {
     if (busBound) return;
     busBound = true;
     bus.on(EVENTS.STATUS_CHANGED, onStatusChanged);
+    bus.on(EVENTS.LEVELS_REBASED, onLevelsRebased);
     bus.on(EVENTS.PROBE_UPDATED, onProbeUpdated);
     bus.on(EVENTS.LOG_APPENDED, onLogAppended);
   }
@@ -78,6 +83,7 @@ export function createSseHub({ maxConnections, heartbeatMs, statusPayload }) {
     if (!busBound || clients.size > 0) return;
     busBound = false;
     bus.off(EVENTS.STATUS_CHANGED, onStatusChanged);
+    bus.off(EVENTS.LEVELS_REBASED, onLevelsRebased);
     bus.off(EVENTS.PROBE_UPDATED, onProbeUpdated);
     bus.off(EVENTS.LOG_APPENDED, onLogAppended);
   }

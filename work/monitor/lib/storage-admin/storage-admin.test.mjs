@@ -231,6 +231,7 @@ test("SSH 失败分类：给出能照着做的话", () => {
 function fakeService({ admin = true, replies = {}, dir = null } = {}) {
   const calls = [];
   const timers = [];
+  const store = createStorageAdminStore({ dir });
   const exec = async (cmd, args, opts) => {
     calls.push({ cmd, command: args.at(-1), input: opts.input });
     const reply = replies[args.at(-1)];
@@ -239,14 +240,14 @@ function fakeService({ admin = true, replies = {}, dir = null } = {}) {
   const svc = createStorageAdminService({
     getConfig: async () => ({ storageAdmin: { targets: [{ id: "master", host: "h", roots: ["/public"] }] } }),
     isAdmin: () => admin,
-    store: createStorageAdminStore({ dir }),
+    store,
     exec,
     dir: dir ?? os.tmpdir(),
     homeDir: "/Users/x",
     setTimer: (fn, ms) => { timers.push({ fn, ms }); return timers.length; },
     clearTimer: () => {},
   });
-  return { svc, calls, timers };
+  return { svc, calls, timers, store };
 }
 
 test("服务：非管理员一律 403，不发任何 SSH", async () => {
@@ -272,7 +273,7 @@ test("服务：开始扫描 → 轮询到结束 → 取回结果存本机 → �
   const dir = mkdtempSync(path.join(os.tmpdir(), "sa-svc-"));
   try {
     const job = { id: "20261105-000000-abcdef", root: "/public", state: "running", bytes: 0 };
-    const { svc, calls, timers } = fakeService({
+    const { svc, calls, timers, store } = fakeService({
       dir,
       replies: {
         "scan-start": { code: 0, stdout: JSON.stringify({ k: "started", job }) },
@@ -284,10 +285,15 @@ test("服务：开始扫描 → 轮询到结束 → 取回结果存本机 → �
     assert.equal(started.running.id, job.id);
     assert.equal(timers.length, 1);
     await timers[0].fn();
-    // 轮询是异步链：等它跑完
-    for (let i = 0; i < 20 && !calls.some((c) => c.command === "scan-result"); i += 1) await new Promise((r) => setTimeout(r, 10));
-    await new Promise((r) => setTimeout(r, 30));
-    const ov = await svc.overview();
+    // scan-result 已发出不等于结果已落盘；Windows runner 的异步磁盘写入可能超过 30ms。
+    const deadline = Date.now() + 10000;
+    let ov;
+    do {
+      ov = await svc.overview();
+      if (ov.targets[0].scans.some((s) => s.id === job.id)) break;
+      await new Promise((r) => setTimeout(r, 10));
+    } while (Date.now() < deadline);
+    await store.flush();
     assert.equal(ov.targets[0].running, null);
     assert.deepEqual(ov.targets[0].scans.map((s) => s.id), [job.id]);
     const view = await svc.scanView("master", job.id, "newhome");

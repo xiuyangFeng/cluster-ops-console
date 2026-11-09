@@ -14,6 +14,7 @@
 export const changelogData = [
   {
     version: "v2.97.1", date: "2026-11-10", changes: [
+      { type: "fix", text: "切换查看服务器时即时推送配置状态，配置弹窗与账号管理入口及时同步，避免页面仍停留在旧版本配置。" },
       { type: "fix", text: "Windows 使用原生进程查询与内核独占锁，修复 supervisor 并发启动和每分钟重复累积；活进程登记不再被误删，父进程不再覆写当前 PID。" },
       { type: "fix", text: "热升级清理同一安装目录的旧守护进程并保留代理和 SSH，补齐孤儿 SSH 接管与带空格私钥验证；代理状态结合真实健康接口核对。" },
     ],
