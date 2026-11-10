@@ -25,6 +25,7 @@ function setup({ get = async () => guideState(), post = async () => guideState()
     onboardingFooter: fakeElement({ hidden: true }),
     onboardingLater: fakeElement({ tag: "button" }),
     onboardingFinish: fakeElement({ tag: "button" }),
+    onboardingStart: fakeElement({ tag: "button", hidden: true }),
     onboardingRoute: fakeElement(), onboardingLogin: fakeElement(), onboardingCheck: fakeElement(),
   };
   const doc = fakeDocument(els);
@@ -96,6 +97,30 @@ test("自动弹出：首包状态说没配置好时弹一次；关掉后同一�
   h.ui.onStatus({ onboarding: "needs-setup", onboardingGuide: { phase: "idle", dismissed: false } });
   await flush();
   assert.equal(h.els.dlgOnboarding.showCount, 1);
+});
+
+test("迁移后密钥缺失：自动打开重新检测；已完成的旧进度不让新电脑误以为已连接", async () => {
+  const h = setup({ get: async () => guideState({ phase: "done" }) });
+  h.ui.onStatus({ onboarding: "ready", onboardingGuide: { phase: "done", dismissed: false, needsLocalSetup: true } });
+  await flush();
+  assert.deepEqual(h.postJson.calls[0], ["/api/onboarding/reset", {}]);
+  assert.match(h.els.onboardingMain.innerHTML, /data-ob-form="start"/);
+  assert.match(h.els.onboardingMain.innerHTML, /动态接入指引/);
+  const busy = setup({ get: async () => guideState({ phase: "running", busy: true }) });
+  await busy.ui.open({ recheck: true });
+  assert.deepEqual(busy.postJson.calls, [], "正在执行的接入不重置、不重复安装");
+});
+
+test("快速接入完成后直接进入工作台，不要求安装工具或填写 API Key", async () => {
+  const quick = guideState({ phase: "done", form: { mode: "monitor", sshUser: "amy" } });
+  const h = setup({ post: async () => quick });
+  await h.ui.open();
+  await h.submit("start", { sshUser: "amy", password: "one-time", mode: "monitor" });
+  assert.equal(h.postJson.calls[0][1].mode, "monitor");
+  assert.equal(h.els.onboardingNext.hidden, true);
+  assert.equal(h.els.onboardingFooter.hidden, false);
+  assert.equal(h.ui.getState().focus.focus, "finish");
+  assert.equal(h.cliSection.load.calls.length, 0);
 });
 
 test("开始接入：提交用户名和密码，密码框立即清空；执行期间每秒取一次状态，停下来就不再取", async () => {

@@ -2,6 +2,7 @@
 // v2.89：setupFocus 算出「现在在第几步、下一步该点哪个按钮」，控制器据此给对话框打上 data-ob-focus，
 // CSS 给对应按钮加脉冲高亮并在变化时滚过去；最后一步可以真的发一条测试对话（POST /api/cli/:id/smoke-test）。
 import { escapeHtml } from "../store.js";
+import { guideProgress } from "./onboarding-progress.js";
 
 const CLI_IDS = ["codex", "claude"];
 const LABEL = { codex: "Codex", claude: "Claude Code" };
@@ -12,11 +13,13 @@ const hasLogin = (tool) => Boolean(tool?.login) && !["none", "unknown"].includes
 export function setupFocus({ guide, overview = null, completed = {}, smoke = {} } = {}) {
   const phase = guide?.phase || "idle";
   if (phase !== "done") {
-    if (phase === "idle") return { stage: 1, focus: "start", hint: "第 1 步：填写你的集群用户名和密码，点「开始接入」。之后的步骤会自动进行。" };
-    if (phase === "waiting") return { stage: 1, focus: "prompt", hint: "需要你确认一下：看高亮的那一块，按提示点按钮。" };
+    const hint = guideProgress(guide).next;
+    if (phase === "idle") return { stage: 1, focus: "start", hint };
+    if (phase === "waiting") return { stage: 1, focus: "prompt", hint };
     if (phase === "failed" || phase === "paused") return { stage: 1, focus: "retry", hint: phase === "paused" ? "上次没走完：点「继续」接着做，已完成的步骤不会重做。" : "这一步没有成功：先看红框里的原因，处理后点「重试」。" };
-    return { stage: 1, focus: "", hint: "正在连接集群并建立你的专属通道，大约一分钟，不用操作。" };
+    return { stage: 1, focus: "", hint };
   }
+  if (guide?.form?.mode === "monitor") return { stage: 5, focus: "finish", hint: "SSH 接入已验证：点「进入工作台」查看集群资源。工具通道可以以后再配置。" };
   if (!overview || overview.serverId !== guide?.server?.id) return { stage: 2, focus: "", hint: "正在读取集群上的安装状态…" };
   const job = overview.job?.status === "running" && overview.job.action !== "publish" ? overview.job : null;
   if (job) return { stage: 2, focus: "installing", hint: `正在安装 ${job.label || ""}：在后台进行，可以等它完成，不用关窗口。` };
@@ -36,7 +39,7 @@ export function setupFocus({ guide, overview = null, completed = {}, smoke = {} 
 export function focusSelector(focus) {
   const tokens = String(focus || "").split(" ").filter(Boolean);
   const last = tokens.at(-1) || "";
-  if (last === "start") return '[data-ob-form="start"] button[type="submit"]';
+  if (last === "start") return '#onboardingStart';
   if (last === "prompt") return ".ob-prompt";
   if (last === "retry") return "[data-ob-retry]";
   if (last === "install") return '#onboardingCliBody [data-cli-action="install"]';

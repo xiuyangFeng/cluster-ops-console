@@ -41,7 +41,7 @@ export function reviveGuideState(raw, stepIds) {
     ...base,
     phase: phase === "running" || phase === "waiting" ? "paused" : phase,
     dismissed: raw.dismissed === true,
-    form: { sshUser: text(form.sshUser, 64), hostName: text(form.hostName, 255), sshPort: Number.isInteger(form.sshPort) ? form.sshPort : null },
+    form: { sshUser: text(form.sshUser, 64), hostName: text(form.hostName, 255), sshPort: Number.isInteger(form.sshPort) ? form.sshPort : null, mode: ["monitor", "full"].includes(form.mode) ? form.mode : null },
     steps,
     result: {
       sshUser: text(result.sshUser, 64),
@@ -62,7 +62,7 @@ export function emptyGuideState(stepIds) {
     version: GUIDE_STATE_VERSION,
     phase: "idle",
     dismissed: false,
-    form: { sshUser: "", hostName: "", sshPort: null },
+    form: { sshUser: "", hostName: "", sshPort: null, mode: null },
     steps: Object.fromEntries(stepIds.map((id) => [id, { status: "pending", detail: "", error: null }])),
     // 等用户回答的问题（指纹 / 密码 / 是否覆盖 Host 段 …）。不落盘：重启后由对应步骤重新提出。
     prompt: null,

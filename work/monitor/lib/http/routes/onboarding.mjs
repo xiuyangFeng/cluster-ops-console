@@ -1,7 +1,7 @@
 // App 内接入引导（lib/onboarding-guide/service.mjs）：
 //
 //   GET  /api/onboarding          → 引导状态 { available, phase, busy, dismissed, server, form, steps, prompt, result, … }
-//   POST /api/onboarding/start    { sshUser, hostName?, password? } → 状态。新开一轮；后台逐步执行，界面轮询 GET。
+//   POST /api/onboarding/start    { sshUser, hostName?, password?, mode?: "monitor"|"full" } → 状态。新开一轮；旧客户端默认 full。
 //   POST /api/onboarding/answer   { kind, … } → 状态。回答当前 prompt（指纹 / 密码 / 是否覆盖 Host 段 / 出网 / 旧代理导出）。
 //   POST /api/onboarding/retry    { step? } → 状态。失败或暂停时从断点继续；已走完时可单独重跑一步。
 //   POST /api/onboarding/install-openssh {} → 状态。Windows：后台装系统自带的 OpenSSH 客户端（弹 UAC），装好后从「没有 ssh」那步继续。

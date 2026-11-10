@@ -130,6 +130,7 @@
     <link rel="modulepreload" href="/assets/js/app/settings-cli.js" />
     <link rel="modulepreload" href="/assets/js/app/onboarding-guide.js" />
     <link rel="modulepreload" href="/assets/js/render/onboarding-view.js" />
+    <link rel="modulepreload" href="/assets/js/render/onboarding-progress.js" />
     <link rel="modulepreload" href="/assets/js/render/onboarding-setup.js" />
     <link rel="modulepreload" href="/assets/js/app/settings-access.js" />
     <link rel="modulepreload" href="/assets/js/app/incidents-controller.js" />
@@ -813,8 +814,9 @@
         </fieldset>
       </div>
       <div class="settings-row">
-        <div class="settings-row-text"><strong>接入引导</strong><small>填集群用户名和密码，自动完成密钥、专属端口、隧道与集群上的代理配置；换了电脑或账号时重新走一遍</small></div>
+        <div class="settings-row-text"><strong>接入引导</strong><small>动态完成本机密钥与公钥授权，可先连接并查看资源，需要时再准备工具通道；换电脑后可重新检测接入</small></div>
         <button type="button" class="btn btn-secondary" data-onboarding-open>打开接入引导</button>
+        <button type="button" class="text-btn" data-onboarding-open data-onboarding-recheck>换电脑 / 重新检测接入</button>
       </div>
       <!-- v2.62 接入管理（app/settings-access.js）：接在「接入引导」这一行下面——这个账号在集群上登记的端口，与「撤销接入」。
            打开配置时读 /api/onboarding/access；没接入过时整块不显示。预览、确认与逐步结果都在这一块里就地展开。 -->
@@ -1179,6 +1181,7 @@
         </section>
       </div>
       <footer class="ob-footer" id="onboardingFooter" hidden>
+        <button type="submit" form="onboardingStartForm" class="btn btn-primary" id="onboardingStart" hidden>开始接入</button>
         <button type="button" class="btn btn-secondary" id="onboardingAddConnection">再添加一个连接</button>
         <button type="button" class="btn btn-primary" id="onboardingFinish">进入工作台</button>
       </footer>

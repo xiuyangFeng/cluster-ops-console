@@ -37,7 +37,7 @@ export const EXPORT_EXCLUDED = Object.freeze([
   "SSH 私钥与 ~/.ssh 下的任何文件",
   "运行数据（日志、历史、用量、事件、作业记录）",
 ]);
-export const EXPORT_NOTICE = "换电脑时 ~/.ssh 下的密钥要另外拷过来；用密码登录的服务器，导入后要在「服务器管理」里重新填一次密码。";
+export const EXPORT_NOTICE = "换电脑后运行接入引导，生成本机密钥并登记公钥，无需拷贝旧电脑的私钥；用密码登录的其他服务器，导入后在「服务器管理」里重新填写密码。";
 
 const PORT_FIELDS = ["remotePort", "localPort"];
 // 比对 servers 条目时不看的字段：只是时间戳 / 版本记号，不代表配置不同。
@@ -226,7 +226,7 @@ const FIELD_LABELS = {
 };
 const SET_FIELDS = new Set(["proxyAllowedTargets"]);
 const WHOLE_FIELDS = ["sshUser", "sshIdentityFile", "activeServerId", "activeAgentId", "autoRepair", "storageBudgetBytes", "egress", "proxyAllowedTargets", "noProxyExtra"];
-const NOTE_IDENTITY = "这个路径要在这台电脑上存在：~/.ssh 下的密钥要另外拷过来。";
+const NOTE_IDENTITY = "这个路径必须在本机存在。新电脑可以运行接入引导生成自己的密钥并重新授权，无需拷贝旧电脑的私钥。";
 const NOTE_PASSWORD = "用密码登录：密码不随导出，导入后在「服务器管理」里重新填一次。";
 // 端口一组的说明（界面上写在这一组的开头，不在每一条下面重复）。
 export const PORTS_NOTE = "这些会改这台电脑的隧道端口。端口在集群上按人登记，同一个账号换电脑、要沿用原来的端口才勾；拿不准就别勾，导入后在「服务器管理」里重新领取。";

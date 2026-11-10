@@ -27,6 +27,7 @@ import { toPort } from "../validators.mjs";
 import { buildManualAuthorizeCommand, installPublicKeyWithPassword, probeKeyLogin } from "./authorize-key.mjs";
 import { createClusterEnvApplier } from "./cluster-env-apply.mjs";
 import { DEDICATED_KEY_NAME, ensureDedicatedKey } from "./local-key.mjs";
+import { localReadiness } from "./local-readiness.mjs";
 import { createGuideStore, emptyGuideState } from "./store.mjs";
 
 export const GUIDE_STEPS = Object.freeze([
@@ -216,6 +217,7 @@ export function createOnboardingGuide({
       dismissed: state.dismissed,
       simulated: fixtureMode,
       platform,
+      localReadiness: localFacts(config, target),
       // Windows 才有：OpenSSH 客户端一键安装的进度（installing）与没装上的原因（error）。
       openSsh: platform === "win32" ? { installing: sshInstall.running, error: sshInstall.error } : null,
       server: target ? { id: target.server.id, name: target.server.name || target.server.id, alias: target.alias } : null,
@@ -224,6 +226,7 @@ export function createOnboardingGuide({
         hostName: target?.hostName || "",
         hostNameLocked: target?.hostNameLocked ?? false,
         sshPort: target?.port ?? 22,
+        mode: state.form.mode || (state.phase === "idle" && (target?.server.tunnel === false || !toPort(target?.server.remotePort)) ? "monitor" : "full"),
       },
       steps: GUIDE_STEPS.map((step) => ({ id: step.id, title: step.title, ...state.steps[step.id] })),
       prompt: state.prompt,
@@ -232,6 +235,12 @@ export function createOnboardingGuide({
       updatedAt: state.updatedAt,
       completedAt: state.completedAt,
     };
+  }
+
+  function localFacts(config, target) {
+    if (!fixtureMode) return localReadiness({ fs, homeDir, server: target?.server, config: config || {} });
+    const ready = ["done", "skipped"].includes(state.steps.key.status);
+    return { privatePresent: ready, publicPresent: ready, keyState: ready ? "ready" : "create", configuredIdentityMissing: false, needsLocalSetup: false };
   }
 
   let passwordTimer = null;
@@ -269,6 +278,7 @@ export function createOnboardingGuide({
       attempts: mem.passwordAttempts || 0,
       // 密码通道走不通（或用户不想在页面里输密码）时的退路：自己在终端里跑这一行，再点「我已完成」。
       manualCommand: mem.key ? buildManualAuthorizeCommand({ publicKeyPath: mem.key.publicKeyPath, hostName: target.hostName, port: target.port, user: target.user, platform }) : "",
+      manualShell: platform === "win32" ? "cmd" : "terminal",
     });
   }
 
@@ -400,6 +410,11 @@ export function createOnboardingGuide({
         await savePersonalConfig(patch);
         // 之前在向导里选过"我不在这个集群"的，这次配通了就把屏蔽撤掉。
         if (target.server.disabled === true) await serverRegistry.enable(target.server.id, {});
+        // 快速接入不新建通道；已经在用的通道保持现状。以后选完整接入时再启用。
+        const quick = state.form.mode === "monitor";
+        if (quick ? target.server.tunnel !== false && !toPort(target.server.remotePort) : target.server.tunnel === false) {
+          await serverRegistry.update(target.server.id, { tunnel: !quick });
+        }
         await refreshConfigIntoKernel();
       } catch (error) {
         return failed("save-failed", `保存个人配置失败：${error.message}`, "");
@@ -546,7 +561,7 @@ export function createOnboardingGuide({
     async key() { return done(`已生成专用密钥 ~/.ssh/${DEDICATED_KEY_NAME}`); },
     async authorize({ target }) {
       const password = takePassword();
-      const prompt = (error) => waiting({ kind: "password", user: target.user, host: target.hostName || "cluster.example", error, attempts: mem.passwordAttempts || 0, manualCommand: `cat ~/.ssh/${DEDICATED_KEY_NAME}.pub | ssh ${target.user}@cluster.example "…"` });
+      const prompt = (error) => waiting({ kind: "password", user: target.user, host: target.hostName || "cluster.example", error, attempts: mem.passwordAttempts || 0, manualShell: platform === "win32" ? "cmd" : "terminal", manualCommand: `cat ~/.ssh/${DEDICATED_KEY_NAME}.pub | ssh ${target.user}@cluster.example "…"` });
       if (mem.manualDone) return done("公钥已在服务器上，免密登录正常");
       if (!password) return prompt(null);
       if (password === "wrong") {
@@ -591,6 +606,10 @@ export function createOnboardingGuide({
       const table = fixtureMode ? simulated : handlers;
       for (const step of GUIDE_STEPS) {
         if (only ? step.id !== only : isSettled(step.id)) continue;
+        if (state.form.mode === "monitor" && ["port", "tunnel", "egress", "clusterEnv"].includes(step.id)) {
+          setStep(step.id, { status: "skipped", detail: "本次先连接并查看资源；需要工具通道时可重新接入并选择完整模式", error: null });
+          continue;
+        }
         setStep(step.id, { status: "running", error: null, detail: "" });
         if (fixtureMode) await sleep(350);
         let outcome;
@@ -680,7 +699,8 @@ export function createOnboardingGuide({
     try { assertSafeSshUser(sshUser); } catch {
       throw statusError("请填写集群用户名（只能包含字母、数字、点、下划线和短横线）", 400, { code: "form", field: "sshUser" });
     }
-    const form = { sshUser, hostName: typeof input.hostName === "string" ? input.hostName.trim() : "", sshPort: toPort(input.sshPort) };
+    if (input.mode != null && !["monitor", "full"].includes(input.mode)) throw statusError("请选择快速接入或完整接入", 400, { code: "form", field: "mode" });
+    const form = { sshUser, hostName: typeof input.hostName === "string" ? input.hostName.trim() : "", sshPort: toPort(input.sshPort), mode: input.mode || "full" };
     const target = resolveTarget(config, form);
     if (!target) throw statusError("团队配置里没有可接入的集群服务器", 409, { code: "unavailable" });
     if (!target.hostName) throw statusError("请填写集群地址（IP 或域名）", 400, { code: "form", field: "hostName" });
@@ -771,7 +791,12 @@ export function createOnboardingGuide({
   return {
     getState: publicState,
     // /api/status 用的精简摘要：界面据此决定要不要自动打开引导。
-    getBrief: () => ({ phase: state.phase, dismissed: state.dismissed, busy: running }),
+    getBrief: () => {
+      const config = getMergedConfig?.() || {};
+      const target = resolveTarget(config);
+      return { phase: state.phase, dismissed: state.dismissed, busy: running,
+        needsLocalSetup: Boolean(target && localFacts(config, target).needsLocalSetup) };
+    },
     start,
     answer,
     retry,

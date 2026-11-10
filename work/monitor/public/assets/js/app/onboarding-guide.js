@@ -42,7 +42,7 @@ export function createOnboardingGuideUi({
   let lastFocus = null;
 
   function renderSetup() {
-    if (guide?.phase !== "done") return applyFocus();
+    if (guide?.phase !== "done" || guide.form?.mode === "monitor") return applyFocus();
     for (const [id, html] of [
       ["onboardingRoute", buildSetupRouteHtml(guide)],
       ["onboardingLogin", buildSetupLoginHtml(guide, overview, completed)],
@@ -67,6 +67,7 @@ export function createOnboardingGuideUi({
     if (dlg.dataset) dlg.dataset.obFocus = f.focus;
     const hint = $("onboardingHint");
     if (hint && hint.textContent !== f.hint) hint.textContent = f.hint;
+    if (hint) hint.hidden = guide?.phase !== "idle" && (guide?.phase !== "done" || guide.form?.mode === "monitor");
     for (const n of [2, 3, 4]) {
       const h = $(`onboardingStage${n}`);
       h?.classList?.toggle?.("is-active", f.stage === n);
@@ -112,7 +113,8 @@ export function createOnboardingGuideUi({
   function focusField(main) {
     // 表单：用户名已经预填时直接落在密码框；提问：落在密码框。
     const user = main.querySelector?.('[data-ob-form="start"] input[name="sshUser"]');
-    const target = user && !user.value ? user : main.querySelector?.('input[name="password"]');
+    const host = main.querySelector?.('[data-ob-form="start"] input[name="hostName"]');
+    const target = host && !host.value ? host : user && !user.value ? user : main.querySelector?.('input[name="password"]');
     target?.focus?.();
   }
 
@@ -129,7 +131,9 @@ export function createOnboardingGuideUi({
     const sub = $("onboardingSub");
     if (sub) sub.textContent = guideSubtitle(guide);
     const done = guide?.phase === "done";
-    for (const [id, hidden] of [["onboardingNext", !done], ["onboardingFooter", !done], ["onboardingLater", done]]) {
+    const idle = guide?.available && guide.phase === "idle";
+    for (const [id, hidden] of [["onboardingNext", !done || guide.form?.mode === "monitor"], ["onboardingFooter", !done && !idle],
+      ["onboardingStart", !idle], ["onboardingFinish", !done], ["onboardingAddConnection", !done], ["onboardingLater", done]]) {
       const el = $(id);
       if (el) el.hidden = hidden;
     }
@@ -154,7 +158,7 @@ export function createOnboardingGuideUi({
     const settled = !next.busy;
     if (settled && before !== `${next.phase}:${next.busy}`) {
       Promise.resolve(refresh({ force: true })).catch(() => {});
-      if (loadTools && next.phase === "done") cliSection?.load?.();
+      if (loadTools && next.phase === "done" && next.form?.mode !== "monitor") cliSection?.load?.();
     }
     if (next.busy && isOpen()) schedulePoll();
     else stopPolling();
@@ -199,12 +203,13 @@ export function createOnboardingGuideUi({
     const password = fields.password?.value || "";
     if (fields.password) fields.password.value = "";
     const body = { sshUser: (fields.sshUser?.value || "").trim() };
+    if (fields.mode?.value) body.mode = fields.mode.value;
     if (fields.hostName) body.hostName = fields.hostName.value.trim();
     if (fields.sshPort?.value) body.sshPort = Number(fields.sshPort.value);
     if (password) body.password = password;
-    ui = { submitting: true, formError: null, draft: { sshUser: body.sshUser, ...(body.hostName != null ? { hostName: body.hostName } : {}), ...(body.sshPort ? { sshPort: body.sshPort } : {}) } };
+    ui = { submitting: true, formError: null, draft: { sshUser: body.sshUser, ...(body.mode ? { mode: body.mode } : {}), ...(body.hostName != null ? { hostName: body.hostName } : {}), ...(body.sshPort ? { sshPort: body.sshPort } : {}) } };
     // 不重画表单（重画会清掉刚填的用户名）：只把按钮按住。
-    const button = form.querySelector?.('button[type="submit"]');
+    const button = form.querySelector?.('button[type="submit"]') || $("onboardingStart");
     if (button) button.disabled = true;
     await send("/api/onboarding/start", body, { form: true });
     ui.submitting = false;
@@ -292,17 +297,20 @@ export function createOnboardingGuideUi({
     return form.dataset.obForm === "start" ? submitStart(form) : submitPassword(form);
   }
 
-  async function open() {
+  async function open({ recheck = false } = {}) {
     const dlg = $("dlgOnboarding");
     if (!dlg) return;
     if (!dlg.open) dlg.showModal();
     render();
     const mine = ++seq;
     try {
-      const next = await getJson("/api/onboarding");
+      let next = await getJson("/api/onboarding");
       if (mine !== seq) return;
+      if (recheck && !next.busy) next = await postJson("/api/onboarding/reset", {});
+      if (mine !== seq) return;
+      if (recheck && !next.busy) ui = { submitting: false, formError: null, draft: null };
       adopt(next, { loadTools: false });
-      if (next.phase === "done") cliSection?.load?.();
+      if (next.phase === "done" && next.form?.mode !== "monitor") cliSection?.load?.();
     } catch (err) {
       if (mine === seq) showToast({ type: "error", title: "接入引导", message: `读取失败：${errText(err)}` });
     }
@@ -339,7 +347,7 @@ export function createOnboardingGuideUi({
       if (!opener) return;
       // 入口在别的浮层里（配置）：先关掉它，两个大浮层不叠在一起。
       opener.closest?.("dialog")?.close?.();
-      open();
+      open({ recheck: opener.dataset?.onboardingRecheck != null });
     });
   }
 
@@ -347,7 +355,7 @@ export function createOnboardingGuideUi({
   function onStatus(status) {
     if (autoOpened || isOpen() || !shouldAutoOpenGuide(status)) return;
     autoOpened = true;
-    open();
+    open({ recheck: status.onboardingGuide?.needsLocalSetup === true });
   }
 
   function onCliOverview(data) {

@@ -2,9 +2,32 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import { idleState, idleSummary } from "./storage-admin-viz.js";
-import { buildBrowserHtml, buildListHtml, buildOverviewHtml, buildSetupHtml, buildUnconfiguredConnectionsHtml, quotaGuideHtml } from "./storage-admin-view.js";
+import { buildBrowserHtml, buildListHtml, buildOverviewHtml, buildSetupHtml, buildStorageGuideHtml, buildUnconfiguredConnectionsHtml, quotaGuideHtml } from "./storage-admin-view.js";
 
 const NOW = Date.UTC(2026, 10, 5, 8, 0);
+
+test("存储动态引导按实际状态推进：范围 → 本机密钥 → 安装公钥与服务 → 检测 → 扫描", () => {
+  const data = { key: { exists: false }, targets: [] };
+  assert.match(buildStorageGuideHtml(data), /data-sa-guide-stage="target"/);
+  data.targets = [{ id: "n4", label: "node04", status: { state: "unknown" } }];
+  assert.match(buildStorageGuideHtml(data), /data-sa-guide-stage="key"/);
+  assert.match(buildStorageGuideHtml(data), /不会移除旧电脑的授权/);
+  data.key.exists = true;
+  assert.match(buildStorageGuideHtml(data), /data-sa-guide-stage="install"/);
+  const installed = buildStorageGuideHtml(data, { installers: { n4: { shell: "cmd" } } });
+  assert.match(installed, /data-sa-guide-stage="verify"/);
+  assert.match(installed, /命令提示符（cmd），不是 PowerShell 或集群终端/);
+  assert.match(installed, /data-sa-refresh="n4"/);
+  data.targets[0].status = { state: "error", code: "unreachable" };
+  const offline = buildStorageGuideHtml(data);
+  assert.match(offline, /data-sa-guide-stage="network"/);
+  assert.doesNotMatch(offline, /data-sa-key|data-sa-installer/);
+  data.targets[0].status = { state: "ok" };
+  assert.match(buildStorageGuideHtml(data), /data-sa-guide-stage="ready"/);
+  data.targets[0] = { ...data.targets[0], connectionId: "n4-root", status: { state: "unknown" } };
+  data.key.exists = false;
+  assert.match(buildStorageGuideHtml(data), /data-sa-guide-stage="check"/, "已保存的连接先检测，避免无必要地生成密钥");
+});
 
 test("已有主服务器时也明确展示尚未配置扫描的 node04；按连接账号匹配并转义", () => {
   const connections = [

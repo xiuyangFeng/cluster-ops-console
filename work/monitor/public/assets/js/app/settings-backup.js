@@ -13,8 +13,8 @@ import { escapeHtml } from "../store.js";
 // 与后端 lib/config-transfer/document.mjs 的 IMPORT_MAX_BYTES 一致：选了更大的文件就地拒绝，不发请求。
 export const IMPORT_FILE_MAX_BYTES = 256 * 1024;
 export const KIND_TEXT = { added: "新增", changed: "修改", removed: "删除" };
-const SSH_KEYS_SHORT = "换电脑时 ~/.ssh 下的密钥要另外拷过去。";
-export const SSH_KEYS_NOTE = "换电脑时，~/.ssh 下的密钥（含工作台的专用密钥 id_ed25519_codextunnel）要另外拷过去；用密码登录的服务器，导入后在「服务器管理」里重新填一次密码。";
+const SSH_KEYS_SHORT = "新电脑导入配置后，运行接入引导生成本机密钥并登记公钥，无需拷贝旧电脑的私钥。";
+export const SSH_KEYS_NOTE = "新电脑导入配置后，点「换电脑 / 重新检测接入」，使用自己的集群账号接入：本机密钥与公钥授权会自动准备，无需拷贝旧电脑的私钥。用密码登录的其他服务器，在「服务器管理」里重新填写密码。";
 
 const errText = (err) => err?.serverMessage || err?.message || "未知错误";
 
@@ -96,7 +96,7 @@ export function buildImportResultHtml(result, changes = []) {
   if (skipped.length) {
     lines.push(`<p class="eg-note">没有导入的：</p><ul class="bk-excluded">${skipped.map((item) => `<li>${escapeHtml(labelOf(item.id))}：${escapeHtml(item.reason)}</li>`).join("")}</ul>`);
   }
-  lines.push('<div class="eg-actions"><button type="button" class="text-btn" data-bk-cancel>关闭</button></div>');
+  lines.push(`<p class="eg-note">${escapeHtml(SSH_KEYS_SHORT)}</p><div class="eg-actions"><button type="button" class="btn btn-secondary" data-onboarding-open data-onboarding-recheck>换电脑 / 重新检测接入</button><button type="button" class="text-btn" data-bk-cancel>关闭</button></div>`);
   return lines.join("");
 }
 

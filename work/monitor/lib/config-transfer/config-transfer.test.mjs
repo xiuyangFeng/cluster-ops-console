@@ -82,7 +82,7 @@ test("导出：只有白名单字段与本机偏好；不含任何口令 / 令�
   assert.deepEqual(Object.keys(doc.jobAlerts), ["server-01"]);
   assert.deepEqual(doc.jobAlerts["server-01"].rules.patterns, ["train_*"]);
   assert.ok(doc.excluded.some((line) => /SSH 私钥/.test(line)));
-  assert.match(doc.notice, /~\/\.ssh 下的密钥要另外拷/);
+  assert.match(doc.notice, /运行接入引导.*无需拷贝旧电脑的私钥/);
   const text = JSON.stringify(doc);
   for (const banned of [SECRET, "_serverTombstones", "revision", "updatedAt\":\"2026-10-01", "_comment", "authToken"]) assert.equal(text.includes(banned), false, banned);
 });
@@ -153,7 +153,7 @@ test("比对：普通字段一项一条；服务器按台、端口单独一条�
     "servers.server-tengxun",
   ].sort());
   assert.equal(byId["personal.activeAgentId"].kind, "added");
-  assert.match(byId["personal.sshIdentityFile"].note, /要另外拷过来/);
+  assert.match(byId["personal.sshIdentityFile"].note, /运行接入引导.*重新授权/);
   assert.deepEqual([byId["portOverrides.server-01"].kind, byId["portOverrides.server-01"].ports], ["changed", true]);
   assert.equal(byId["portOverrides.server-01"].note, "", "端口的后果写在这一组开头（PORTS_NOTE），不在每条下面重复");
   assert.deepEqual([byId["servers.server-tengxun"].kind, byId["servers.server-tengxun"].ports], ["added", true], "建隧道的新服务器离不开端口");

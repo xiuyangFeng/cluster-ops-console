@@ -27,6 +27,7 @@ test("shouldAutoOpenGuide：没配置好或上次走到一半才自动弹；点�
   assert.equal(shouldAutoOpenGuide({ onboarding: "needs-setup", onboardingGuide: { ...idle, phase: "done" } }), false);
   assert.equal(shouldAutoOpenGuide({ onboarding: "needs-setup" }), false, "旧后端没有引导");
   assert.equal(shouldAutoOpenGuide(null), false);
+  assert.equal(shouldAutoOpenGuide({ onboarding: "ready", onboardingGuide: { phase: "done", needsLocalSetup: true } }), true, "旧配置带来的完成记录不能替代新电脑的密钥");
 });
 
 test("表单：地址预烤时只问用户名和密码；没预烤才出现地址与端口；密码框从不回填", () => {
@@ -45,7 +46,7 @@ test("表单：地址预烤时只问用户名和密码；没预烤才出现地�
   const errored = buildGuideHtml(guide(), { formError: { field: "sshUser", message: "请填写集群用户名" }, draft: { sshUser: "a b" } });
   assert.match(errored, /name="sshUser" value="a b"[^>]*aria-invalid="true"/);
   assert.match(errored, /role="alert">请填写集群用户名</);
-  assert.match(buildGuideHtml(guide(), { submitting: true }), /disabled>正在开始…</);
+  assert.match(buildGuideHtml(guide(), { submitting: true }), /role="status">正在开始…</);
 });
 
 test("步骤清单：每步带状态类与说明；提问嵌在发问的那一步下面", () => {
@@ -78,6 +79,9 @@ test("密码提问：首次只问密码；输错说明次数；通道不通时�
   assert.doesNotMatch(channel, /name="password"/, "页面里的密码框此时没用");
   assert.match(channel, /cat &quot;k\.pub&quot; \| ssh amy@10\.0\.0\.8/);
   assert.match(channel, /data-ob-answer="password-manual"/);
+  const windows = ask({ error: "channel", manualShell: "cmd" });
+  assert.match(windows, /命令提示符（cmd）/);
+  assert.match(windows, /不要粘贴到 PowerShell 或集群终端/);
   assert.match(ask({ error: "still-missing" }), /还没检测到公钥/);
 });
 

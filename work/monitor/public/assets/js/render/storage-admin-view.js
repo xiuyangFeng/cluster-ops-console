@@ -257,17 +257,54 @@ export function buildUnconfiguredConnectionsHtml(data) {
       `<button type="button" class="text-btn" data-sa-configure="${attr(connection.id)}">配置扫描目录</button></p>`).join("") + '</section>';
 }
 
+export function buildStorageGuideHtml(data, { installers = {}, busy = {} } = {}) {
+  if (!data) return "";
+  const targets = data.targets || [];
+  const target = targets.find((t) => t.status?.state !== "ok");
+  let stage, title, message, action = "";
+  if (!targets.length) {
+    stage = "target"; title = "1 · 先选择节点和允许扫描的目录";
+    message = "SSH 连接成功后，还需要为存储管理单独选择节点与目录；保存后，这里会引导你完成后续接入。";
+    action = '<button type="button" class="text-btn" data-sa-show-setup>填写扫描范围</button>';
+  } else if (!target) {
+    stage = "ready"; title = "4 · 已完成检测，可以查看目录和扫描";
+    message = "连接与只读服务已经检测通过。选择下方的节点和目录，再点击对应的扫描按钮；已有扫描结果可以直接打开。";
+  } else if (["unreachable", "timeout"].includes(target.status?.code)) {
+    stage = "network"; title = "先恢复到这个节点的网络连接";
+    message = "连上能访问该节点的内网或 VPN，核对地址和端口后重新检测。网络不通时，重复生成密钥不能解决问题。";
+    action = `<button type="button" class="text-btn" data-sa-refresh="${attr(target.id)}"${busy[`ref:${target.id}`] ? " disabled" : ""}>重新检测连接</button>`;
+  } else if (target.connectionId && target.status?.state === "unknown") {
+    stage = "check"; title = "2 · 先检测已保存的节点连接";
+    message = "先用你选择的账号检测服务器上的只读存储服务；已经接入过的节点可以直接使用。";
+    action = `<button type="button" class="text-btn" data-sa-refresh="${attr(target.id)}"${busy[`ref:${target.id}`] ? " disabled" : ""}>检测 ${escapeHtml(target.label)}</button>`;
+  } else if (!data.key?.exists) {
+    stage = "key"; title = "2 · 准备这台电脑的存储专用密钥";
+    message = "这是管理员存储功能的受限密钥。新电脑生成自己的密钥，再把公钥加入服务器即可；不用拷贝旧电脑的私钥，也不会移除旧电脑的授权。";
+    action = `<button type="button" class="text-btn" data-sa-key${busy.key ? " disabled" : ""}>${busy.key ? "正在生成…" : "生成本机存储密钥"}</button>`;
+  } else if (!installers[target.id]) {
+    stage = "install"; title = `3 · 为 ${target.label} 准备公钥授权和只读服务`;
+    message = "本机密钥已准备好。生成安装命令后，按提示在本机执行一次；服务器上只安装公钥和只读服务。该步骤需要管理员具备目标服务器的 root 登录权限。";
+    action = `<button type="button" class="text-btn" data-sa-installer="${attr(target.id)}"${busy[`inst:${target.id}`] ? " disabled" : ""}>生成安装命令</button>`;
+  } else {
+    stage = "verify"; title = `3 · 安装完成后检测 ${target.label}`;
+    const shell = installers[target.id].shell === "cmd" ? "本机的命令提示符（cmd），不是 PowerShell 或集群终端" : "本机终端，不是集群终端";
+    message = `展开下方「接入步骤」，复制该节点的安装命令，在${shell}执行。看到安装成功后点击检测，检测通过才进入扫描。`;
+    action = `<button type="button" class="text-btn" data-sa-refresh="${attr(target.id)}"${busy[`ref:${target.id}`] ? " disabled" : ""}>我已安装，检测连接</button>`;
+  }
+  return `<section class="sa-setup" data-sa-guide-stage="${stage}" aria-label="存储接入下一步"><h3>${escapeHtml(title)}</h3><p class="sa-note">${escapeHtml(message)}</p>${action}</section>`;
+}
+
 export function buildOverviewHtml(data, { installers = {}, busy = {}, error = "", loading = false, now = Date.now(), activity, fold = null, selected = null } = {}) {
   if (loading && !data) return '<p class="sa-note">正在读取…</p>';
   if (!data) return error ? `<p class="sa-note" data-level="warn">${escapeHtml(error)}</p>` : "";
   if (!data.targets?.length) {
-    return buildStorageTargetForm(data, busy) + buildUnconfiguredConnectionsHtml(data) || '<p class="sa-note">个人配置 config.local.json 里还没有 storageAdmin.targets（要查看的机器与允许扫描的目录）。</p>';
+    return buildStorageGuideHtml(data, { installers, busy }) + buildStorageTargetForm(data, busy) + buildUnconfiguredConnectionsHtml(data);
   }
   const err = error ? `<p class="sa-note" data-level="warn">${escapeHtml(error)}</p>` : "";
   const opts = { now, fold, ...(activity ? { activity } : {}) };
   const setup = buildStorageTargetForm(data, busy);
   const picks = Array.isArray(selected) ? selected : selected ? [selected] : data.targets.map((t) => t.id);
-  return `${err}${setup}${buildUnconfiguredConnectionsHtml(data)}${buildSetupHtml(data, { installers, busy })}${targetTabsHtml(data.targets, picks)}${data.targets.filter((t) => picks.includes(t.id)).map((t) => buildTargetHtml(t, opts)).join("") || '<p class="sa-note">勾选上方节点与账号以查看存储。</p>'}`;
+  return `${err}${buildStorageGuideHtml(data, { installers, busy })}${setup}${buildUnconfiguredConnectionsHtml(data)}${buildSetupHtml(data, { installers, busy })}${targetTabsHtml(data.targets, picks)}${data.targets.filter((t) => picks.includes(t.id)).map((t) => buildTargetHtml(t, opts)).join("") || '<p class="sa-note">勾选上方节点与账号以查看存储。</p>'}`;
 }
 
 // 扫描结果的某一层。

@@ -5,6 +5,7 @@
 // 提问的那一步下面；走完 → 结果摘要 + 折叠的步骤清单（装 CLI 与登录两段是 index.html 里的静态块，
 // 由控制器显隐）。
 import { escapeHtml } from "../store.js";
+import { buildGuideProgressHtml } from "./onboarding-progress.js";
 
 const SETUP_STATES = new Set(["needs-setup", "partial"]);
 const IN_PROGRESS = new Set(["running", "waiting", "failed", "paused"]);
@@ -13,7 +14,9 @@ const IN_PROGRESS = new Set(["running", "waiting", "failed", "paused"]);
 // 入口始终还在（首页横幅的按钮、配置里的「接入引导」）。
 export function shouldAutoOpenGuide(status) {
   const guide = status?.onboardingGuide;
-  if (!guide || guide.dismissed || guide.phase === "done") return false;
+  if (!guide || guide.dismissed) return false;
+  if (guide.needsLocalSetup) return true;
+  if (guide.phase === "done") return false;
   if (IN_PROGRESS.has(guide.phase)) return true;
   return SETUP_STATES.has(status.onboarding);
 }
@@ -48,7 +51,7 @@ function passwordPrompt(prompt) {
   const manual = prompt.manualCommand
     ? `<details class="ob-manual"${manualOnly ? " open" : ""}>
         <summary>改在终端里输入密码</summary>
-        <p>在这台电脑的终端里运行下面这一行（会提示输入集群密码），完成后点「我已完成」：</p>
+        <p>在这台电脑的${prompt.manualShell === "cmd" ? "「命令提示符（cmd）」中" : "终端里"}运行下面这一行（会提示输入集群密码），${prompt.manualShell === "cmd" ? "不要粘贴到 PowerShell 或集群终端。" : "不要粘贴到集群终端。"}完成后点「我已完成」，工作台会重新验证：</p>
         <pre class="ob-code"><code>${escapeHtml(prompt.manualCommand)}</code></pre>
         ${actions('<button type="button" class="btn btn-secondary" data-ob-copy="manual">复制命令</button><button type="button" class="btn btn-secondary" data-ob-answer="password-manual">我已完成</button>')}
       </details>`
@@ -151,19 +154,22 @@ function formHtml(state, ui) {
         <label class="ob-field"><span>集群地址</span><input name="hostName" value="${escapeHtml(form.hostName || "")}" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="IP 或域名" required${fieldError("hostName")}></label>
         <label class="ob-field ob-field-port"><span>SSH 端口</span><input name="sshPort" type="number" min="1" max="65535" value="${escapeHtml(String(form.sshPort || 22))}"></label>
       </div>`;
-  return `<form class="ob-form" data-ob-form="start" novalidate>
-    <p class="ob-lead">填写你在集群上的账号。之后的密钥、专属端口、隧道和集群上的代理配置都会自动完成，一般一两分钟。</p>
+  return `<form class="ob-form" id="onboardingStartForm" data-ob-form="start" novalidate>
+    <p class="ob-lead">填写自己的集群账号，密钥准备和公钥授权会自动完成。需要你确认时，流程会停下来提示。</p>
     ${address}
+    <label class="ob-field"><span>这次要完成什么</span><select name="mode"><option value="monitor"${form.mode !== "full" ? " selected" : ""}>快速接入：先连接并查看集群资源</option><option value="full"${form.mode === "full" ? " selected" : ""}>完整接入：同时准备 AI 工具的通道与代理</option></select></label>
+    ${note("同一内网下先选快速接入即可：验证 SSH 后进入工作台。需要让集群工具经本机出网时，再选择完整接入；已有通道会保留。")}
     <label class="ob-field"><span>集群用户名</span><input name="sshUser" value="${escapeHtml(form.sshUser || "")}" autocomplete="username" autocapitalize="off" spellcheck="false" required${fieldError("sshUser")}></label>
     <label class="ob-field"><span>集群密码</span><input name="password" type="password" autocomplete="off"${fieldError("password")}></label>
     ${note("密码只用一次：把这台电脑的公钥装到服务器上，之后都用密钥登录。不会保存在这台电脑或集群上；已经能免密登录的可以留空。")}
     ${note("开始之前确认本机能连到服务器的 SSH：服务器只允许内网访问时，先连上单位内网 / 校园网 / VPN。")}
     ${ui.formError ? `<p class="ob-error" role="alert">${escapeHtml(ui.formError.message)}</p>` : ""}
-    ${actions(`<button type="submit" class="btn btn-primary"${ui.submitting ? " disabled" : ""}>${ui.submitting ? "正在开始…" : "开始接入"}</button>`)}
+    ${ui.submitting ? '<p class="ob-note" role="status">正在开始…</p>' : ""}
   </form>`;
 }
 
 function doneHtml(state) {
+  const quick = state.form?.mode === "monitor";
   const result = state.result || {};
   const facts = [
     result.sshUser && state.server ? `${result.sshUser}@${state.server.alias}` : "",
@@ -173,7 +179,7 @@ function doneHtml(state) {
   const flagged = (state.steps || []).filter((step) => step.status === "warn");
   return `<div class="ob-done">
     <p class="ob-done-title">1 · 已接入集群</p>
-    <p class="ob-note">通道和代理配置已准备。下面继续安装工具、选择登录方式，再检查并开始使用。</p>
+    <p class="ob-note">${quick ? "SSH 登录和本机公钥授权已验证，可以直接进入工作台查看资源。以后需要 AI 工具通道时，重新接入并选择完整模式即可。" : "通道和代理配置已准备。下面继续安装工具、选择登录方式，再检查并开始使用。"}</p>
     ${facts ? `<p class="ob-done-facts">${escapeHtml(facts)}</p>` : ""}
     ${warnings ? `<ul class="ob-warnings">${warnings}</ul>` : ""}
   </div>
@@ -190,12 +196,13 @@ export function buildGuideHtml(state, ui = {}) {
   if (!state.available) {
     return '<p class="incidents-empty">团队配置里没有可以接入的集群服务器。自己的服务器可以在「配置 → 服务器管理」里添加。</p>';
   }
-  if (state.phase === "idle") return formHtml(state, ui);
-  if (state.phase === "done") return doneHtml(state);
+  const progress = buildGuideProgressHtml(state);
+  if (state.phase === "idle") return progress + formHtml(state, ui);
+  if (state.phase === "done") return progress + doneHtml(state);
   const paused = state.phase === "paused"
     ? `<div class="ob-paused"><p>上次进行到一半就关掉了。已完成的步骤不会重做。</p>${actions(`<button type="button" class="btn btn-primary" data-ob-retry${state.busy ? " disabled" : ""}>继续</button><button type="button" class="text-btn" data-ob-restart${state.busy ? " disabled" : ""}>重新填写账号</button>`)}</div>`
     : "";
-  return `${paused}${stepsHtml(state)}`;
+  return `${progress}${paused}${stepsHtml(state)}`;
 }
 
 // 页头副标题：接的是哪台、用哪个账号。

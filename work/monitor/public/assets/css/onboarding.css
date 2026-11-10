@@ -44,7 +44,7 @@
 .ob-form, .ob-prompt { display: grid; gap: var(--space-3); }
 .ob-lead { font-size: var(--text-base); color: var(--text-soft); line-height: 1.6; }
 .ob-field { display: grid; gap: 5px; font-size: var(--text-xs); color: var(--muted-strong); min-width: 0; }
-.ob-field input {
+.ob-field input, .ob-field select {
   min-height: 34px; padding: 0 10px;
   border: 1px solid var(--hud-border-strong); border-radius: var(--radius-md);
   background: var(--control-bg); color: var(--text-strong);
@@ -56,6 +56,16 @@
 .ob-error { font-size: var(--text-sm); color: var(--red-soft); line-height: 1.5; }
 .ob-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3); }
 .ob-form > .ob-actions { margin-top: var(--space-1); }
+
+.ob-progress { display: grid; gap: var(--space-2); padding: var(--space-4); margin-bottom: var(--space-4); border: 1px solid var(--hud-border-strong); border-radius: var(--radius-hud); background: var(--card-bg); }
+.ob-progress-head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: var(--space-2); }
+.ob-progress-head strong { color: var(--text-strong); font-size: var(--text-sm); }
+.ob-progress-head span { color: var(--muted); font-size: var(--text-xs); }
+.ob-progress-track { height: 4px; background: var(--inset-bg); border-radius: 2px; overflow: hidden; }
+.ob-progress-track i { display: block; width: 100%; height: 100%; background: var(--cyan); transform-origin: left; transition: transform 0.2s ease; }
+.ob-next-action { color: var(--text-strong); font-size: var(--text-sm); line-height: 1.6; overflow-wrap: anywhere; }
+.ob-key-help summary { color: var(--muted); cursor: pointer; font-size: var(--text-xs); }
+.ob-key-help p { margin-top: var(--space-2); }
 
 /* ---- 步骤清单：左侧一列圆标，用细线连起来 ---- */
 .ob-steps { list-style: none; display: grid; }
@@ -183,7 +193,7 @@
 .ob-next h3.is-done .ob-stage-number::after { content: "✓"; font-size: var(--text-xs); color: var(--cyan); }
 
 /* 高亮的按钮：一圈描边 + 前几下脉冲（只闪 4 次，之后保留描边；减少动态时不闪）。禁用的按钮不高亮。 */
-.onboarding-dialog[data-ob-focus~="start"] [data-ob-form="start"] button[type="submit"]:not(:disabled),
+.onboarding-dialog[data-ob-focus~="start"] #onboardingStart:not(:disabled),
 .onboarding-dialog[data-ob-focus~="prompt"] .ob-prompt .btn-primary:not(:disabled),
 .onboarding-dialog[data-ob-focus~="retry"] [data-ob-retry]:not(:disabled),
 .onboarding-dialog[data-ob-focus~="install"] #onboardingCliBody [data-cli-action="install"]:not(:disabled),

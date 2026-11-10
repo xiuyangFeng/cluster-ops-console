@@ -105,6 +105,7 @@ function createWorld(t, { team = {}, password = "correct horse", sshConfig = nul
     },
     serverRegistry: {
       enable: async () => { server().disabled = false; },
+      update: async (id, patch) => { world.calls.push({ cmd: "registry-update", args: [id, patch] }); Object.assign(server(), patch); },
       testConnection: async () => (world.authorized || world.aliasLogin ? { ok: true, code: "ok" } : { ok: false, code: "auth", nextAction: "检查 ssh 用户名与密钥" }),
       suggestPort: async () => ({ probed: true, suggested: { remotePort: 7892 }, registry: "ok" }),
       claimPort: async (_id, { remotePort }) => {
@@ -149,7 +150,7 @@ test("全新的同事：填用户名和密码 → 确认指纹 → 其余自动�
   const world = createWorld(t);
   const guide = world.guide();
   assert.equal(guide.getState().phase, "idle");
-  assert.deepEqual(guide.getState().form, { sshUser: "", hostName: "10.0.0.8", hostNameLocked: true, sshPort: 22 });
+  assert.deepEqual(guide.getState().form, { sshUser: "", hostName: "10.0.0.8", hostNameLocked: true, sshPort: 22, mode: "monitor" });
 
   guide.start({ sshUser: "amy", password: "correct horse" });
   let state = await settle(guide);
@@ -179,6 +180,56 @@ test("全新的同事：填用户名和密码 → 确认指纹 → 其余自动�
   assert.ok(!fs.readFileSync(world.statePath, "utf8").includes("correct horse"));
   assert.ok(!JSON.stringify(state).includes("correct horse"));
   if (posix) assert.equal(fs.statSync(world.statePath).mode & 0o777, 0o600);
+});
+
+test("换电脑导入旧配置：缺失密钥能被识别，一次密码自动创建并授权本机密钥，重跑不重复生成", async (t) => {
+  const world = createWorld(t);
+  world.merged.sshIdentityFile = path.join(world.root, "old-computer", "missing-key");
+  world.merged.sshUser = "amy";
+  const guide = world.guide();
+  assert.equal(guide.getBrief().needsLocalSetup, true);
+  assert.equal(guide.getState().localReadiness.keyState, "create");
+  guide.start({ sshUser: "amy", password: "correct horse" });
+  await guide.whenIdle();
+  assert.equal(guide.getState().prompt.kind, "hostkey");
+  guide.answer({ kind: "hostkey", accept: true, linesHash: guide.getState().prompt.linesHash });
+  await guide.whenIdle();
+  assert.equal(guide.getState().phase, "done");
+  assert.equal(guide.getBrief().needsLocalSetup, false);
+  assert.equal(world.personal.sshIdentityFile, path.join(world.sshDir, DEDICATED_KEY_NAME));
+  assert.equal(guide.getState().localReadiness.keyState, "ready");
+  assert.deepEqual(world.passwordsSeen, ["correct horse"]);
+  assert.equal(JSON.stringify(guide.getState()).includes("correct horse"), false);
+  assert.equal(JSON.stringify(guide.getState()).includes("PRIVATE"), false);
+  guide.reset();
+  guide.start({ sshUser: "amy" });
+  await guide.whenIdle();
+  assert.equal(guide.getState().phase, "done");
+  assert.equal(world.calls.filter((call) => call.cmd === "ssh-keygen" && call.args.includes("-t")).length, 1);
+  assert.equal(world.passwordsSeen.length, 1, "已有授权重跑不再索要密码");
+});
+
+test("同一内网快速接入只准备 SSH 并验证资源连接，不领端口、不起通道；以后可以补全工具通道", async (t) => {
+  const world = createWorld(t);
+  const guide = world.guide();
+  guide.start({ sshUser: "amy", password: "correct horse", mode: "monitor" });
+  await guide.whenIdle();
+  guide.answer({ kind: "hostkey", accept: true, linesHash: guide.getState().prompt.linesHash });
+  await guide.whenIdle();
+  assert.equal(guide.getState().phase, "done");
+  assert.equal(world.merged.servers[0].tunnel, false);
+  assert.equal(world.merged.servers[0].remotePort, undefined);
+  assert.equal(world.shouldBeRunning, false);
+  assert.equal(world.calls.some((call) => call.cmd === "remote"), false);
+  assert.deepEqual(guide.getState().steps.filter((s) => s.status === "skipped").map((s) => s.id), ["port", "tunnel", "egress", "clusterEnv"]);
+  guide.reset();
+  guide.start({ sshUser: "amy", mode: "full" });
+  await guide.whenIdle();
+  assert.equal(guide.getState().phase, "done");
+  assert.equal(world.merged.servers[0].tunnel, true);
+  assert.equal(world.shouldBeRunning, true);
+  assert.equal(world.merged.servers[0].remotePort, 7892);
+  assert.equal(world.passwordsSeen.length, 1);
 });
 
 test("没在表单里填密码：走到装公钥时再问；密码错了留在这一步重新问，对了继续", async (t) => {
@@ -453,18 +504,18 @@ test("团队配置的 host 本身就是地址（没有别名、没预烤 sshHost
   const world = createWorld(t, { team: { sshHostName: "" } });
   world.merged.servers[0].host = "cluster.example.edu";
   const guide = world.guide();
-  assert.deepEqual(guide.getState().form, { sshUser: "", hostName: "cluster.example.edu", hostNameLocked: false, sshPort: 22 });
+  assert.deepEqual(guide.getState().form, { sshUser: "", hostName: "cluster.example.edu", hostNameLocked: false, sshPort: 22, mode: "monitor" });
   // 表单里填的地址与端口生效（没预烤时不被团队配置的默认端口盖掉）
   guide.start({ sshUser: "amy", hostName: "10.9.9.9", sshPort: 2200 });
   const state = await guide.whenIdle().then(() => guide.getState());
-  assert.deepEqual(state.form, { sshUser: "amy", hostName: "10.9.9.9", hostNameLocked: false, sshPort: 2200 });
+  assert.deepEqual(state.form, { sshUser: "amy", hostName: "10.9.9.9", hostNameLocked: false, sshPort: 2200, mode: "full" });
   assert.deepEqual(world.calls.find((c) => c.cmd === "ssh-keyscan").args, ["-T", "5", "-p", "2200", "10.9.9.9"]);
 });
 
 test("「稍后再说」会记住；「重新运行引导」清掉进度但不删已写下的东西", async (t) => {
   const world = createWorld(t, { authorized: true, team: { sshHostKeyFingerprints: [HOST_FP] } });
   let guide = world.guide();
-  assert.deepEqual(guide.getBrief(), { phase: "idle", dismissed: false, busy: false });
+  assert.deepEqual(guide.getBrief(), { phase: "idle", dismissed: false, busy: false, needsLocalSetup: false });
   guide.setDismissed(true);
   guide = world.guide();
   assert.equal(guide.getBrief().dismissed, true);
@@ -514,7 +565,7 @@ test("进度文件：认不出的版本 / 坏内容按没开始处理；正在�
   assert.equal(revived.steps.hostkey.status, "done");
   assert.deepEqual(revived.steps.key, { status: "pending", detail: "", error: null });
   assert.equal(revived.steps.bogus, undefined);
-  assert.deepEqual(revived.form, { sshUser: "amy", hostName: "", sshPort: null });
+  assert.deepEqual(revived.form, { sshUser: "amy", hostName: "", sshPort: null, mode: null });
   assert.deepEqual(revived.result.warnings, [{ code: "x", text: "y", command: "" }]);
 
   const store = createGuideStore({ filePath: path.join(os.tmpdir(), `cwb-guide-missing-${process.pid}.json`), stepIds: ids });

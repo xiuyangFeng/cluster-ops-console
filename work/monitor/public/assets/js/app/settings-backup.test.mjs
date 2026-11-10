@@ -36,7 +36,8 @@ test("说明区：导出包含 / 不包含什么、写前备份在哪（北京�
   assert.match(html, /<code>\/data\/config-backups<\/code>/);
   assert.equal(formatStamp("20261014-090507-2"), "2026-10-14 09:05:07");
   assert.match(buildBackupInfoHtml(null), /打开后读取/);
-  assert.match(SSH_KEYS_NOTE, /~\/\.ssh 下的密钥.*要另外拷过去/);
+  assert.match(SSH_KEYS_NOTE, /换电脑.*重新检测接入/);
+  assert.match(SSH_KEYS_NOTE, /无需拷贝旧电脑的私钥/);
 });
 
 test("预览：普通改动、端口（默认不勾、带后果说明）、暂时导入不了的分组；按勾选数显示按钮", () => {
@@ -69,6 +70,7 @@ test("结果：导入了几项、备份名、跳过的条目与原因", () => {
   const html = buildImportResultHtml({ applied: ["personal.egress"], skipped: [{ id: "jobAlerts.server-x", reason: "服务器不在作业采集范围" }], backup: { name: "config.local.20261014-090507.json" } }, CHANGES);
   assert.match(html, /已导入 1 项；导入前的配置已备份为 <code>config\.local\.20261014-090507\.json<\/code>/);
   assert.match(html, /<li>server-x 的作业提醒规则：服务器不在作业采集范围<\/li>/);
+  assert.match(html, /data-onboarding-open data-onboarding-recheck/);
 });
 
 function harness({ electronAPI = null, preview = PREVIEW, applyResult = { success: true, applied: ["personal.egress"], skipped: [], backup: { name: "b.json" } } } = {}) {

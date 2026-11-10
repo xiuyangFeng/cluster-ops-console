@@ -298,19 +298,24 @@ export function createStorageAdminController({
     }
   }
 
-  function configureConnection(id) {
-    const connection = data?.connections?.find((item) => item.id === id);
-    if (!connection) return;
-    data = { ...data, setup: { id: `${connection.id}-storage`, label: `${connection.name} · ${connection.sshUser}`,
-      connectionId: connection.id, host: connection.host, port: connection.port || 22, roots: "" } };
-    render();
+  function showTargetForm() {
     const form = $("storageAdminBody")?.querySelector?.("[data-sa-target-form]");
     const details = form?.closest("details");
     if (details) details.open = true;
     form?.querySelector('[name="roots"]')?.focus();
   }
 
+  function configureConnection(id) {
+    const connection = data?.connections?.find((item) => item.id === id);
+    if (!connection) return;
+    data = { ...data, setup: { id: `${connection.id}-storage`, label: `${connection.name} · ${connection.sshUser}`,
+      connectionId: connection.id, host: connection.host, port: connection.port || 22, roots: "" } };
+    render();
+    showTargetForm();
+  }
+
   const BODY_ACTIONS = [
+    ["[data-sa-show-setup]", showTargetForm],
     ["[data-sa-configure]", (button) => configureConnection(button.dataset.saConfigure)],
     ["[data-sa-save-target]", saveTarget],
     ["[data-sa-fold]", toggleFold],
