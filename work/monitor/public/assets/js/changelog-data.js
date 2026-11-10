@@ -13,6 +13,12 @@
 //      找到且日期一致、两边都按日期降序、首条版本等于 package.json 当前版本。
 export const changelogData = [
   {
+    version: "v2.98.1", date: "2026-11-10", changes: [
+      { type: "fix", text: "分区外节点跳采失败时，复用已保存节点连接的近期成功采样，修复 node04 已可直连却仍显示 SSH 失败；校验实际主机、账号与数据时效。" },
+      { type: "fix", text: "存储页明确列出尚未配置扫描的节点账号，点击带入连接、地址及端口，再选择扫描目录并完成只读服务接入。" },
+    ],
+  },
+  {
     version: "v2.98.0", date: "2026-11-10", changes: [
       { type: "fix", text: "Windows 进程查询使用系统工具绝对路径，CIM/WMI 降级与失败退避；界面显示查询故障和下次检查时间，保留现有连接。" },
       { type: "feat", text: "节点账号可分别配置公网直连或单级内网跳转，两跳独立使用密钥或密码；Windows 密码接入使用原生 Node/Electron 应答。" },

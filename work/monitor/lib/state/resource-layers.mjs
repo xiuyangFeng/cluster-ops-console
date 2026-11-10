@@ -2,6 +2,8 @@
 // 数据源：每台服务器自己的 collect:slow 采集（负载 + 旁路数据）、活跃服务器的
 // validation 探针、log-signals（fast 采集）的信号快照。
 
+import { reconcileDirectNodeResources } from "./direct-node-resources.mjs";
+
 const EMPTY_BRIEF = { ok: false, cpu: 0, ram: 0, disk: 0, output: "" };
 
 // slow 采集旁路数据（GPU / Agent 安装态 / 新版资源结构 / Slurm 快照 / 占用现场）的归一形状。
@@ -32,7 +34,7 @@ function resourceLevel(result, brief) {
 
 // servers：已过滤掉屏蔽条目的服务器列表。v2.18：每台服务器（含活跃服务器）的负载
 // 都由自己的 collect:slow 探针给出。
-export function buildResourcesLayer({ servers, slowResultFor, serversBrief, resourceExtras }) {
+export function buildResourcesLayer({ servers, slowResultFor, serversBrief, resourceExtras, config = {}, now = Date.now() }) {
   const resources = {};
   for (const server of servers) {
     const result = slowResultFor(server.id);
@@ -61,7 +63,7 @@ export function buildResourcesLayer({ servers, slowResultFor, serversBrief, reso
       tunnelEgress: extras ? extras.tunnelEgress ?? null : null,
     };
   }
-  return resources;
+  return reconcileDirectNodeResources(resources, servers, config, now);
 }
 
 // 只透出仍配着 validationProfile 的服务器（档案被删后残留结果不再展示）。

@@ -167,7 +167,7 @@ export function createStorageAdminService({
       expectedVersion: scriptVersion(await script()),
       targets: await Promise.all(targets.map(targetView)),
       setup: typeof savePersonalConfig === "function" ? storageTargetDraft(config) : null,
-      connections: (config.servers || []).filter((s) => !s.disabled && s.monitorEnabled !== false).map((s) => ({ id: s.id, name: s.name || s.host, host: s.sshHostName || s.host, sshUser: s.sshUser || config.sshUser || "", sshJumpServerId: s.sshJumpServerId || "" })),
+      connections: (config.servers || []).filter((s) => !s.disabled && s.monitorEnabled !== false).map((s) => ({ id: s.id, name: s.name || s.host, host: s.sshHostName || s.host, port: s.sshPort || 22, sshUser: attachPersonalSsh(s, config).sshUser || "", sshJumpServerId: s.sshJumpServerId || "" })),
     };
   }
 

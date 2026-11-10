@@ -105,7 +105,7 @@ function statHtml(stat) {
 export function buildNodesHtml(nodes, selected = null) {
   return (Array.isArray(nodes) ? nodes : []).map((n) => {
     const pressed = selected === n.name;
-    const badge = n.direct ? '<span class="cl-node-badge" title="不在任何 Slurm 分区，由登录节点 ssh 直连采集">直连</span>' : "";
+    const badge = n.direct ? `<span class="cl-node-badge" title="${escapeHtml(n.connectionId ? "使用已保存的节点连接采集" : "不在任何 Slurm 分区，由登录节点 ssh 直连采集")}">直连</span>` : "";
     let body;
     if (n.offline) {
       body = (

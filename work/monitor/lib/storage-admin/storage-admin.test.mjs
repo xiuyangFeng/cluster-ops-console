@@ -501,7 +501,7 @@ test("存储节点可绑定不同用户名和直连/跳转配置；仅白名单�
   let admin = true;
   const config = { servers: [
     { id: "master-account", host: "master.example", sshUser: "kai", tunnel: false },
-    { id: "n4-root", host: "node04.example", sshUser: "root", authRef: "mem:root", tunnel: false },
+    { id: "n4-root", host: "node04.example", sshPort: 2204, sshUser: "root", authRef: "mem:root", tunnel: false },
     { id: "n4-user", host: "node04", sshUser: "user01", sshJumpServerId: "master-account", tunnel: false },
   ], storageAdmin: { targets: [
     { id: "n4root", connectionId: "n4-root", roots: ["/mnt"] },
@@ -510,7 +510,9 @@ test("存储节点可绑定不同用户名和直连/跳转配置；仅白名单�
   const calls = [], store = createStorageAdminStore({});
   const svc = createStorageAdminService({ getConfig: async () => config, isAdmin: () => admin, store, dir: os.tmpdir(),
     exec: async (cmd, args, options) => { calls.push({ cmd, args, options }); return { code: 255, stdout: "", stderr: "Permission denied" }; } });
-  assert.equal((await svc.overview()).targets.length, 2);
+  const overviewBeforeRefresh = await svc.overview();
+  assert.equal(overviewBeforeRefresh.targets.length, 2);
+  assert.equal(overviewBeforeRefresh.connections.find((s) => s.id === "n4-root").port, 2204);
   assert.equal(calls.length, 0);
   await svc.refresh("n4root"); await svc.refresh("n4user");
   assert.deepEqual(calls.map((c) => c.options.server.sshUser), ["root", "user01"]);

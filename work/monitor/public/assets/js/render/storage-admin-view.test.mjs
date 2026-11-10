@@ -2,9 +2,29 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import { idleState, idleSummary } from "./storage-admin-viz.js";
-import { buildBrowserHtml, buildListHtml, buildOverviewHtml, buildSetupHtml, quotaGuideHtml } from "./storage-admin-view.js";
+import { buildBrowserHtml, buildListHtml, buildOverviewHtml, buildSetupHtml, buildUnconfiguredConnectionsHtml, quotaGuideHtml } from "./storage-admin-view.js";
 
 const NOW = Date.UTC(2026, 10, 5, 8, 0);
+
+test("已有主服务器时也明确展示尚未配置扫描的 node04；按连接账号匹配并转义", () => {
+  const connections = [
+    { id: "master", name: "master", host: "master.example", port: 22, sshUser: "root" },
+    { id: "node04", name: "node04", host: "203.0.113.4", port: 2222, sshUser: "root" },
+    { id: "node04-reader", name: '<img src=x>', host: "203.0.113.4", port: 2222, sshUser: "alice" },
+  ];
+  const data = { setup: { id: "master" }, connections,
+    targets: [{ id: "master-storage", host: "master.example", port: 22 }] };
+  const html = buildUnconfiguredConnectionsHtml(data);
+  assert.match(html, /尚未配置存储扫描/);
+  assert.match(html, /data-sa-configure="node04"/);
+  assert.doesNotMatch(html, /data-sa-configure="master"/);
+  assert.doesNotMatch(html, /<img src=x>/);
+  data.targets.push({ id: "n4-storage", connectionId: "node04" });
+  const updated = buildUnconfiguredConnectionsHtml(data);
+  assert.doesNotMatch(updated, /data-sa-configure="node04"/);
+  assert.match(updated, /data-sa-configure="node04-reader"/);
+  assert.match(buildOverviewHtml({ ...data, targets: [] }), /data-sa-configure="node04"/);
+});
 const target = (over = {}) => ({
   id: "master", label: "master", host: "203.0.113.10", port: 22, roots: ["/public"],
   status: { state: "ok" }, checkedAt: NOW - 60_000,

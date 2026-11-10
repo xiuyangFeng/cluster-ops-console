@@ -98,6 +98,8 @@ v2.51 继续沿用同一归属：`lib/jobs/subrun-model.mjs` 与远端 `job-subr
 
 v2.53：直连节点（node04）的各卡利用率由 `server/telemetry.mjs` 从同一轮 slow 采集的 slurm 段取出，写进资源样本的 `nodeGpuUtil`（`lib/metrics-store.mjs` 校验），前端 `resources-model.buildGpuGroups` 按节点分组、`gpu-trend.js` 按节点取走势。v2.50 的用量实时异常（`lib/usage/anomalies*.mjs`、`/api/usage/anomal*`、前端 `usage-anomalies-*`）已删除。
 
+v2.98.1：`lib/state/direct-node-resources.mjs` 在资源层投影时补全失败的登录节点跳采：同时匹配已保存连接的节点标识与实际 hostname，使用 150 秒内成功的独立 slow 采样，经 `slurm.directNodeFromResource` 转成相同节点指标。主集群和独立连接的采样到达顺序不影响展示；账号、时效和连接歧义检查不通过时保留原结果，普通账号不借用其它账号的明细。该投影不发 SSH、不修改原始快照或 Slurm 调度状态；独立连接仍由现有探针采集。存储管理另列尚未绑定扫描目标的已保存连接，管理员选择目录后配置，只读服务接入与扫描状态分别判断。
+
 v2.55 远端守护进程：`lib/daemons/commands.mjs` 是固定注册表（只有 `paseo` / `t3code` 两个 id）与常量远端脚本（经 stdin 送 `bash -s`，无任何插值）及白名单输出解析；`lib/daemons/service.mjs` 只对活跃的团队服务器查状态（10 秒短缓存、并发合并）与启动（同一时刻一个、端口已在监听即空操作，从不 kill / restart / stop），SSH 经 `acquireSshSlot`，启动写运维日志与状态时间线。路由 `http/routes/daemons.mjs`（`GET /api/daemons`、`POST /api/daemons/start`，随 `daemons` 模块开关），前端是服务器页面板（`render/daemons-view.js` + `app/daemons-controller.js`）。这是 v2.31.0 移除远端动作后唯一放开的两条固定启动命令。
 
 v2.57 CLI（第 2 期）的入口：路由 `http/routes/cli-login.mjs`（`/api/cli/:cli/login*`、`/api/cli/login/*`）在 `http/routes/cli.mjs`（`GET /api/cli`、`POST /api/cli/:id/install`、`GET /api/cli/jobs/:jobId`、`POST /api/cli/:id/rollback`）之前注册，两组路径互不重叠。前端三处分工：Agent 卡片（`render/cli-model.js` + `app/cli-controller.js`，读 `/api/cli`、404 安静降级）只读展示版本 / 登录方式，「可更新到 x」chip 与详情里的「安装…」经 `settings-cli.openFor` 直达配置浮层「命令行工具」一节（`app/settings-cli.js`，安装 / 更新 / 回滚的唯一操作处）的同一个确认；登录只在 Agent 详情「登录 / 切换账号…」（`app/cli-login-dialog.js`）。命令行向导：集群侧配置（4）→ `scripts/setup/cli-install.mjs`（5，检测 / 安装，复用 `buildInstallDeps` 与 `install.mjs`）→ `scripts/setup/cli-login.mjs`（6，登录）→ 依赖检查（7）。

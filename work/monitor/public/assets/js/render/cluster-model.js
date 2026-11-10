@@ -410,7 +410,7 @@ function buildNodes(rawNodes, jobsByNode, now) {
         : false;
       const title = [
         `${n.name} · ${state.label}${n.stateRaw ? `（Slurm：${n.stateRaw}）` : ""}`,
-        direct ? "不在任何 Slurm 分区，由登录节点 ssh 直连采集" : "",
+        direct ? (n.connectionId ? `不在任何 Slurm 分区，使用已保存连接 ${n.connectionId} 采集` : "不在任何 Slurm 分区，由登录节点 ssh 直连采集") : "",
         !direct ? [partitions.length ? `${partitions.join(" / ")} 分区` : "", jobCount ? `${jobCount} 个作业在运行` : "没有作业在运行"].filter(Boolean).join(" · ") : "",
         !direct && alloc != null && total != null ? `CPU 已分配 ${alloc} / ${total} 核` : "",
         direct && busyPct != null ? `CPU 利用率 ${busyPct}%` : "",
@@ -423,6 +423,7 @@ function buildNodes(rawNodes, jobsByNode, now) {
         key: n.name,
         name: n.name,
         direct,
+        connectionId: n.connectionId || null,
         reachable,
         state,
         meta,

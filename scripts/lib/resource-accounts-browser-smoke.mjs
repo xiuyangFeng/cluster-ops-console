@@ -15,7 +15,7 @@ export async function runResourceAccountsBrowserSmoke({ BrowserWindow, baseUrl }
       const { createStorageAdminController } = await import("/assets/js/app/storage-admin-controller.js");
       const saved = new Map();
       const storage = { getItem: (k) => saved.get(k), setItem: (k, v) => saved.set(k, v) };
-      const servers = [{ id: "master", name: "主集群", host: "master.example", sshUser: "kai" }, { id: "n4", name: "node04", host: "node04", sshUser: "user01", sshJumpServerId: "master" }];
+      const servers = [{ id: "master", name: "主集群", host: "master.example", port: 22, sshUser: "kai" }, { id: "n4", name: "node04", host: "node04", port: 2204, sshUser: "user01", sshJumpServerId: "master" }];
       const card = (name, user) => ({ index: 0, uuid: name, name, memUsedMb: 500, memTotalMb: 24000, util: 30, users: [{ user, memMb: 500, procs: [{ pid: "42", memMb: 500, cmdline: `${name} train.py`, etimes: 3600 }] }] });
       let status = { activeServerId: "master", activeServer: servers[0], teamAdmin: { isAdmin: true }, layers: { resources: { master: { gpu: [card("master-card", "kai")] }, n4: { gpu: [card("node04-card", "user01")] } } } };
       const gpu = createGpuConnectionsController({ doc: document, storage, trend: false });
@@ -39,6 +39,14 @@ export async function runResourceAccountsBrowserSmoke({ BrowserWindow, baseUrl }
       assert(document.querySelectorAll(".sa-target").length === 1, "存储取消一个选项只隐藏该组");
       assert(document.querySelectorAll(".gpu-connection").length === 2, "存储偏好与 GPU 独立");
       assert(posts === 0, "勾选和切换只看缓存，不触发扫描");
+      document.querySelector('[data-sa-configure="n4"]').click();
+      const form = document.querySelector('[data-sa-target-form]');
+      assert(form.querySelector('[name="connectionId"]').value === "n4", "未配置节点可直接绑定已有账号");
+      assert(form.querySelector('[name="host"]').value === "node04", "带入节点地址");
+      assert(form.querySelector('[name="port"]').value === "2204", "保留非默认 SSH 端口");
+      assert(form.querySelector('[name="roots"]').value === "", "扫描目录由管理员选择");
+      assert(form.closest("details").open, "点击后展开配置表单");
+      assert(posts === 0, "配置入口不自动保存或扫描");
       storageCtrl.stop?.();
       return { groups: document.querySelectorAll(".gpu-connection").length, storageGroups: document.querySelectorAll(".sa-target").length };
     }).toString()})()`);

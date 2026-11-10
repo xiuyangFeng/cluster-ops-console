@@ -229,7 +229,7 @@ export function createStateStore({ config, now = Date.now, logSource = "ops", ge
     const agents = buildAgentsLayer({
       config: cfg, agentsStatus, agentExpiry, monitorOnly: isMonitorOnly(main), stateFor: agentStateFor, resultFor,
     });
-    const resources = buildResourcesLayer({ servers, slowResultFor, serversBrief, resourceExtras });
+    const resources = buildResourcesLayer({ servers, slowResultFor, serversBrief, resourceExtras, config: cfg, now: now() });
     const tunnels = buildTunnelsLayer({
       servers,
       mainId: main.id,

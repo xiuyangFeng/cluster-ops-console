@@ -245,17 +245,29 @@ export function buildStorageTargetForm(data, busy = {}) {
     `<button type="button" class="btn btn-secondary" data-sa-save-target${busy.target ? " disabled" : ""}>${busy.target ? "正在保存…" : "保存存储服务器"}</button></div></details>`;
 }
 
+export function buildUnconfiguredConnectionsHtml(data) {
+  if (!data?.setup) return "";
+  const missing = (data.connections || []).filter((connection) => !(data.targets || []).some((target) =>
+    target.connectionId === connection.id || (!target.connectionId && target.host === connection.host
+      && target.port === connection.port && connection.sshUser === "root")));
+  if (!missing.length) return "";
+  return '<section class="sa-setup"><h3>尚未配置存储扫描的连接</h3>' +
+    '<p class="sa-note">已保存的 SSH 连接需要单独选择扫描目录，再安装并检测只读存储服务。</p>' +
+    missing.map((connection) => `<p><b>${escapeHtml(connection.name)}</b> · ${escapeHtml(connection.sshUser || "默认账号")}@${escapeHtml(connection.host)} ` +
+      `<button type="button" class="text-btn" data-sa-configure="${attr(connection.id)}">配置扫描目录</button></p>`).join("") + '</section>';
+}
+
 export function buildOverviewHtml(data, { installers = {}, busy = {}, error = "", loading = false, now = Date.now(), activity, fold = null, selected = null } = {}) {
   if (loading && !data) return '<p class="sa-note">正在读取…</p>';
   if (!data) return error ? `<p class="sa-note" data-level="warn">${escapeHtml(error)}</p>` : "";
   if (!data.targets?.length) {
-    return buildStorageTargetForm(data, busy) || '<p class="sa-note">个人配置 config.local.json 里还没有 storageAdmin.targets（要查看的机器与允许扫描的目录）。</p>';
+    return buildStorageTargetForm(data, busy) + buildUnconfiguredConnectionsHtml(data) || '<p class="sa-note">个人配置 config.local.json 里还没有 storageAdmin.targets（要查看的机器与允许扫描的目录）。</p>';
   }
   const err = error ? `<p class="sa-note" data-level="warn">${escapeHtml(error)}</p>` : "";
   const opts = { now, fold, ...(activity ? { activity } : {}) };
   const setup = buildStorageTargetForm(data, busy);
   const picks = Array.isArray(selected) ? selected : selected ? [selected] : data.targets.map((t) => t.id);
-  return `${err}${setup}${buildSetupHtml(data, { installers, busy })}${targetTabsHtml(data.targets, picks)}${data.targets.filter((t) => picks.includes(t.id)).map((t) => buildTargetHtml(t, opts)).join("") || '<p class="sa-note">勾选上方节点与账号以查看存储。</p>'}`;
+  return `${err}${setup}${buildUnconfiguredConnectionsHtml(data)}${buildSetupHtml(data, { installers, busy })}${targetTabsHtml(data.targets, picks)}${data.targets.filter((t) => picks.includes(t.id)).map((t) => buildTargetHtml(t, opts)).join("") || '<p class="sa-note">勾选上方节点与账号以查看存储。</p>'}`;
 }
 
 // 扫描结果的某一层。

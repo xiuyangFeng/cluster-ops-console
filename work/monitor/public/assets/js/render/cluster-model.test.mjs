@@ -389,6 +389,16 @@ test("直连节点：利用率外环、GPU 逐卡柱高与使用者；不计入 
   assert.match(html, /scaleY\(0\.88\)/);
 });
 
+test("复用已保存节点连接时显示正确采集来源与在线卡片", () => {
+  const layer = layerFixture();
+  layer.slurm.nodes.push(directNode("node04", { connectionId: "node04-root" }));
+  const n = buildClusterPanelModel({ layer, now: NOW }).nodes.find((item) => item.name === "node04");
+  assert.equal(n.connectionId, "node04-root");
+  assert.equal(n.state.label, "直连在线");
+  assert.match(n.title, /使用已保存连接 node04-root 采集/);
+  assert.doesNotMatch(buildNodesHtml([n]), /由登录节点 ssh|data-offline=/);
+});
+
 test("直连节点中断：卡片换成说明（上次连接时间），标黄但不影响其它节点", () => {
   const layer = layerFixture();
   layer.slurm.nodes.push(directNode("node04", {

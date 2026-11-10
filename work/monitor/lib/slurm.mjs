@@ -19,6 +19,7 @@
 // 排队时长用远端 now 减提交时刻（同一远端时钟，不受本机时钟偏差影响）。
 
 import { attachGpuUsers, parseGpuAppLine, parseGpuCardLine, parseGpuProcLine } from "./gpu-cards.mjs";
+import { humanSizeToBytes } from "./resource-usage.mjs";
 
 export const SLURM_SCHEMA_VERSION = 1;
 export const SLURM_MAX_NODES = 256;
@@ -393,6 +394,26 @@ function directNode(name, status, stateRaw, kvLines, selfUser) {
   if (kv.user) node.sshUser = clip(kv.user, SHORT_MAX) || null;
   node.gpus = buildDirectGpus(cards.sort((a, b) => a.index - b.index), apps, node.sshUser || selfUser);
   return node;
+}
+
+// 已保存连接自己的 slow 采集可替代登录节点上失败的 SSH 跳采。
+// 沿用直连节点的指标与 GPU 口径；缺失数据保持 null，不保留失败跳采的旧值。
+export function directNodeFromResource(node, resource, { connectionId, sshUser } = {}) {
+  const out = directNode(node.name, "ok", node.stateRaw, [], sshUser);
+  const usage = resource.usage;
+  out.connectionId = connectionId;
+  out.sshUser = sshUser || null;
+  out.lastSeenAt = resource.checkedAt;
+  out.cpus.total = usage?.cpu?.logicalCores ?? null;
+  out.load = usage?.cpu?.load1 ?? null;
+  out.busyPct = usage?.cpu?.busyPct ?? null;
+  const total = usage?.memory?.totalBytes;
+  out.memTotalMb = Number.isFinite(total) ? Math.round(total / 1024 ** 2) : null;
+  const memLine = String(resource.output || "").split("\n").find((line) => /^Mem:\s/.test(line));
+  const available = humanSizeToBytes(memLine?.trim().split(/\s+/)[6]);
+  out.memFreeMb = available == null ? null : Math.round(available / 1024 ** 2);
+  out.gpus = buildDirectGpus(structuredClone(resource.gpu || []), [], sshUser);
+  return out;
 }
 
 function parseDirectNodes(hopLines, hopKvLines, slurmNames, selfUser) {

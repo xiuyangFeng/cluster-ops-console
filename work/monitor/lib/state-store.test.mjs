@@ -1498,6 +1498,28 @@ test("Windows CIM 暂时不可用时状态为等待确认，不误报代理停�
   } finally { store.dispose(); }
 });
 
+test("节点独立采样晚于主集群到达时立即修正跳采失败，连接失败或账号变化即撤回", () => {
+  const config = { ...baseConfig(), sshUser: "root" };
+  config.servers.push({ id: "node04", name: "node04", host: "203.0.113.4", sshUser: "root", tunnel: false });
+  const store = createStateStore({ config });
+  const node = () => store.getLayers().resources["server-01"].slurm.nodes[0];
+  const success = () => emit("collect:slow:node04", "resources", probeResult("ok", { load: { ok: true, output: "node04\n" } }));
+  try {
+    emit("collect:slow:server-01", "resources", probeResult("ok", { load: { ok: true, output: "master\n" },
+      slurm: { state: "ok", user: "root", nodes: [{ name: "node04", source: "direct", reachable: false, failure: "unreachable" }] } }));
+    assert.equal(node().reachable, false);
+    success();
+    assert.equal(node().reachable, true);
+    assert.equal(node().connectionId, "node04");
+    emit("collect:slow:node04", "resources", probeResult("error", null, "SSH failed"));
+    assert.equal(node().reachable, false);
+    success();
+    assert.equal(node().reachable, true);
+    store.setConfig({ ...config, servers: config.servers.map((s) => s.id === "node04" ? { ...s, sshUser: "reader" } : s) });
+    assert.equal(node().reachable, false);
+  } finally { store.dispose(); }
+});
+
 test("账号或跳板身份改变立即清除旧 GPU 资源，切换查看视角保留独立账号数据", () => {
   const config = baseConfig();
   config.servers[0].sshUser = "root";
