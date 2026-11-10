@@ -20,6 +20,8 @@ import { execFileWithTimeout } from "./exec.mjs";
 import { buildHostKeyArgs } from "./host-key-policy.mjs";
 import { createMemoryVault, isPersistedAuthRef } from "./credential-vault.mjs";
 import { runWithPasswordSsh } from "./ssh-askpass.mjs";
+import { createSshRuntimeExecutor } from "./ssh-runtime.mjs";
+import { resolveSshRoute, sshEndpoint } from "./ssh-route.mjs";
 import { statusError } from "./status-error.mjs";
 import { summarizeServer } from "./servers/summary.mjs";
 import { isOverrideOnly, sanitizeEntry, validateServerInput } from "./servers/validate.mjs";
@@ -47,10 +49,17 @@ export function createServerRegistry({
   hostKeyStore = null,
   credentialVault = null,
   askpassDir = null,
+  acquireSshSlot = null,
 } = {}) {
   const runtime = new Map();
   const secrets = new Map();
   const vault = credentialVault || createMemoryVault({ now });
+  const routeExecutor = createSshRuntimeExecutor({ getConfig: async () => merged(), credentialVault: vault, helperDir: askpassDir,
+    dataDir: hostKeyStore?.dataDir, execFileImpl });
+  async function executeRoute(args, options) {
+    const release = acquireSshSlot ? await acquireSshSlot({ hostKey: options.server?.host }) : () => {};
+    try { return await routeExecutor("ssh", args, options); } finally { release(); }
+  }
   let mutationQueue = Promise.resolve();
   const serialize = (fn) => (...args) => {
     const result = mutationQueue.then(() => fn(...args));
@@ -361,12 +370,18 @@ export function createServerRegistry({
   async function add(input) {
     if (input?.authRef) throw statusError("请通过凭据接口绑定密码引用", 400, { code: "credential-binding-required" });
     const value = validateServerInput(input, { now });
+    resolveSshRoute(value, { ...merged(), servers: [...(merged().servers || []), value] });
     const personal = readPersonal();
     checkRevision(personal, input?.expectedRevision);
+    const collision = findPersonal(value.id, personal);
+    if (!input.id && collision && collision.sshUser !== value.sshUser) {
+      const suffix = `-${value.sshUser}`;
+      value.id = `${value.id.slice(0, 64 - suffix.length)}${suffix}`;
+    }
     const existing = findPersonal(value.id, personal);
     if (existing) {
       const sameHost = (existing.host || existing.address) === value.host;
-      const sameSubmittedFields = ["name", "sshPort", "sshUser", "sshIdentityFile", "remotePort", "localPort", "disabled", "tunnel"]
+      const sameSubmittedFields = ["name", "sshPort", "sshUser", "sshIdentityFile", "sshJumpServerId", "remotePort", "localPort", "disabled", "tunnel"]
         .every((field) => input[field] === undefined || String(existing[field] ?? (field === "sshPort" ? 22 : "")) === String(value[field] ?? ""));
       if (sameHost && sameSubmittedFields) {
         audit({ action: "add", serverId: value.id, result: "ok", errorCode: "idempotent" });
@@ -439,9 +454,11 @@ export function createServerRegistry({
       tunnel: patch.tunnel ?? patch.tunnelEnabled ?? current.tunnel ?? true,
       disabled: patch.disabled ?? (typeof patch.monitorEnabled === "boolean" ? !patch.monitorEnabled : current.disabled),
     }, { legacy: current, now });
+    resolveSshRoute(next, { ...merged(), servers: (merged().servers || []).map((s) => s.id === id ? next : s) });
     const identityChanged = next.host !== (current.address || current.host)
       || String(next.sshPort || 22) !== String(current.sshPort || 22)
-      || String(next.sshUser || "") !== String(current.sshUser || "");
+      || String(next.sshUser || "") !== String(current.sshUser || "")
+      || String(next.sshJumpServerId || "") !== String(current.sshJumpServerId || "");
     if (identityChanged) delete next.authRef;
     const servers = personalServers(personal).map((s) => (s.id === id ? { ...next, createdAt: current.createdAt || next.createdAt } : s));
     const saved = await persist({ servers, expectedRevision: patch.expectedRevision ?? personal.revision ?? 0 });
@@ -597,7 +614,9 @@ export function createServerRegistry({
     let result;
     try {
       const options = { timeoutMs: 10000 };
-      result = usePassword
+      result = server.sshJumpServerId
+        ? await executeRoute(args, { ...options, server })
+        : usePassword
         ? await runWithPasswordSsh({ password, helperDir: askpassDir, args, options, execFileImpl })
         : await execFileImpl("ssh", args, options);
     } catch (err) {
@@ -626,9 +645,14 @@ export function createServerRegistry({
     const pending = { ...(runtime.get(id) || {}), state: "hostkey-required" };
     runtime.set(id, pending);
     const result = await hostKeyStore.preview({
-      host: server.host || server.address,
+      host: server.sshJumpServerId ? sshEndpoint(server) : server.host || server.address,
       sshPort: server.sshPort || 22,
       serverId: id,
+      ...(server.sshJumpServerId ? { scan: async (host, port) => {
+        const [jump] = resolveSshRoute(server, merged());
+        const { args } = oneShotSshArgs(jump.id, jump, `ssh-keyscan -T 5 -p ${port} ${host}`);
+        return executeRoute(args, { server: (merged().servers || []).find((s) => s.id === jump.id), timeoutMs: 18000 });
+      } } : {}),
     });
     if (runtime.get(id) !== pending) {
       hostKeyStore.clear?.(id);

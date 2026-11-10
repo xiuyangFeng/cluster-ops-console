@@ -24,7 +24,7 @@ export function createGpuCardController({ doc, getStatus, openDialog }) {
     const body = getEl("dlgGpuCardBody");
     if (!body) return;
     const status = getStatus?.() || null;
-    const card = resolveGpuCard(status, opened.key, opened.index);
+    const card = resolveGpuCard(status, opened.key, opened.index, opened.serverId);
     const title = getEl("dlgGpuCardTitle");
     if (!card) {
       setText(title, opened.label ? `${opened.label} GPU #${opened.index}` : `GPU #${opened.index}`);
@@ -34,7 +34,7 @@ export function createGpuCardController({ doc, getStatus, openDialog }) {
     setText(title, gpuCardHeading(card));
     morphInnerHtml(body, buildGpuCardBodyHtml(card, {
       label: opened.label,
-      sampledAt: activeGpuLayer(status)?.checkedAt ?? null,
+      sampledAt: activeGpuLayer(status, opened.serverId)?.checkedAt ?? null,
     }));
   }
 
@@ -42,6 +42,7 @@ export function createGpuCardController({ doc, getStatus, openDialog }) {
     const index = Number(row?.dataset?.gpuIndex);
     if (!Number.isFinite(index)) return;
     opened = {
+      serverId: row.closest?.("[data-gpu-server-id]")?.dataset?.gpuServerId || getStatus?.()?.activeServerId,
       key: typeof row.dataset.gpuKey === "string" ? row.dataset.gpuKey : "",
       index,
       label: typeof row.dataset.gpuLabel === "string" ? row.dataset.gpuLabel : "",

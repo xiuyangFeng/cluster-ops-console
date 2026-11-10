@@ -1497,3 +1497,17 @@ test("Windows CIM 暂时不可用时状态为等待确认，不误报代理停�
     assert.notEqual(store.getLegacyStatus().health, "waiting");
   } finally { store.dispose(); }
 });
+
+test("账号或跳板身份改变立即清除旧 GPU 资源，切换查看视角保留独立账号数据", () => {
+  const config = baseConfig();
+  config.servers[0].sshUser = "root";
+  const store = createStateStore({ config });
+  try {
+    emit("collect:slow:server-01", "resources", probeResult("ok", { load: { ok: true, output: "sample" }, gpu: [{ index: 0, users: [{ user: "other", procs: [{ cmdline: "private" }] }] }] }));
+    assert.equal(store.getLayers().resources["server-01"].gpu.length, 1);
+    store.setConfig({ ...config, activeServerId: "server-tengxun" });
+    assert.equal(store.getLayers().resources["server-01"].gpu.length, 1);
+    store.setConfig({ ...config, servers: config.servers.map((s) => s.id === "server-01" ? { ...s, sshUser: "reader" } : s) });
+    assert.deepEqual(store.getLayers().resources["server-01"].gpu, []);
+  } finally { store.dispose(); }
+});

@@ -124,7 +124,7 @@ export async function startMonitorServer({ env = process.env } = {}) {
 
   // 探针退避（默认关）：SSH 执行层报证据、守护进程快照与进程采样报信号、调度器按它放行。
   const probeBackoff = createProbeBackoffRuntime({ env, getMergedConfig, appendLog });
-  const credentials = await createCredentialRuntime({ env, getConfig, runtimeDir, rootDir, onSshResult: probeBackoff.onSshResult, fixtureMode });
+  const credentials = await createCredentialRuntime({ env, getConfig, runtimeDir, dataDir: paths.dataRoot, rootDir, onSshResult: probeBackoff.onSshResult, fixtureMode });
   const { executeRuntime } = credentials;
 
   // ---- 状态存储 + supervisor 旁路（bridge 快照 2s / 运行快照 5s）----
@@ -630,6 +630,7 @@ export async function startMonitorServer({ env = process.env } = {}) {
   // ---- 管理员存储视图（只给 adminUsers；以 root 经专用受限密钥只读扫描）----
   const storageAdminDir = path.join(runtimeDir, STORAGE_ADMIN_DIR);
   const storageAdmin = createStorageAdminService({
+    dataDir: paths.dataRoot,
     getConfig,
     savePersonalConfig: async (patch) => {
       await configManager.savePersonalConfig(patch);
@@ -637,7 +638,7 @@ export async function startMonitorServer({ env = process.env } = {}) {
     },
     isAdmin: (config) => teamAdminService.getAdminRole(config).isAdmin,
     store: createStorageAdminStore({ dir: storageAdminDir }),
-    exec: (cmd, args, options = {}) => (fixtureMode && cmd === "ssh"
+    exec: (cmd, args, options = {}) => (options.server ? executeRuntime(cmd, args, options) : fixtureMode && cmd === "ssh"
       ? Promise.resolve({ code: 255, stdout: "", stderr: "fixture 模式不发起真实 SSH", timedOut: false, truncated: false })
       : options.input != null ? execFileWithInput(cmd, args, options) : execFileWithTimeout(cmd, args, options)),
     acquireSshSlot: (options) => scheduler.acquireSshSlot(options),

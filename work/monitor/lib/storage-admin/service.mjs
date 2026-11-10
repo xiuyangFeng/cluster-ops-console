@@ -17,7 +17,9 @@ import { fileURLToPath } from "node:url";
 
 import { writeFileAtomic } from "../atomic-file.mjs";
 import { isSafeRoot, MAX_TARGETS, resolveIdentityFile, resolveTargets, storageTargetDraft } from "./config.mjs";
-import { buildInstallCommand, buildInstallScript, buildUninstallScript, parsePublicKey, scriptVersion } from "./install.mjs";
+import { buildInstallCommand, buildInstallScript, buildUninstallScript, parsePublicKey, scriptVersion, REMOTE_SCRIPT_PATH } from "./install.mjs";
+import { attachPersonalSsh, buildPinnedProbeSshArgs } from "../ssh-args.mjs";
+import { createHash } from "node:crypto";
 import { buildScanView, buildUsersView, mergeListWithScan, pickMounts } from "./model.mjs";
 import {
   buildRootSshArgs, isAbsNormal, isJobId, isRelPath, MAX_OUT_BYTES, parseInfo, parseJobReply, parseList,
@@ -35,7 +37,8 @@ const under = (p, root) => p === root || p.startsWith(`${root}/`);
 // ssh 失败 → { code, message }（给界面一句能照着做的话）。
 export function classifySshFailure(res, target) {
   const stderr = String(res?.stderr || "");
-  const where = `root@${target.host}`;
+  const where = `${target.sshUser || "root"}@${target.host}`;
+  if (/auth-required|password-unsupported|config-changed|route-invalid/.test(stderr)) return { code: "auth", message: `连接 ${where} 的凭据或路径不可用，请在服务器管理中检查并重新输入密码` };
   if (res?.timedOut) return { code: "timeout", message: `连接 ${where} 超时` };
   if (/Host key verification failed|REMOTE HOST IDENTIFICATION HAS CHANGED|No .* host key is known/i.test(stderr)) {
     return { code: "host-key", message: `本机还没有记下 ${target.host} 的主机指纹（或指纹变了）：在终端运行一次安装命令，按提示核对并确认指纹` };
@@ -52,7 +55,7 @@ export function classifySshFailure(res, target) {
 }
 
 export function createStorageAdminService({
-  getConfig, isAdmin, store, exec, acquireSshSlot = null, dir, log = null, platform = process.platform,
+  getConfig, isAdmin, store, exec, acquireSshSlot = null, dir, dataDir, log = null, platform = process.platform,
   savePersonalConfig = null,
   now = Date.now, homeDir, scriptFile = REMOTE_SCRIPT_FILE,
   setTimer = (fn, ms) => { const t = setTimeout(fn, ms); t.unref?.(); return t; },
@@ -74,7 +77,20 @@ export function createStorageAdminService({
     const target = ctx.targets.find((t) => t.id === targetId);
     if (!target) throw fail("没有这台机器（检查 config.local.json 的 storageAdmin.targets）", 404);
     if (!ctx.identityFile) throw fail("专用密钥路径无效（storageAdmin.identityFile）", 400);
+    const bindingKey = targetBinding(target, ctx.config);
+    const saved = await store.getTarget(target.id);
+    if (saved.bindingKey !== bindingKey && (saved.bindingKey || target.connectionId)) {
+      await store.patchTarget(target.id, { bindingKey, info: null, error: null, checkedAt: null, scans: [], jobs: [], quota: {} });
+      viewCache = null;
+    } else if (!saved.bindingKey) await store.patchTarget(target.id, { bindingKey });
     return { ...ctx, target };
+  }
+
+  function targetBinding(target, config) {
+    const connection = config.servers?.find((s) => s.id === target.connectionId);
+    const jump = config.servers?.find((s) => s.id === connection?.sshJumpServerId);
+    const route = connection ? [jump, connection].filter(Boolean).map((s) => attachPersonalSsh(s, config)) : [];
+    return createHash("sha256").update(JSON.stringify([target.host, target.port, target.roots, target.connectionId || "", route])).digest("hex");
   }
 
   async function script() {
@@ -83,9 +99,18 @@ export function createStorageAdminService({
   }
 
   async function ssh(target, identityFile, command, { input = "", timeoutMs = SSH_TIMEOUT_MS } = {}) {
-    const release = acquireSshSlot ? await acquireSshSlot({ hostKey: `root@${target.host}` }) : () => {};
+    const config = await getConfig();
+    const binding = targetBinding(target, config);
+    const connection = config.servers?.find((s) => s.id === target.connectionId && !s.disabled);
+    if (target.connectionId && !connection) throw fail("连接已变更或停用，请重新选择节点账号", 409);
+    const release = acquireSshSlot ? await acquireSshSlot({ hostKey: `${target.sshUser || "root"}@${target.host}` }) : () => {};
     try {
-      return await exec("ssh", buildRootSshArgs(target, identityFile, command, { platform }), { input, timeoutMs, maxOutputBytes: MAX_OUT_BYTES });
+      const args = connection
+        ? [...buildPinnedProbeSshArgs(connection, config, { dataDir, platform }), `python3 ${REMOTE_SCRIPT_PATH} ${command}`]
+        : buildRootSshArgs(target, identityFile, command, { platform });
+      const result = await exec("ssh", args, { input, timeoutMs, maxOutputBytes: MAX_OUT_BYTES, ...(connection ? { server: connection } : {}) });
+      if (targetBinding(target, await getConfig()) !== binding) throw fail("连接已变更，已丢弃本次结果，请重新检测", 409);
+      return result;
     } finally {
       release();
     }
@@ -114,7 +139,9 @@ export function createStorageAdminService({
   }
 
   async function targetView(target) {
-    const saved = await store.getTarget(target.id);
+    let saved = await store.getTarget(target.id);
+    const bindingKey = targetBinding(target, await getConfig());
+    if (saved.bindingKey !== bindingKey && (saved.bindingKey || target.connectionId)) saved = {};
     const expected = scriptVersion(await script());
     const info = saved.info ? { ...saved.info, mounts: pickMounts(saved.info.mounts, target.roots) } : null;
     let status = saved.error ? { state: "error", ...saved.error } : info ? { state: "ok" } : { state: "unknown" };
@@ -123,6 +150,7 @@ export function createStorageAdminService({
     const jobs = Array.isArray(saved.jobs) ? saved.jobs : [];
     return {
       id: target.id, label: target.label, host: target.host, port: target.port, roots: target.roots,
+      ...(target.connectionId ? { connectionId: target.connectionId, sshUser: target.sshUser, sshJumpServerId: target.sshJumpServerId } : {}),
       status, checkedAt: saved.checkedAt ?? null, info,
       users: buildUsersView({ info, quota: saved.quota || {}, scans }),
       running: jobs.find((j) => j.state === "running") || null,
@@ -139,6 +167,7 @@ export function createStorageAdminService({
       expectedVersion: scriptVersion(await script()),
       targets: await Promise.all(targets.map(targetView)),
       setup: typeof savePersonalConfig === "function" ? storageTargetDraft(config) : null,
+      connections: (config.servers || []).filter((s) => !s.disabled && s.monitorEnabled !== false).map((s) => ({ id: s.id, name: s.name || s.host, host: s.sshHostName || s.host, sshUser: s.sshUser || config.sshUser || "", sshJumpServerId: s.sshJumpServerId || "" })),
     };
   }
 
@@ -146,9 +175,11 @@ export function createStorageAdminService({
     const { config, targets } = await context();
     if (typeof savePersonalConfig !== "function") throw fail("当前环境不支持保存存储配置", 503);
     if (!input || !Array.isArray(input.roots) || !input.roots.length || input.roots.length > 8 || !input.roots.every(isSafeRoot)) throw fail("请输入 1 至 8 个允许查看的绝对目录，例如 /home、/public；不支持根目录 /", 400);
-    const target = resolveTargets({ storageAdmin: { targets: [input] } })[0];
+    const target = resolveTargets({ ...config, storageAdmin: { targets: [input] } })[0];
     if (!target) throw fail("服务器标识、地址或 SSH 端口无效", 400);
     const rest = targets.filter((t) => t.id !== target.id);
+    const previous = targets.find((t) => t.id === target.id);
+    if (previous && targetBinding(previous, config) !== targetBinding(target, config)) throw fail("请使用新的服务器标识保存另一个节点或账号，避免混用历史扫描数据", 400);
     if (rest.length >= MAX_TARGETS) throw fail(`最多配置 ${MAX_TARGETS} 台存储服务器`, 400);
     await savePersonalConfig({ storageAdmin: { ...config.storageAdmin, targets: [...rest, target] } });
     return { saved: true, target };
@@ -313,6 +344,8 @@ export function createStorageAdminService({
   }
 
   async function loadScan(targetId, jobId) {
+    const saved = await store.getTarget(targetId);
+    if (saved.bindingKey && !(saved.scans || []).some((s) => s.job?.id === jobId)) return null;
     const key = `${targetId}/${jobId}`;
     if (viewCache?.key === key) return viewCache.entry;
     const entry = await store.getScan(targetId, jobId);

@@ -567,6 +567,7 @@ ct_proc_of() {
     if [ -n "$gc" ]; then gc=$(printf "%s" "$gc" | head -c 200); fi
   fi
 }
+printf "user=%s\n" "$(id -un 2>/dev/null)"
 printf "nproc=%s\n" "$(nproc 2>/dev/null)"
 printf "load=%s\n" "$(cut -d " " -f1-3 /proc/loadavg 2>/dev/null)"
 printf "uptime=%s\n" "$(cut -d . -f1 /proc/uptime 2>/dev/null)"
@@ -607,6 +608,11 @@ ct_slurm() (
   ct_sl_state=ok
   ct_sl_error=
   ct_sl_jobs=
+  ct_sl_user=$(id -un 2>/dev/null)
+  ct_scope_squeue() {
+    if [ "$ct_sl_user" = root ]; then $ct_to squeue "$@";
+    else $ct_to squeue -u "$ct_sl_user" "$@"; fi
+  }
 
   ct_sl_nodes=$($ct_to sinfo -h -N -O "NodeList:|,StateLong:|,CPUsState:|,CPUsLoad:|,FreeMem:|,Memory:|,AllocMem:|,Gres:|,GresUsed:|,Partition:|,Reason:|" 2>/dev/null)
   ct_rc=$?
@@ -628,12 +634,12 @@ ct_slurm() (
 
   # sinfo 超时说明 slurmctld 无响应，squeue 必然同样挂住：跳过，别再等 8s。
   if [ "$ct_sl_error" != sinfo-timeout ]; then
-    ct_sl_jobs=$($ct_to squeue -h -O "JobID:|,UserName:|,Partition:|,State:|,TimeUsed:|,TimeLimit:|,NumNodes:|,NumCPUs:|,tres-alloc:|,tres-per-node:|,MinMemory:|,SubmitTime:|,StartTime:|,Reason:|,NodeList:|,Name:|" 2>/dev/null)
+    ct_sl_jobs=$(ct_scope_squeue -h -O "JobID:|,UserName:|,Partition:|,State:|,TimeUsed:|,TimeLimit:|,NumNodes:|,NumCPUs:|,tres-alloc:|,tres-per-node:|,MinMemory:|,SubmitTime:|,StartTime:|,Reason:|,NodeList:|,Name:|" 2>/dev/null)
     ct_rc=$?
     if [ "$ct_rc" -eq 0 ]; then
       ct_sl_jobs=$(printf '%s\n' "$ct_sl_jobs" | sed 's/|$//')
     elif [ "$ct_rc" -ne 124 ]; then
-      ct_sl_jobs=$($ct_to squeue -h -o "%i|%u|%P|%T|%M|%l|%D|%C||%b|%m|%V|%S|%r|%N|%j" 2>/dev/null)
+      ct_sl_jobs=$(ct_scope_squeue -h -o "%i|%u|%P|%T|%M|%l|%D|%C||%b|%m|%V|%S|%r|%N|%j" 2>/dev/null)
       ct_rc=$?
     fi
     if [ "$ct_rc" -ne 0 ]; then

@@ -13,6 +13,13 @@
 //      找到且日期一致、两边都按日期降序、首条版本等于 package.json 当前版本。
 export const changelogData = [
   {
+    version: "v2.98.0", date: "2026-11-10", changes: [
+      { type: "fix", text: "Windows 进程查询使用系统工具绝对路径，CIM/WMI 降级与失败退避；界面显示查询故障和下次检查时间，保留现有连接。" },
+      { type: "feat", text: "节点账号可分别配置公网直连或单级内网跳转，两跳独立使用密钥或密码；Windows 密码接入使用原生 Node/Electron 应答。" },
+      { type: "feat", text: "GPU 与管理员存储分别支持同时勾选多个节点账号、分组展示。普通账号仅看本人 GPU 明细，root 看全部；存储保持只读，复用连接认证且不自动提权。" },
+    ],
+  },
+  {
     version: "v2.97.1", date: "2026-11-10", changes: [
       { type: "fix", text: "切换查看服务器时即时推送配置状态，配置弹窗与账号管理入口及时同步，避免页面仍停留在旧版本配置。" },
       { type: "fix", text: "Windows 使用原生进程查询与内核独占锁，修复 supervisor 并发启动和每分钟重复累积；活进程登记不再被误删，父进程不再覆写当前 PID。" },

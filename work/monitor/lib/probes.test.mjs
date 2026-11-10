@@ -718,7 +718,6 @@ describe("collect:slow 采集探针", () => {
     const result = await slowProbeSpec(toolkitFor(stdout), "server-01", THREE_SERVERS).run();
     assert.deepEqual(result.data.gpu[0].users, [
       { user: "kai", memMb: 9770, jobs: [{ id: "48214", memMb: 5358 }, { id: "48213", memMb: 4412 }] },
-      { user: "lin", memMb: 800 },
     ]);
     assert.equal(result.data.procTop.sampled, 40);
     assert.equal(result.data.procTop.slurm, true);

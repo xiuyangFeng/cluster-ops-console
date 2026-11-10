@@ -77,16 +77,16 @@ export function gpuCardProcs(card) {
 
 // 就地从状态里取当前服务器的资源层（与 app/render-pipeline.js 的取值口径一致）。
 // 登录节点的 gpu 段与直连节点（layer.slurm.nodes[].gpus.cards）都在这一层里。
-export function activeGpuLayer(status) {
+export function activeGpuLayer(status, serverId = status?.activeServerId) {
   const layers = status?.layers?.resources;
   if (!layers || typeof layers !== "object") return null;
-  return layers[status?.activeServerId] ?? null;
+  return layers[serverId] ?? null;
 }
 
 // 回原始卡：key = "" 是登录节点（layer.gpu），否则是直连节点名（layer.slurm.nodes[].gpus.cards）。
 // 与 render/resources-model.js 的 buildGpuGroups 取同一份数据——浮层因此不需要任何新请求。
-export function resolveGpuCard(status, key, index) {
-  const layer = activeGpuLayer(status);
+export function resolveGpuCard(status, key, index, serverId = status?.activeServerId) {
+  const layer = activeGpuLayer(status, serverId);
   const cards = key
     ? (Array.isArray(layer?.slurm?.nodes) ? layer.slurm.nodes : []).find((node) => node?.name === key)?.gpus?.cards
     : layer?.gpu;

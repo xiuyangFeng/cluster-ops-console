@@ -59,6 +59,9 @@ export function validateServerInput(input = {}, { legacy = null, now = Date.now 
   }
   if ((input.tunnel === true || input.tunnelEnabled === true) && !input.remotePort) errors.push({ field: "remotePort", message: "启用隧道必须填写反向端口" });
   if (input.id && !SAFE_ID_RE.test(String(input.id))) errors.push({ field: "id", message: "id 只允许字母/数字/下划线/点/连字符" });
+  if (input.sshJumpServerId && (!SAFE_ID_RE.test(input.sshJumpServerId) || input.sshJumpServerId === input.id || input.tunnel === true || input.tunnelEnabled === true)) {
+    errors.push({ field: "sshJumpServerId", message: "跳转请选择另一台公网直连配置；跳转连接仅用于监控，无需建立反向隧道" });
+  }
   if (errors.length) throw new ConfigValidationError(errors[0].message || "服务器字段未通过校验", errors);
   return {
     id: input.id && SAFE_ID_RE.test(input.id) ? input.id : slugId(name, address),
@@ -66,6 +69,7 @@ export function validateServerInput(input = {}, { legacy = null, now = Date.now 
     host: String(address),
     address: String(address),
     sshPort: input.sshPort ? Number(input.sshPort) : 22,
+    ...(input.sshJumpServerId ? { sshJumpServerId: input.sshJumpServerId } : {}),
     ...(input.sshUser ? { sshUser: String(input.sshUser).trim() } : {}),
     sshIdentityFile: input.sshIdentityFile ? String(input.sshIdentityFile).trim() : undefined,
     ...(input.remotePort ? { remotePort: Number(input.remotePort) } : {}),

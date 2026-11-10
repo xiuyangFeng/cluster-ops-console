@@ -62,14 +62,14 @@ export function createHostKeyStore({
     previews.delete(serverId);
   }
 
-  async function preview({ host, sshPort = 22, serverId } = {}) {
+  async function preview({ host, sshPort = 22, serverId, scan = null } = {}) {
     const safeHost = assertSafeHost(host, "address");
     const port = assertSafePort(sshPort, "sshPort");
     if (fixtureMode) {
       return { ok: false, code: "dns", fingerprints: [], nextAction: "fixture 模式不扫描真实主机密钥" };
     }
     if (typeof execFileImpl !== "function") throw new Error("host-key preview 需要 execFileImpl");
-    const scanned = await execFileImpl("ssh-keyscan", ["-T", "5", "-p", String(port), safeHost], { timeoutMs: 8000 });
+    const scanned = scan ? await scan(safeHost, port) : await execFileImpl("ssh-keyscan", ["-T", "5", "-p", String(port), safeHost], { timeoutMs: 8000 });
     const lines = parseKeyscanLines(scanned.stdout);
     if (!lines.length) {
       return { ok: false, code: "hostkey", fingerprints: [], nextAction: "未能读取主机密钥，请检查地址与端口" };
@@ -106,5 +106,5 @@ export function createHostKeyStore({
     return { ok: true, ...saved, fingerprints: live.fingerprints || [] };
   }
 
-  return { pathFor, hasConfirmed, buildArgs, writeLines, clear, preview, confirm };
+  return { dataDir, pathFor, hasConfirmed, buildArgs, writeLines, clear, preview, confirm };
 }

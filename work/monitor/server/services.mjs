@@ -64,6 +64,7 @@ export function createServices({
     hostKeyStore,
     credentialVault,
     askpassDir: path.join(runtimeDir, "askpass"),
+    acquireSshSlot: (options) => scheduler.acquireSshSlot(options),
   });
   const localResourceProbe = createLocalResourceProbe({});
   scheduler.registerProbe({

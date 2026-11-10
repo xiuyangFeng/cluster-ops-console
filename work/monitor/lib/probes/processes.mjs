@@ -2,6 +2,7 @@ import { isActiveTunnelUp, parseProcessList } from "../../monitor-core.mjs";
 import { resolveProxyPort, resolveTunnelTargets } from "../config-loader.mjs";
 import { queryCmdlines } from "../process-registry.mjs";
 import { readWindowsProcesses } from "../processes/query.mjs";
+import { WINDOWS_PROCESS_QUERY_BUDGET_MS } from "../processes/windows-query.mjs";
 import { isPort } from "../validators.mjs";
 import { probeProxyHealth } from "../supervisor/proxy-health.mjs";
 
@@ -117,7 +118,7 @@ export function createProcessProbe({ getConfig, execFileCmd, getMainServerConfig
     }
 
     const { stdout } = platform === "win32"
-      ? { stdout: (await readWindowsProcesses(execFileCmd)).map((p) => `- ${p.pid} ${p.command}`).join("\n") }
+      ? { stdout: (await readWindowsProcesses(execFileCmd, { now })).map((p) => `- ${p.pid} ${p.command}`).join("\n") }
       : await execFileCmd("ps", ["-ef"]);
     const cacheKey = cacheKeyFor(stdout);
     const value = platform !== "win32" && processParseCache.key === cacheKey ? processParseCache.value : parse(stdout);
@@ -135,7 +136,8 @@ export function createProcessProbe({ getConfig, execFileCmd, getMainServerConfig
     try { processes = await getProcesses(); }
     catch (error) {
       if (platform !== "win32") throw error;
-      return { level: "waiting", reason: error.message, data: { processQueryIndeterminate: true } };
+      return { level: "waiting", reason: error.message, data: { processQueryIndeterminate: true,
+        processQueryDiagnostic: { message: error.message, nextRetryAt: error.nextRetryAt, permanent: error.permanent === true, toolPath: error.toolPath, pidCount: error.pidCount } } };
     }
     const supervisorUp = processes.supervisor.length > 0;
     const localProxyUp = processes.localProxy.length > 0;
@@ -152,5 +154,5 @@ export function createProcessProbe({ getConfig, execFileCmd, getMainServerConfig
     };
   }
 
-  return { getProcesses, runProcessesProbe };
+  return { getProcesses, runProcessesProbe, queryTimeoutMs: platform === "win32" ? WINDOWS_PROCESS_QUERY_BUDGET_MS : 10000 };
 }

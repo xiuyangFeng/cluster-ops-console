@@ -18,6 +18,7 @@ import { getActiveAgentView, hasDoctorAgent, renderAgentOverview, renderServerBr
 import { renderSignalBanner } from "../render/signal-banner.js";
 import { escapeHtml, formatClock } from "../store.js";
 import { moduleEnabled, PANELS } from "./panels.js";
+import { createGpuConnectionsController } from "./gpu-connections-controller.js";
 
 const activeResourceLayer = (status) => (status.layers?.resources ? status.layers.resources[status.activeServerId] : null);
 
@@ -91,6 +92,7 @@ export function createRenderPipeline({
   isPanelHidden = () => false,
 }) {
   const getEl = createElementLookup(doc);
+  const gpuConnections = createGpuConnectionsController({ doc });
   const cache = { doctorOutput: "" };
   // 端点弹层（标题、徽标、结论条、报文、延迟图）整体交给 endpoint-panel：弹层关着时它什么都不做。
   const endpointPanel = createEndpointPanel({ doc, isOpen: () => isPanelOpen("endpointContent") });
@@ -170,6 +172,7 @@ export function createRenderPipeline({
       const resourceLayer = layer && backoff ? { ...layer, backoff } : layer;
       const sampleKey = resourceLayer && resourceLayer.checkedAt != null ? resourceLayer.checkedAt : (status.remoteLoad?.output) || null;
       renderRemoteLoad(status.remoteLoad, status.activeServer || null, sampleKey, resourceLayer?.usage ?? null, resourceLayer);
+      gpuConnections.render(status, getConfig());
     },
     // Slurm 节点与队列（作业表可达数百行）：只在服务器页可见时渲染，切到服务器页时补渲一次。
     // 「我的 Slurm 作业」模块关闭时不显示「我的」汇总与「我的历史」。

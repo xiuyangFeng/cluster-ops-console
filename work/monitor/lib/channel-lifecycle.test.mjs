@@ -50,7 +50,7 @@ test("Windows 热交接：退场同一安装目录的所有旧 supervisor，保�
   h.deps.registry.readMeta = () => ({ pid: 41376 });
   h.deps.registry.stopProcess = async () => { killed.push(41376); table.delete(41376); return { stopped: true }; };
   h.deps.toolkit.execFile = async (cmd) => {
-    assert.equal(cmd, "powershell");
+    assert.match(cmd, /\\powershell\.exe$/i);
     return { code: 0, stdout: JSON.stringify([...table].map(([ProcessId, CommandLine]) => ({ ProcessId, CommandLine }))) };
   };
   await h.create().spawnSupervisor({ replaceExisting: true });

@@ -37,6 +37,7 @@ export function createStorageAdminController({
       const raw = JSON.parse(storage?.getItem(PREFS_KEY) || "{}");
       return {
         target: typeof raw.target === "string" ? raw.target : null,
+        targets: Array.isArray(raw.targets) ? raw.targets.filter((id) => typeof id === "string") : null,
         months: IDLE_MONTHS.includes(raw.months) ? raw.months : DEFAULT_IDLE_MONTHS,
         only: raw.only === true,
       };
@@ -86,7 +87,7 @@ export function createStorageAdminController({
       const open = new Set([...body.querySelectorAll("details[open]")].map((d) => d.querySelector("summary")?.textContent));
       const closed = new Set([...body.querySelectorAll("details:not([open])")].map((d) => d.querySelector("summary")?.textContent));
       body.innerHTML = buildOverviewHtml(data, {
-        installers, busy, error, loading, now: now(), fold, selected: prefs.target,
+        installers, busy, error, loading, now: now(), fold, selected: prefs.targets ?? (prefs.target ? [prefs.target] : null),
         activity: { months: prefs.months, only: prefs.only },
       });
       for (const d of body.querySelectorAll("details")) {
@@ -288,7 +289,7 @@ export function createStorageAdminController({
     const form = button.closest("[data-sa-target-form]");
     if (!form) return;
     const value = (name) => form.querySelector(`[name="${name}"]`)?.value?.trim() || "";
-    const target = { id: value("id"), label: value("label"), host: value("host"), port: Number(value("port")), roots: value("roots").split(/[\s,，]+/).filter(Boolean) };
+    const target = { id: value("id"), label: value("label"), host: value("host"), port: Number(value("port")), roots: value("roots").split(/[\s,，]+/).filter(Boolean), ...(value("connectionId") ? { connectionId: value("connectionId") } : {}) };
     data = { ...data, setup: { ...target, roots: target.roots.join(" ") } };
     const saved = await act("target", () => postJson("/api/storage-admin/targets", target), { okToast: { title: "存储服务器已保存", message: "继续按接入步骤配置只读扫描。" } });
     if (saved) {
@@ -301,7 +302,9 @@ export function createStorageAdminController({
     ["[data-sa-save-target]", saveTarget],
     ["[data-sa-fold]", toggleFold],
     ["[data-sa-target-tab]", (b) => {
-      prefs.target = b.dataset.saTargetTab;
+      const id = b.dataset.saTargetTab;
+      const current = prefs.targets ?? (prefs.target ? [prefs.target] : (data?.targets || []).map((t) => t.id));
+      prefs.targets = current.includes(id) ? current.filter((s) => s !== id) : [...current, id];
       savePrefs();
       render();
     }],
@@ -433,6 +436,16 @@ export function createStorageAdminController({
 
   function bind() {
     $("storageAdminBody")?.addEventListener("click", onClick);
+    $("storageAdminBody")?.addEventListener("change", (event) => {
+      if (!event.target.matches?.("[data-sa-connection]")) return;
+      const connection = data?.connections?.find((s) => s.id === event.target.value);
+      if (!connection) return;
+      const form = event.target.closest("[data-sa-target-form]");
+      for (const [name, value] of Object.entries({ id: `${connection.id}-storage`, label: `${connection.name} · ${connection.sshUser}`, host: connection.host })) {
+        const input = form?.querySelector(`[name="${name}"]`);
+        if (input) input.value = value;
+      }
+    });
     $("storageAdminBrowser")?.addEventListener("click", onBrowserClick);
     bindTips($("storageAdminBody"));
     bindTips($("storageAdminBrowser"));

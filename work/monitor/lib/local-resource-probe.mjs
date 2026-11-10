@@ -1,3 +1,4 @@
+import { windowsSystemTool } from "./processes/windows-query.mjs";
 import { execFileWithTimeout } from "./exec.mjs";
 import { cpus, freemem, totalmem } from "node:os";
 import { performance } from "node:perf_hooks";
@@ -122,7 +123,7 @@ export function createLocalResourceProbe({
   async function sampleProcesses(host, epoch) {
     if (!["darwin", "linux", "win32"].includes(platform)) return { processes: [], quality: "unsupported" };
     try {
-      const command = platform === "win32" ? "powershell.exe" : "ps";
+      const command = platform === "win32" ? windowsSystemTool("powershell") : "ps";
       const args = platform === "win32" ? ["-NoProfile", "-NonInteractive", "-Command", WINDOWS_PROCESS_SCRIPT]
         : [platform === "linux" ? "-eo" : "-axo", "pid=,rss=,time=,lstart=,comm="];
       const result = await execFile(command, args, { timeoutMs: SAMPLE_TIMEOUT_MS,

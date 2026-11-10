@@ -28,6 +28,7 @@ v2.29 起代码按「入口薄、模块小、目录即归属」组织：每个�
 * `work/monitor/desktop/`：Electron 主进程模块（`context` 共享状态与动作表、`monitor-process` 后台拉起与退避、`vault` 凭据保管、`export-file` 配置导出的另存为、`windows`（主窗口的大小与位置记忆在 `window-bounds`，存 `runtime/window-state.json`；悬浮岛钉在桌面的开关与位置、菜单栏数字的选项在 `widget-prefs`，存 `runtime/widget-state.json`）/ `tray` / `tray-glance`（托盘图标旁的数字，macOS；与悬浮岛共用 `public/assets/js/render/glance-model.js`，主进程里唯一 import 前端模块的地方）/ `ipc`、`quit` 退出与停止顺序、`control-plane` 重启界面与热更新监视、`crash-watch` 自身故障可见、`diagnostics-save` 诊断包的保存对话框）。**不 import `electron`**，Electron API 由入口经工厂参数注入，便于 `node:test` 用假对象驱动。
 * 管理角色统一由 `lib/team-admin/protocol.mjs` 的 `isAdminUser` 判断：当前 SSH 账号为 root 或命中 adminUsers。`lib/storage-admin/service.mjs` 通过配置服务保存页面填写的目标与目录范围；配置只预填当前连接、不自动发 SSH。顶部多连接选择与服务器页选择共用 `app/server-switch.js`，统一渲染同步两个选择器；添加入口复用 `server-cards.js` 的登记表单，各连接独立保存账号和密钥。
 * `work/monitor/server/`：monitor-server 的装配模块（`start.mjs` 按固定顺序调用各工厂；`kernel` 日志与存储、`telemetry` 事件监听、`incident-sync`（事实 → 事件存储；处置操作受理即把 operationId 关联到未解决的隧道/通道事件，供「查看处置日志」）、`auto-repair*`、`probe-backoff`（探针退避的装配：证据与恢复信号接线、状态视图）、`bridge-ingest`、`snapshot-poller`、`runners`、`services`、`http-server`、`lifecycle` 关停顺序等）。只属于控制面。
+* Windows 进程查询的绝对系统工具路径、CIM/WMI 降级、仅存活降级证据与指数退避在 `lib/processes/windows-query.mjs`；GPU 按实际节点账号过滤在 `lib/probes/gpu-visibility.mjs`。两跳连接由 `ssh-route.mjs` 和凭据执行器统一处理；节点与账号以连接 id 隔离，GPU 和存储各自记忆多选，不改变全局查看视角。存储绑定 connectionId 时仍只调用预装的只读服务，不自动提权。
 * Windows 本机进程查询统一由 `lib/processes/query.mjs` 使用 CIM JSON 完成；supervisor 启动前以 `lib/supervisor/singleton.mjs` 的命名管道独占同一运行目录，锁持有至进程退出。父进程只发起启动，不抢先登记 PID；热交接退场同一安装目录的旧 Windows supervisor，保留 SSH 与代理。
 * `work/monitor/lib/`：控制面与数据面共用的内核模块（纯逻辑为主、可单测），完整清单见下表。按领域再分子目录：
   * `lib/http/`：HTTP 层。`http-router.mjs` 只负责鉴权、operation 上下文、按顺序跑路由组、404/500；`io` / `static` / `sse` / `status-payload` 与 `routes/<领域>.mjs`（status、logs、metrics、servers、config、channel、incidents …）各管一块 API。
@@ -148,7 +149,7 @@ v2.52 界面外壳：`app/sidebar.js` 管侧边栏开合 / 窄窗浮层 / 细栏
 6. **测试跟着源码走**。每个模块的测试放在同目录 `*.test.mjs`；源码级断言（读源码做正则）只断言本文件归属的源码，跨模块的接线断言放在 `scripts/*-wiring.test.mjs`。新增 `lib/` 顶层模块要在下表登记一行（`scripts/architecture-inventory.test.mjs` 守护），子目录模块不需要。
 7. **硬约束不变**：零 npm 运行时依赖；`/api/status` 旧字段形状不变（`lib/state/legacy-status.mjs`，有 golden 测试）；控制台发起的 SSH 一律经调度器槽位（并发 ≤3）并带 ControlMaster 复用参数；运行时文件只写 `runtimeDir`；`ps` 带 UTF-8 区域设置。
 
-#### 完整模块清单（76 个，位于 `work/monitor/lib/`）
+#### 完整模块清单（78 个，位于 `work/monitor/lib/`）
 
 上文的叙述只展开核心几个模块；下表是目录的完整索引（新增模块必须同步登记，
 `scripts/architecture-inventory.test.mjs` 会在两边不一致时失败）。
@@ -214,7 +215,9 @@ v2.52 界面外壳：`app/sidebar.js` 管侧边栏开合 / 窄窗浮层 / 细栏
 | `slurm.mjs` | Slurm 集群快照解析（纯函数）：slow 采集 `slurm` 段（只读 sinfo / squeue）→ 节点 CPU 分配 / 负载 / 内存 / GPU 与全体作业队列，远端本地时间按段内 tz 换算；不在分区内的直连节点（`hop=` / `hopkv=`）以 `source:"direct"` 并入节点列表。 |
 | `sse-client.mjs` | 极简 SSE 客户端（Node 内置 http，零依赖），供 Electron 主进程订阅。 |
 | `ssh-args.mjs` | 探针 SSH 与 supervisor 探测共用的身份 / ControlMaster 片段与主机名硬校验。 |
-| `ssh-askpass.mjs` | SSH 密码只留在进程内存；磁盘 helper 不含凭据。Windows 上日常采集与隧道不支持密码，只有接入引导「用一次密码装公钥」显式放开（纯 ASCII 的 `.cmd` helper，路径经环境变量传递）。 |
+| `ssh-route.mjs` | 节点账号的单级 ProxyJump 路径、两跳独立身份与临时 SSH 配置（不含密码）。 |
+| `ssh-askpass-helper.mjs` | 原生 Node/Electron askpass 入口；仅经本机一次性内存通道取密码，Windows 不用批处理。 |
+| `ssh-askpass.mjs` | SSH 密码只留在进程内存；磁盘 helper 不含凭据。Windows 接入引导、监控与隧道显式使用内存 askpass（原生 Node/Electron 的 `--import` 入口）。 |
 | `ssh-config-block.mjs` | `~/.ssh/config` 里单个 Host 段的读写（纯函数）：幂等 upsert、读出已有段并区分是不是本工具写的；命令行向导与 App 内接入引导共用。 |
 | `ssh-config-user.mjs` | `~/.ssh/config` 的 User 解析（纯函数 + 薄读盘包装）。 |
 | `ssh-runtime.mjs` | SSH 运行时的凭据归属：凭据属于显式服务器快照，绝不进 argv / 主机名。控制面的 ssh / scp 在这里统一带 10 秒连接超时，并把每次真实执行的结果交给探针退避。 |

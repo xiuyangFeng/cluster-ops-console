@@ -5,6 +5,7 @@ import { promisify } from "node:util";
 
 import { writePrivateFileAtomicSync } from "./atomic-file.mjs";
 import { normalizeProcessCommand, windowsCommandArgs } from "./processes/query.mjs";
+import { runWindowsProcessQuery, windowsSystemTool } from "./processes/windows-query.mjs";
 
 const defaultExecFile = promisify(execFile);
 
@@ -84,7 +85,7 @@ export function shouldYieldToExisting({ meta, selfPid, alive, cmdline, expect } 
 function buildCmdlineQuery(platformName, pid) {
   if (platformName === "win32") {
     return {
-      command: "powershell",
+      command: windowsSystemTool("powershell"),
       args: [
         "-NoProfile",
         "-NonInteractive",
@@ -236,6 +237,10 @@ export function cmdlineMatches(cmdline, meta) {
 export function createProcessRegistry({ runtimeDir, execFileImpl = defaultExecFile, platform = process.platform, onReclaim,
   killProcess = (pid, signal) => process.kill(pid, signal), waitForPidExitImpl = waitForPidExit,
 } = {}) {
+  const windowsExec = async (command, args, options) => {
+    const res = await execFileImpl(command, args, { windowsHide: true, timeout: options.timeoutMs, maxBuffer: options.maxOutputBytes, env: options.env });
+    return { ...res, code: 0 };
+  };
   function pidFile(name) {
     return join(runtimeDir, `${name}.pid.json`);
   }
@@ -283,7 +288,9 @@ export function createProcessRegistry({ runtimeDir, execFileImpl = defaultExecFi
     const query = buildCmdlineQuery(platform, meta.pid);
     let stdout = "";
     try {
-      const res = await execFileImpl(query.command, query.args, execOptions());
+      const res = platform === "win32"
+        ? await runWindowsProcessQuery(windowsExec, query.args.at(-1))
+        : await execFileImpl(query.command, query.args, execOptions());
       stdout = res?.stdout ? res.stdout : "";
     } catch {
       // 查询命令本身跑不起来（D1：典型如 win32 下没有 ps）——无法判断，保守
@@ -295,7 +302,9 @@ export function createProcessRegistry({ runtimeDir, execFileImpl = defaultExecFi
       return { verified: false, reason: `进程 ${meta.pid} 不存在`, meta, indeterminate: false };
     }
 
-    return judgeCmdline(meta, extractCmdline(platform, stdout));
+    const cmdline = extractCmdline(platform, stdout);
+    if (platform === "win32" && !cmdline && isPidAlive(meta.pid)) return { verified: false, reason: `进程 ${meta.pid} 仍存活但命令行不可读`, meta, indeterminate: true };
+    return judgeCmdline(meta, cmdline);
   }
 
   function judgeCmdline(meta, cmdline) {

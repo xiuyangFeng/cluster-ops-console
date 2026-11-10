@@ -39,7 +39,7 @@ test("S7: win32 平台下 verifyProcess 走 PowerShell Get-CimInstance 查询命
   });
 
   const result = await registry.verifyProcess("supervisor");
-  assert.equal(captured.cmd, "powershell", "win32 应改走 PowerShell，而不是不存在的 ps");
+  assert.match(captured.cmd, /WindowsPowerShell\\v1\.0\\powershell\.exe$/i);
   const joinedArgs = captured.args.join(" ");
   assert.match(joinedArgs, /Get-CimInstance/);
   assert.match(joinedArgs, /Win32_Process/);
@@ -460,7 +460,9 @@ test("verifyProcesses: win32 回落逐条 verifyProcess（PowerShell 与 indeter
   });
   registry.recordProcess("a", 301, { command: "node", args: ["a.mjs"], cwd: "C:\\app" });
   const results = await registry.verifyProcesses(["a"]);
-  assert.deepEqual(calls, ["powershell"]);
+  assert.equal(calls.length, 3);
+  assert.match(calls[0], /\\powershell\.exe$/i);
+  assert.match(calls[2], /\\tasklist\.exe$/i);
   assert.equal(results.get("a").indeterminate, true);
 });
 

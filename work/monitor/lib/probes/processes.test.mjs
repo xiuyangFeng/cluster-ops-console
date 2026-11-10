@@ -12,7 +12,7 @@ const rows = [
 test("Windows 进程探针从 CIM 识别安装版 supervisor、代理与 SSH；分钟巡检后仍不丢失", async () => {
   let time = 0;
   const probe = createProcessProbe({ getConfig: async () => config, getMainServerConfig: () => config.servers[0], platform: "win32", now: () => time,
-    execFileCmd: async (cmd) => { assert.equal(cmd, "powershell"); return { code: 0, stdout: JSON.stringify(rows) }; },
+    execFileCmd: async (cmd) => { assert.match(cmd, /\\powershell\.exe$/i); return { code: 0, stdout: JSON.stringify(rows) }; },
   });
   for (const t of [0, 5000, 60000, 120000]) {
     time = t;
@@ -33,7 +33,7 @@ test("Windows 进程清单未含代理但 HTTP 探活有身份 PID 时不误报�
   healthy = false;
   assert.equal((await probe.getProcesses()).localProxy.length, 0, "相同 CIM 清单仍需重测 HTTP，不保留旧健康结果");
   failed = true;
-  await assert.rejects(() => probe.getProcesses(), /无法读取 Windows/);
+  await assert.rejects(() => probe.getProcesses(), /Windows 进程命令行暂时无法读取/);
   const unknown = await probe.runProcessesProbe();
   assert.equal(unknown.level, "waiting");
   assert.equal(unknown.data.processQueryIndeterminate, true);

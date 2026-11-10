@@ -45,7 +45,7 @@ const PERSONAL_SERVER_FIELDS = new Set([
   "id", "name", "host", "address", "sshPort", "sshUser", "sshIdentityFile",
   "remotePort", "localPort", "disabled", "tunnel", "tags", "createdAt",
   "updatedAt", "schemaVersion", "authRef", "monitorEnabled",
-  "description",
+  "description", "sshJumpServerId",
 ]);
 
 const FORBIDDEN_PERSONAL_SERVER_FIELDS = new Set([
@@ -461,6 +461,10 @@ function personalServerForWrite(raw, id, prefix, previousServers, errors, previo
       return null;
     }
     if (hasValue(raw.sshIdentityFile)) entry.sshIdentityFile = String(raw.sshIdentityFile).trim();
+    if (hasValue(raw.sshJumpServerId)) {
+      if (!isSafeServerId(raw.sshJumpServerId) || raw.sshJumpServerId === id || tunnel) throw new Error("跳转连接必须选择另一台直连服务器，且仅用于监控");
+      entry.sshJumpServerId = raw.sshJumpServerId;
+    }
     if (hasValue(raw.authRef)) {
       if (!isAuthRef(raw.authRef)) throw new Error("无效凭据引用");
       entry.authRef = raw.authRef;

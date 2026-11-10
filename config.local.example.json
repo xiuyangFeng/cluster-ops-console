@@ -2,9 +2,9 @@
   "_comment": "个人配置层示例（字段截至 v2.61）。本文件用来说明字段，不是模板：团队集群的接入请运行 `npm run setup`，不要复制本文件后手改端口——其中的端口号只是示意，照抄可能与同事已登记的端口冲突。确需手写时复制成 config.local.json 再改；config.local.json 已被 .gitignore 排除，不会入库。打包运行时的个人层在 ~/Library/Application Support/codex-tunnel-monitor/config.local.json，开发模式在仓库根目录。向导会生成同样的内容，并把团队服务器的专属端口写进 portOverrides（如 { \"server-01\": { \"remotePort\": 7893, \"localPort\": 8893 } }，本地端口 = 远端端口 + 1000；远端端口须是向导在集群登记目录里原子领取的）。当前团队 config.json 已启用 portRegistry.required=true：登记目录不可用时会停止分配，不会使用只能看到在线监听的旧回退方式。",
   "_comment_fields": "个人层白名单字段：activeServerId / activeAgentId / sshUser / sshIdentityFile / portOverrides / servers / autoRepair / storageBudgetBytes / egress / storageAdmin，另有两个合并方式不同的字段 proxyAllowedTargets（与团队层取并集）和 noProxyExtra（登录引导写入）。写在这些之外的键会被忽略。",
   "activeAgentId": "codex",
-  "_comment_storageAdmin": "storageAdmin 给 root 或团队管理员（adminUsers）：{ identityFile?, targets: [{ id, label, host, port, roots }] }。侧栏「存储管理」可直接配置服务器与 roots，无需手改本文件；以 root 经专用受限密钥只读查看磁盘与按用户占用。普通同事不用写。",
+  "_comment_storageAdmin": "storageAdmin 给 root 或团队管理员（adminUsers）：{ identityFile?, targets: [{ id, label, host?, port?, roots, connectionId? }] }。侧栏「存储管理」可直接配置服务器与 roots，无需手改本文件；以 root 经专用受限密钥只读查看磁盘与按用户占用。可选 connectionId 绑定服务器管理中的节点账号，复用其直连/跳转和独立认证；服务器需预先安装只读存储服务，账号需具备读取权限，不自动提权。普通同事不用写。",
   "activeServerId": "server-01",
-  "_comment_servers": "servers 按 id 与团队层 config.json 合并：id 不同 = 新增自己的机器（id/host/remotePort 必填）；id 相同 = 覆盖团队条目，且只允许覆盖 disabled / remotePort / localPort / tunnel —— 覆盖 host / sshHostName / sshPort 的字段会被丢弃并告警（团队服务器指向哪台机器由团队层决定）。",
+  "_comment_servers": "servers 的个人监控条目可写 sshJumpServerId（另一条已启用的直连配置 id，单级跳转、tunnel:false）；目标用户名、sshIdentityFile 与密码引用各自独立，密码由界面录入、不写明文。servers 按 id 与团队层 config.json 合并：id 不同 = 新增自己的机器（id/host/remotePort 必填）；id 相同 = 覆盖团队条目，且只允许覆盖 disabled / remotePort / localPort / tunnel —— 覆盖 host / sshHostName / sshPort 的字段会被丢弃并告警（团队服务器指向哪台机器由团队层决定）。",
   "_comment_disable_team_server": "servers 里最后一条是屏蔽团队服务器的示例：不在这个集群的同事写 { id: server-01, disabled: true }，server-01 从此不显示、不建隧道、不注册探针，控制台不会恒红刷噪音。想恢复就删掉这条（或重跑 npm run setup 正常填用户名）。在这个集群的同事必须删掉它。",
   "servers": [
     {

@@ -57,7 +57,8 @@ export function buildSetupHtml(data, { installers = {}, busy = {} } = {}) {
       ? `<p class="sa-note">${inst.shell === "cmd" ? "在本机「命令提示符」（cmd，<b>不是 PowerShell</b>）里" : "在本机「终端」里"}运行下面这一行，输入 <b>root 密码</b>。第一次连接会显示主机指纹，核对后输入 <code>yes</code>。完成后点「检测」。</p>${copyBlock(inst.command)}` +
         `<p class="sa-note">这把密钥在服务器上被限定为只能运行只读扫描脚本（restrict + command=），开不了 shell。以后要撤销，在终端运行：</p>${copyBlock(inst.uninstallCommand, "复制卸载命令")}`
       : "";
-    return `<li${ok ? ' data-done="true"' : ""}><b>${escapeHtml(t.label)}</b>（root@${escapeHtml(t.host)}）：${escapeHtml(ok ? "已就绪" : t.status?.message || "未安装或未检测")}` +
+    return `<li${ok ? ' data-done="true"' : ""}><b>${escapeHtml(t.label)}</b>（${escapeHtml(t.sshUser || "root")}@${escapeHtml(t.host)}）：${escapeHtml(ok ? "已就绪" : t.status?.message || "未安装或未检测")}` +
+      (t.connectionId ? `<p class="sa-note">使用所选连接的独立认证${t.sshJumpServerId ? "，经主集群跳转" : "，公网直连"}。需要服务器已安装只读存储服务，账号也需具备读取权限；不会自动提权。</p>` : "") +
       `<span class="sa-actions">${key.exists ? `<button type="button" class="text-btn" data-sa-installer="${attr(t.id)}"${busy[`inst:${t.id}`] ? " disabled" : ""}>${ok ? "重新生成安装命令" : "生成安装命令"}</button>` : ""}` +
       `<button type="button" class="text-btn" data-sa-refresh="${attr(t.id)}"${t.refreshing || busy[`ref:${t.id}`] ? " disabled" : ""}>${t.refreshing || busy[`ref:${t.id}`] ? "检测中…" : "检测"}</button></span>${body}</li>`;
   }).join("");
@@ -199,7 +200,7 @@ function scansHtml(t, now, fold) {
 
 export function buildTargetHtml(t, { now = Date.now(), activity = { months: DEFAULT_IDLE_MONTHS, only: false }, fold = null } = {}) {
   const state = t.status?.state || "unknown";
-  const head = `<div class="sa-target-head"><h3>${escapeHtml(t.label)}</h3><span class="sa-dim">root@${escapeHtml(t.host)} · 允许：${escapeHtml(t.roots.join(" "))}</span>` +
+  const head = `<div class="sa-target-head"><h3>${escapeHtml(t.label)}</h3><span class="sa-dim">${escapeHtml(t.sshUser || "root")}@${escapeHtml(t.host)} · 允许：${escapeHtml(t.roots.join(" "))}</span>` +
     `<span class="sa-status" data-state="${attr(state)}">${escapeHtml(STATUS_TEXT[state] || state)}</span>` +
     `${t.checkedAt ? `<span class="sa-dim">检测于 ${escapeHtml(formatRelativeTime(t.checkedAt, now) || "刚刚")}</span>` : ""}` +
     `<button type="button" class="text-btn" data-sa-refresh="${attr(t.id)}"${t.refreshing ? " disabled" : ""}>${t.refreshing ? "刷新中…" : "刷新"}</button></div>`;
@@ -219,14 +220,14 @@ export function buildTargetHtml(t, { now = Date.now(), activity = { months: DEFA
 
 // 机器标签：多台机器时一次只展开一台（selected），标签上带最满那块盘的占用与「扫描中」。
 function targetTabsHtml(targets, selected) {
-  return `<div class="sa-tabs" role="tablist" aria-label="机器">${targets.map((t) => {
+  return `<div class="sa-tabs" role="group" aria-label="存储节点和账号（可多选）">${targets.map((t) => {
     const worst = (t.info?.mounts || []).reduce((m, d) => Math.max(m, usedRatio(d)), 0);
     const lv = worst >= 0.9 ? "crit" : worst >= 0.8 ? "warn" : "ok";
     const badge = t.info?.mounts?.length ? `<span class="sa-tab-pct" data-level="${lv}">${Math.round(worst * 100)}%</span>` : "";
     const busyDot = t.running ? '<span class="sa-tab-busy" title="有任务在跑"></span>' : "";
     const bad = t.status?.state && t.status.state !== "ok" ? '<span class="sa-tab-warn" title="连接或版本有问题">!</span>' : "";
-    return `<button type="button" class="sa-tab" role="tab" data-sa-target-tab="${attr(t.id)}" aria-selected="${t.id === selected ? "true" : "false"}">` +
-      `<b>${escapeHtml(t.label)}</b>${badge}${busyDot}${bad}</button>`;
+    return `<label class="sa-tab"><input type="checkbox" data-sa-target-tab="${attr(t.id)}"${selected.includes(t.id) ? " checked" : ""}>` +
+      `<b>${escapeHtml(t.label)} · ${escapeHtml(t.sshUser || "root")}@${escapeHtml(t.host)}</b>${badge}${busyDot}${bad}</label>`;
   }).join("")}</div>`;
 }
 
@@ -238,6 +239,7 @@ export function buildStorageTargetForm(data, busy = {}) {
     '<p class="sa-note">已预填当前连接。选择允许查看的目录并保存，然后按接入步骤配置只读扫描。也可填写另一台服务器。</p>' +
     '<div class="sa-target-form" data-sa-target-form>' +
     field("id", "服务器标识", draft.id, 'maxlength="64"') + field("label", "显示名称", draft.label, 'maxlength="64"') +
+    `<label>节点与登录账号<select name="connectionId" data-sa-connection><option value="">专用 root 受限密钥（手填地址）</option>${(data.connections || []).map((s) => `<option value="${attr(s.id)}"${draft.connectionId === s.id ? " selected" : ""}>${escapeHtml(s.name)} · ${escapeHtml(s.sshUser || "默认账号")}@${escapeHtml(s.host)}（${s.sshJumpServerId ? "内网跳转" : "直连"}）</option>`).join("")}</select></label>` +
     field("host", "服务器地址或 SSH 别名", draft.host, 'autocomplete="off"') + field("port", "SSH 端口", draft.port || 22, 'type="number" min="1" max="65535"') +
     `<label class="sa-target-roots">允许查看的目录<input name="roots" value="${attr(draft.roots || "")}" placeholder="例如 /home /public /mnt（空格分隔）" /></label>` +
     `<button type="button" class="btn btn-secondary" data-sa-save-target${busy.target ? " disabled" : ""}>${busy.target ? "正在保存…" : "保存存储服务器"}</button></div></details>`;
@@ -252,9 +254,8 @@ export function buildOverviewHtml(data, { installers = {}, busy = {}, error = ""
   const err = error ? `<p class="sa-note" data-level="warn">${escapeHtml(error)}</p>` : "";
   const opts = { now, fold, ...(activity ? { activity } : {}) };
   const setup = buildStorageTargetForm(data, busy);
-  if (data.targets.length === 1) return `${err}${setup}${buildSetupHtml(data, { installers, busy })}${buildTargetHtml(data.targets[0], opts)}`;
-  const pick = data.targets.find((t) => t.id === selected) || data.targets[0];
-  return `${err}${setup}${buildSetupHtml(data, { installers, busy })}${targetTabsHtml(data.targets, pick.id)}${buildTargetHtml(pick, opts)}`;
+  const picks = Array.isArray(selected) ? selected : selected ? [selected] : data.targets.map((t) => t.id);
+  return `${err}${setup}${buildSetupHtml(data, { installers, busy })}${targetTabsHtml(data.targets, picks)}${data.targets.filter((t) => picks.includes(t.id)).map((t) => buildTargetHtml(t, opts)).join("") || '<p class="sa-note">勾选上方节点与账号以查看存储。</p>'}`;
 }
 
 // 扫描结果的某一层。

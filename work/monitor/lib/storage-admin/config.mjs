@@ -10,6 +10,7 @@ import os from "node:os";
 import path from "node:path";
 
 import { isBoundedServerId } from "../validators.mjs";
+import { attachPersonalSsh } from "../ssh-args.mjs";
 
 export const DEFAULT_IDENTITY_NAME = "id_ed25519_storage_admin";
 export const MAX_TARGETS = 8;
@@ -50,14 +51,19 @@ export function resolveTargets(config) {
     if (out.length >= MAX_TARGETS) break;
     if (!t || typeof t !== "object") continue;
     const id = typeof t.id === "string" ? t.id.trim() : "";
-    if (!isBoundedServerId(id) || seen.has(id) || !isSafeTargetHost(t.host)) continue;
-    const port = t.port == null ? 22 : Number(t.port);
+    if (!isBoundedServerId(id) || seen.has(id)) continue;
+    const connectionId = typeof t.connectionId === "string" ? t.connectionId : "";
+    const connection = connectionId ? config.servers?.find((s) => s.id === connectionId && !s.disabled && s.monitorEnabled !== false) : null;
+    if (connectionId && !connection) continue;
+    const host = connection ? connection.sshHostName || connection.address?.host || connection.address || connection.host : t.host;
+    if (!isSafeTargetHost(host)) continue;
+    const port = connection ? connection.sshPort || 22 : t.port == null ? 22 : Number(t.port);
     if (!Number.isInteger(port) || port < 1 || port > 65535) continue;
     const roots = (Array.isArray(t.roots) ? t.roots : []).filter(isSafeRoot).slice(0, MAX_ROOTS);
     if (!roots.length) continue;
     seen.add(id);
     const label = typeof t.label === "string" && t.label.trim() ? t.label.trim().slice(0, 64) : id;
-    out.push({ id, label, host: t.host, port, roots: [...new Set(roots)] });
+    out.push({ id, label, host, port, roots: [...new Set(roots)], ...(connection ? { connectionId, sshUser: attachPersonalSsh(connection, config).sshUser || null, sshJumpServerId: connection.sshJumpServerId || "" } : {}) });
   }
   return out;
 }

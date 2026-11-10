@@ -17,6 +17,7 @@ export function summarizeServer(server, { runtime, revision, hostKeyConfirmed } 
     host: server.host,
     sshPort: server.sshPort || 22,
     sshUser: server.sshUser || null,
+    sshJumpServerId: server.sshJumpServerId || "",
     sshIdentityFile: server.sshIdentityFile || "",
     remotePort: server.remotePort ?? null,
     localPort: server.localPort ?? null,

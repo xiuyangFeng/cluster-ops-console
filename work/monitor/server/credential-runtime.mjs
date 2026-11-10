@@ -31,7 +31,7 @@ export function guardFixtureSsh(execute) {
 // （start.mjs 在 listen / 守护巡检之前 await 本工厂）。
 // onSshResult：每次真实 ssh 执行结束后的回调（探针退避的证据来源，见 server/probe-backoff.mjs）。
 // fixtureMode：执行器套上 guardFixtureSsh。
-export async function createCredentialRuntime({ env = process.env, getConfig, runtimeDir, rootDir, onSshResult = null, fixtureMode = false }) {
+export async function createCredentialRuntime({ env = process.env, getConfig, runtimeDir, dataDir, rootDir, onSshResult = null, fixtureMode = false }) {
   const credentialVault = env.CODEX_MONITOR_VAULT_URL && env.CODEX_MONITOR_VAULT_TOKEN
     ? createHttpVaultClient({
       baseUrl: env.CODEX_MONITOR_VAULT_URL,
@@ -49,7 +49,7 @@ export async function createCredentialRuntime({ env = process.env, getConfig, ru
     env.CODEX_MONITOR_VAULT_TOKEN = token;
   }
   const sshExecutor = createSshRuntimeExecutor({
-    getConfig, credentialVault,
+    getConfig, credentialVault, dataDir,
     helperDir: path.join(runtimeDir, "askpass"), cwd: rootDir, onSshResult,
   });
   const executeRuntime = fixtureMode ? guardFixtureSsh(sshExecutor) : sshExecutor;

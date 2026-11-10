@@ -529,6 +529,18 @@ export function createStateStore({ config, now = Date.now, logSource = "ops", ge
     if (!nextConfig) return;
     const previousId = mainServer().id;
     const previousKeys = Object.keys(currentLevelMap());
+    const connectionKey = (server, config) => JSON.stringify([server?.host, server?.sshHostName, server?.sshPort,
+      server?.sshUser || config.sshUser, server?.sshIdentityFile || config.sshIdentityFile, server?.authRef, server?.sshJumpServerId]);
+    for (const server of nextConfig.servers || []) {
+      const previous = cfg.servers?.find((s) => s.id === server.id);
+      const oldJump = cfg.servers?.find((s) => s.id === previous?.sshJumpServerId);
+      const nextJump = nextConfig.servers?.find((s) => s.id === server.sshJumpServerId);
+      if (connectionKey(previous, cfg) !== connectionKey(server, nextConfig) || connectionKey(oldJump, cfg) !== connectionKey(nextJump, nextConfig)) {
+        resourceExtras.delete(server.id);
+        delete serversBrief[server.id];
+        probeResults.delete(`${COLLECT_SLOW_PREFIX}${server.id}`);
+      }
+    }
     cfg = nextConfig;
     pruneDisabledAgents();
     ensureConfigEntries();

@@ -1,5 +1,6 @@
 // Windows 原生进程查询：CIM JSON 保留中文、空格及完整参数，不依赖 ps/WMIC。
 import { execFileWithTimeout } from "../exec.mjs";
+import { runWindowsProcessQuery } from "./windows-query.mjs";
 
 export const WINDOWS_PROCESS_QUERY = [
   "[Console]::OutputEncoding = New-Object System.Text.UTF8Encoding($false)",
@@ -7,11 +8,12 @@ export const WINDOWS_PROCESS_QUERY = [
   "ConvertTo-Json -Compress -InputObject @(Get-CimInstance Win32_Process | Select-Object ProcessId,ParentProcessId,CommandLine)",
 ].join("; ");
 
-export async function readWindowsProcesses(exec = execFileWithTimeout) {
-  const result = await exec("powershell", ["-NoProfile", "-NonInteractive", "-Command", WINDOWS_PROCESS_QUERY], { timeoutMs: 10000, maxOutputBytes: 4 * 1024 * 1024 });
-  if (result.code !== 0 || result.timedOut || result.truncated) throw new Error("无法读取 Windows 进程清单；保留现有进程，稍后重试");
-  const rows = JSON.parse(String(result.stdout || "").replace(/^\uFEFF/, ""));
-  if (!Array.isArray(rows)) throw new Error("Windows 进程清单格式无效");
+export async function readWindowsProcesses(exec = execFileWithTimeout, options = {}) {
+  let rows;
+  await runWindowsProcessQuery(exec, WINDOWS_PROCESS_QUERY, { ...options, validate: (stdout) => {
+    rows = JSON.parse(String(stdout || "").replace(/^\uFEFF/, ""));
+    if (!Array.isArray(rows)) throw new Error("Windows 进程清单格式无效");
+  } });
   return rows.filter((p) => Number.isInteger(p.ProcessId) && p.ProcessId > 0 && typeof p.CommandLine === "string" && p.CommandLine)
     .map((p) => ({ pid: p.ProcessId, parentPid: p.ParentProcessId, command: p.CommandLine }));
 }

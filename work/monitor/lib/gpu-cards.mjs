@@ -147,7 +147,7 @@ export function attachGpuUsers(cards, apps, { selfUser: rawSelf = null } = {}) {
         });
       }
     }
-    if (!selfUser || app.user !== selfUser || !app.jobId) continue;
+    if (!selfUser || (selfUser !== "root" && app.user !== selfUser) || !app.jobId) continue;
     entry.jobs ||= [];
     const job = entry.jobs.find((item) => item.id === app.jobId);
     if (job) job.memMb = (job.memMb ?? 0) + (app.memMb ?? 0);

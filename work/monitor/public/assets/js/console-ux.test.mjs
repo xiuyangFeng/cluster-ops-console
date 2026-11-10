@@ -50,9 +50,9 @@ test("命令面板：快捷键帮助 HTML 转义且只读", () => {
   assert.doesNotMatch(html, /role="option"/);
 });
 
-test("服务器表单：win32 隐藏密码框并给出改用密钥提示", () => {
-  assert.equal(passwordFieldPolicy("win32").enabled, false);
-  assert.match(passwordFieldPolicy("win32").hint, /密钥/);
+test("服务器表单：win32 开放内存 askpass 密码接入并提示 OpenSSH 要求", () => {
+  assert.equal(passwordFieldPolicy("win32").enabled, true);
+  assert.match(passwordFieldPolicy("win32").hint, /OpenSSH/);
   assert.equal(passwordFieldPolicy("darwin").enabled, true);
   assert.equal(passwordFieldPolicy(null).enabled, true, "平台未知时不隐藏（旧后端兼容）");
 });

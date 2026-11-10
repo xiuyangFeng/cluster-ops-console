@@ -693,7 +693,7 @@ export function createTunnelController({
     const config = withSessionMarker(rawConfig);
     const baseArgs = buildTunnelArgs(config);
     const passwordSession = config.authRef
-      ? await createPasswordSshSessionImpl({ password: await readTunnelPassword(config.authRef, credentialVault, runtimeDir), helperDir: askpassDir }) : null;
+      ? await createPasswordSshSessionImpl({ password: await readTunnelPassword(config.authRef, credentialVault, runtimeDir), helperDir: askpassDir, allowWindows: true }) : null;
     const tunnelArgs = passwordSession ? [...passwordSession.args, ...baseArgs] : baseArgs;
     let child;
     ensureWindowsOpenSshOnPath("ssh");

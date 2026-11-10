@@ -43,33 +43,39 @@ test("password session: 真实 helper 支持空格路径与多字节密码，磁
   } finally { await session.dispose(); await fs.rm(dir, { recursive: true, force: true }); }
 });
 
-test("password session: Windows 默认仍拒绝；接入引导显式放开时 helper 是纯 ASCII 的 .cmd，路径经环境变量传递", async () => {
+test("password session: Windows 原生入口不依赖批处理、PATH 或明文凭据文件", async () => {
   const fs = await import("node:fs/promises");
   const os = await import("node:os");
   const path = await import("node:path");
-  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "askpass-win-"));
+  const { execFileWithTimeout } = await import("./exec.mjs");
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "askpass-win-中文 空格-"));
   try {
-    await assert.rejects(
-      createPasswordSshSession({ password: "pw", helperDir: dir, platform: "win32" }),
-      (error) => error.code === "password-unsupported",
-    );
-    const nodePath = "C:\\Users\\张三\\node dir\\node.exe";
-    const session = await createPasswordSshSession({ password: "pw-秘密", helperDir: dir, platform: "win32", allowWindows: true, nodePath, ttlMs: 10000 });
+    await assert.rejects(createPasswordSshSession({ password: "pw", helperDir: dir, platform: "win32" }), (e) => e.code === "password-unsupported");
+    const session = await createPasswordSshSession({ password: "pw-秘密", helperDir: dir, platform: "win32", allowWindows: true });
     try {
-      assert.match(session.env.SSH_ASKPASS, /broker-helper-[0-9a-f]{24}\.cmd$/);
-      const body = await fs.readFile(session.env.SSH_ASKPASS, "utf8");
-      assert.equal(body, '@echo off\r\n"%CODEX_ASKPASS_NODE%" "%CODEX_ASKPASS_SCRIPT%" %*\r\n');
-      // 批处理文件按 OEM 代码页读：里面不能有任何非 ASCII 字符（中文用户名的路径只走环境变量）。
-      assert.ok([...body].every((ch) => ch.charCodeAt(0) < 128));
-      assert.equal(session.env.CODEX_ASKPASS_NODE, nodePath);
-      assert.match(session.env.CODEX_ASKPASS_SCRIPT, /ssh-askpass\.mjs$/);
-      assert.equal(session.env.SSH_ASKPASS_REQUIRE, "force");
-      assert.ok(!JSON.stringify(session.args).includes("pw-秘密"));
-      assert.ok(!body.includes("pw-秘密"));
-    } finally {
-      await session.dispose();
-    }
-  } finally {
-    await fs.rm(dir, { recursive: true, force: true });
-  }
+      assert.equal(session.env.SSH_ASKPASS, process.execPath);
+      assert.match(session.env.NODE_OPTIONS, /--import=.*ssh-askpass-helper\.mjs/);
+      assert.equal(JSON.stringify(session.env).includes("pw-秘密"), false);
+      assert.deepEqual(await fs.readdir(dir), []);
+      const result = await execFileWithTimeout(session.env.SSH_ASKPASS, ["user@node04's password:"], { env: { ...session.env, PATH: "" } });
+      assert.equal(result.code, 0, result.stderr);
+      assert.equal(result.stdout, "pw-秘密");
+    } finally { await session.dispose(); }
+  } finally { await fs.rm(dir, { recursive: true, force: true }); }
+});
+
+ test("password session: 两跳各有密码，只响应对应账号主机且各消费一次", async () => {
+  const fs = await import("node:fs/promises");
+  const os = await import("node:os");
+  const path = await import("node:path");
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "askpass-route-"));
+  const session = await createPasswordSshSession({ passwords: [{ user: "kai", host: "master", password: "jump-only" }, { user: "user01", host: "node04", password: "target-only" }], helperDir: dir, platform: "win32", allowWindows: true });
+  const ask = (prompt) => fetch(`${session.env.CODEX_ASKPASS_URL}/password`, { method: "POST", body: JSON.stringify({ prompt }), headers: { "x-askpass-token": session.env.CODEX_ASKPASS_TOKEN } });
+  try {
+    assert.equal((await ask("kai@node04's password:")).status, 403);
+    assert.deepEqual(await (await ask("kai@master's password:")).json(), { password: "jump-only" });
+    assert.equal((await ask("kai@master's password:")).status, 403);
+    assert.deepEqual(await (await ask("user01@node04's password:")).json(), { password: "target-only" });
+    assert.equal((await ask("user01@node04's password:")).status, 403);
+  } finally { await session.dispose(); await fs.rm(dir, { recursive: true, force: true }); }
 });

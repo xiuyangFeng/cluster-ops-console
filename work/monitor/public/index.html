@@ -69,6 +69,7 @@
     <link rel="modulepreload" href="/assets/js/render/tunnel-egress-view.js" />
     <link rel="modulepreload" href="/assets/js/render/gpu-card-view.js" />
     <link rel="modulepreload" href="/assets/js/app/gpu-card-controller.js" />
+    <link rel="modulepreload" href="/assets/js/app/gpu-connections-controller.js" />
     <link rel="modulepreload" href="/assets/js/render/dir-usage-view.js" />
     <link rel="modulepreload" href="/assets/js/app/dir-usage-controller.js" />
     <link rel="modulepreload" href="/assets/js/render/storage-admin-view.js" />
@@ -409,6 +410,7 @@
 
           <!-- GPU：仅在采到 nvidia-smi 数据时显示 -->
           <section class="res-gpu" id="resGpuSection" aria-label="GPU" hidden>
+            <fieldset id="resGpuAccounts" class="resource-accounts" aria-label="选择 GPU 节点和账号"></fieldset>
             <div class="res-gpu-head" id="resGpuSummary"></div>
             <div class="res-gpu-list" id="resGpuList"></div>
           </section>
@@ -830,6 +832,7 @@
             <label>地址<input name="address" required autocomplete="off" placeholder="10.0.0.8 或 hostname"></label>
             <label>SSH 端口<input name="sshPort" type="number" min="1" max="65535" value="22"></label>
             <label>用户名<input name="sshUser" required autocomplete="username" placeholder="ubuntu"></label>
+            <label>连接路径<select name="sshJumpServerId"><option value="">公网 / 本机直连</option></select></label>
             <label>SSH 私钥路径（可选）<input name="sshIdentityFile" autocomplete="off" placeholder="留空使用默认密钥"></label>
             <label>反向端口（建隧道时填写）<input name="remotePort" type="number" min="1" max="65535" disabled></label>
             <label>SSH 密码（可选）<input name="password" type="password" autocomplete="new-password" placeholder="留空则使用 ssh-agent / 私钥"></label>

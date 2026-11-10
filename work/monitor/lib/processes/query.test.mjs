@@ -23,7 +23,7 @@ test("Windows 原生 CIM 查询找到真实子进程，并正确解码中文与�
 test("CIM 清单保留中文/空格命令行，PowerShell 失败或坏输出绝不能退化为空进程清单", async () => {
   const command = '"C:\\应用 程序\\Codex Operations Console.exe" work\\monitor\\channel-supervisor.mjs';
   const rows = await readWindowsProcesses(async (cmd, args) => {
-    assert.equal(cmd, "powershell");
+    assert.match(cmd, /WindowsPowerShell\\v1\.0\\powershell\.exe$/i);
     assert.match(args.at(-1), /UTF8Encoding/);
     assert.match(args.at(-1), /Get-CimInstance Win32_Process/);
     return { code: 0, stdout: `\uFEFF${JSON.stringify([{ ProcessId: 42, ParentProcessId: 1, CommandLine: command }])}` };

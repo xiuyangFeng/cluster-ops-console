@@ -60,6 +60,7 @@ test("团队卡隐藏编辑；编辑回填用完整对象", () => {
   });
   assert.deepEqual(values, {
     sshIdentityFile: "",
+    sshJumpServerId: "",
     name: "腾讯云",
     address: "10.0.0.8",
     sshPort: 2222,

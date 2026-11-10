@@ -12,6 +12,7 @@ import {
 import { resolveKnownHostsIfPresent } from "../host-key-policy.mjs";
 import { buildResourceUsage } from "../resource-usage.mjs";
 import { createDirectNodeWatch } from "./direct-nodes.mjs";
+import { filterGpuVisibility } from "./gpu-visibility.mjs";
 import { parseSlurmSection } from "../slurm.mjs";
 import { parseTunnelEgress } from "../tunnel-egress.mjs";
 import { toPort } from "../validators.mjs";
@@ -43,7 +44,7 @@ function buildSlowData({ server, sections, sysText, parsedSys, listening, usage 
   // v2.32 Slurm 节点与队列快照（lib/slurm.mjs）。段缺失（旧采集脚本 / 输出截断在它之前）
   // 给 null；非集群机器是 { state: "absent" }——没采到与没有 Slurm 是两回事。
   const slurm = sections.slurm === undefined ? null : parseSlurmSection(sections.slurm, { checkedAt: Date.now() });
-  return {
+  return filterGpuVisibility({
     load: parsedSys
       ? {
           name: server.host,
@@ -69,7 +70,7 @@ function buildSlowData({ server, sections, sysText, parsedSys, listening, usage 
     // 经隧道出网的程序（登录节点上连着 127.0.0.1:<remotePort> 的连接，按程序名汇总，lib/tunnel-egress.mjs）。
     // 段缺失（旧采集脚本）或空段给 null；远端没有 ss / 查询失败是 { state: "absent" | "error" }。
     tunnelEgress: sections["tunnel-egress"] === undefined ? null : parseTunnelEgress(sections["tunnel-egress"]),
-  };
+  }, agents?.user || slurm?.user || server.sshUser || null);
 }
 
 // onSlurmSection(serverId, text)：slurm 段原文的旁路观察者（v2.49 失败作业诊断的登记，见

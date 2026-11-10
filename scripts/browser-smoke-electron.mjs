@@ -16,6 +16,7 @@ import { runSubrunBrowserSmoke } from "./lib/subrun-browser-smoke.mjs";
 import { runJobHistoryLookupBrowserSmoke } from "./lib/job-history-lookup-browser-smoke.mjs";
 import { assertViewportWidth, sizedWindowClass } from "./lib/smoke-window.mjs";
 import { runRootAdminBrowserSmoke } from "./lib/root-admin-browser-smoke.mjs";
+import { runResourceAccountsBrowserSmoke } from "./lib/resource-accounts-browser-smoke.mjs";
 
 // 所有冒烟窗口（含子冒烟自己开的）都经它创建：屏幕比请求的窗口小（CI 的 macos runner）时也拿到请求的尺寸。
 const SmokeWindow = sizedWindowClass(BrowserWindow);
@@ -546,6 +547,7 @@ async function runSmoke() {
   await runSubrunBrowserSmoke({ BrowserWindow: SmokeWindow, baseUrl, screenshotDir: process.env.BROWSER_SMOKE_SCREENSHOTS });
   await runJobHistoryLookupBrowserSmoke({ BrowserWindow: SmokeWindow, baseUrl, screenshotDir: process.env.BROWSER_SMOKE_SCREENSHOTS });
   await runRootAdminBrowserSmoke({ win, baseUrl, waitFor, screenshotDir: process.env.BROWSER_SMOKE_SCREENSHOTS });
+  await runResourceAccountsBrowserSmoke({ BrowserWindow: SmokeWindow, baseUrl });
   assert.equal(await win.webContents.executeJavaScript('document.getElementById("dlgSettings").scrollWidth <= document.getElementById("dlgSettings").clientWidth + 2'), true);
   const overflow = await win.webContents.executeJavaScript('document.documentElement.scrollWidth - document.documentElement.clientWidth');
   assert.ok(overflow <= 2, `主页面不得横向溢出（超出 ${overflow}px）`);
@@ -675,13 +677,13 @@ async function checkResourcesPanel(pageEval) {
       && (document.getElementById("cpuTrendLine").getAttribute("d") || "").startsWith("M");
   })()`), async () => `resources panel did not render injected data: ${await pageEval('document.querySelector(".panel-servers").innerText')}`);
   await checkTrendRanges(pageEval);
-  // app.js 目前只把 usage 传给 renderRemoteLoad（整层透传是集成 follow-up），它的下一轮渲染
-  // 会把 GPU 区收起。这里以同一份数据带整层重渲（截图与窄屏断言前各调一次），覆盖 GPU 区；
-  // 接线补上后两边签名相同，本调用被 memo 跳过。
+  // 用同一份资源层走负载和多账号 GPU 的正式渲染入口，截图与窄屏检查覆盖两者。
   await pageEval(`(() => {
     const FIXTURE = ${JSON.stringify(fixture)};
-    window.__resourcesSmokeRender = () => import("/assets/js/render/load-panel.js").then((m) => {
+    window.__resourcesSmokeRender = () => Promise.all([import("/assets/js/render/load-panel.js"), import("/assets/js/app/gpu-connections-controller.js")]).then(([m, g]) => {
       m.renderRemoteLoad({ ok: true, output: FIXTURE.output }, { id: "fixture-server", host: "fixture.invalid" }, FIXTURE.layer.checkedAt, FIXTURE.layer.usage, FIXTURE.layer);
+      window.__resourceGpu ||= g.createGpuConnectionsController({ doc: document, storage: { getItem: () => '["fixture-server"]' }, trend: false });
+      window.__resourceGpu.render({ activeServerId: "fixture-server", layers: { resources: { "fixture-server": FIXTURE.layer } } }, { servers: [{ id: "fixture-server", host: "fixture.invalid", sshUser: "fixture" }] });
       document.querySelectorAll(".toast-item").forEach((el) => el.remove());
       return true;
     });
@@ -689,7 +691,7 @@ async function checkResourcesPanel(pageEval) {
   })()`);
   await waitFor(() => pageEval(`window.__resourcesSmokeRender().then(() => !document.getElementById("resGpuSection").hidden
     && document.querySelectorAll("#resGpuList .res-gpu-row").length === 8
-    && document.getElementById("resGpuSummary").textContent.includes("8 卡 · A100-SXM4-80GB"))`), "GPU section did not render 8 rows");
+    && document.getElementById("resGpuList").textContent.includes("8 卡 · A100-SXM4-80GB"))`), "GPU section did not render 8 rows");
   const originalTheme = await pageEval('document.body.getAttribute("data-theme")');
   if (process.env.BROWSER_SMOKE_SCREENSHOTS) {
     await capturePanel("resources-light.png", { width: 1100, theme: "light" });

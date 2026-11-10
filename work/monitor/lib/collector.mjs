@@ -17,6 +17,7 @@ import { fileURLToPath } from "node:url";
 import { attachGpuUsers, parseGpuAppLine, parseGpuCardLine, parseGpuProcLine } from "./gpu-cards.mjs";
 import { assertSafePort, buildProbeSshArgs } from "./ssh-args.mjs";
 import { toPort } from "./validators.mjs";
+import { SSH_JUMP_EXTRA_TIMEOUT_MS } from "./ssh-route.mjs";
 
 export const COLLECTOR_SCRIPT_PATH = path.join(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -95,7 +96,7 @@ export function buildCollectorInvocation({
     file: "ssh",
     args,
     input: loadCollectorScript(),
-    timeoutMs: COLLECTOR_TIMEOUT_MS[profile],
+    timeoutMs: COLLECTOR_TIMEOUT_MS[profile] + (server.sshJumpServerId ? SSH_JUMP_EXTRA_TIMEOUT_MS : 0),
   };
 }
 

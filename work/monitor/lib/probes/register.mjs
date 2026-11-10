@@ -13,6 +13,7 @@ import { isUsageEligible, USAGE_BACKFILL_INTERVAL_MS, USAGE_SCAN_INTERVAL_MS } f
 import { USAGE_SCAN_TIMEOUT_MS } from "../usage/scan.mjs";
 import { toPort } from "../validators.mjs";
 import { COLLECT_SLOW_INTERVAL_MS, COLLECT_SLOW_TIMEOUT_MS } from "./collect.mjs";
+import { SSH_JUMP_EXTRA_TIMEOUT_MS } from "../ssh-route.mjs";
 import { shouldRegisterValidation, VALIDATION_INTERVAL_MS, validationTimeoutMs } from "./validation.mjs";
 
 // reclaude 关闭时 fast 采集仍取回 reclaude 两段（脚本不变、端口证据不受影响），只是不再扫描。
@@ -132,7 +133,7 @@ export function createProbeRegistrar({ getConfig, getLocalProxyLog, ctx, process
       id: PROCESSES_PROBE_ID,
       layer: "channel",
       intervalMs: 5000,
-      timeoutMs: 10000,
+      timeoutMs: processes.queryTimeoutMs || 10000,
       run: processes.runProcessesProbe,
     });
     const agentProbeIds = registerAgentProbes({ scheduler, config, getShouldBeRunning, isChannelOk });
@@ -160,7 +161,7 @@ export function createProbeRegistrar({ getConfig, getLocalProxyLog, ctx, process
         id,
         layer: "resources",
         intervalMs: COLLECT_SLOW_INTERVAL_MS,
-        timeoutMs: COLLECT_SLOW_TIMEOUT_MS,
+        timeoutMs: COLLECT_SLOW_TIMEOUT_MS + (server.sshJumpServerId ? SSH_JUMP_EXTRA_TIMEOUT_MS : 0),
         usesSsh: true,
         hostKey: () => server.host,
         enabled: () => getShouldBeRunning(),

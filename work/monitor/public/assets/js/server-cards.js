@@ -57,6 +57,7 @@ export function serverFormValues(server) {
     sshPort: server?.sshPort || 22,
     sshUser: server?.sshUser || "",
     sshIdentityFile: server?.sshIdentityFile || "",
+    sshJumpServerId: server?.sshJumpServerId || "",
     remotePort: server?.remotePort ?? "",
     tunnel: server ? server.tunnel !== false : false,
     monitor: server?.monitorEnabled !== false && server?.disabled !== true,
@@ -70,6 +71,7 @@ export function applyServerFormValues(form, values) {
   if (form.elements.sshPort) form.elements.sshPort.value = values.sshPort;
   if (form.elements.sshUser) form.elements.sshUser.value = values.sshUser;
   if (form.elements.sshIdentityFile) form.elements.sshIdentityFile.value = values.sshIdentityFile;
+  if (form.elements.sshJumpServerId) form.elements.sshJumpServerId.value = values.sshJumpServerId || "";
   if (form.elements.remotePort) form.elements.remotePort.value = values.remotePort;
   if (form.elements.tunnel) form.elements.tunnel.checked = values.tunnel;
   if (form.elements.monitor) form.elements.monitor.checked = values.monitor;
@@ -81,7 +83,7 @@ export function applyServerFormValues(form, values) {
 // 与其让用户填完再报错，不如直接隐藏密码框并说明改用密钥。platform 取自 /api/status.platform。
 export function passwordFieldPolicy(platform) {
   if (platform === "win32") {
-    return { enabled: false, hint: "Windows 版暂不支持密码登录 SSH，请改用密钥或 ssh-agent。" };
+    return { enabled: true, hint: "密码由本机凭据保管库保存；Windows 需要系统自带的 OpenSSH 客户端。" };
   }
   return { enabled: true, hint: "" };
 }
@@ -215,6 +217,11 @@ export function initServerRegistryUi({ getJson, postJson, patchJson, deleteJson,
     for (const button of [...form.querySelectorAll("button"), ...list.querySelectorAll("button")]) button.disabled = value;
   }
   function syncTunnelField() {
+    const jumping = Boolean(form.elements.sshJumpServerId?.value);
+    if (form.elements.tunnel) {
+      form.elements.tunnel.disabled = jumping;
+      if (jumping) form.elements.tunnel.checked = false;
+    }
     if (form.elements.remotePort) {
       form.elements.remotePort.required = form.elements.tunnel.checked;
       form.elements.remotePort.disabled = !form.elements.tunnel.checked;
@@ -275,6 +282,14 @@ export function initServerRegistryUi({ getJson, postJson, patchJson, deleteJson,
     const data = await getJson("/api/servers");
     revision = data.revision ?? 0;
     currentPayload = data;
+    const routeSelect = form.elements.sshJumpServerId;
+    if (routeSelect) {
+      const selected = routeSelect.value;
+      routeSelect.innerHTML = `<option value="">公网 / 本机直连</option>${(data.servers || [])
+        .filter((s) => s.id !== editingId && !s.disabled && !s.sshJumpServerId)
+        .map((s) => `<option value="${escapeHtml(s.id)}">经 ${escapeHtml(s.name || s.host)}（${escapeHtml(s.sshUser || "默认账号")}）内网跳转</option>`).join("")}`;
+      routeSelect.value = selected;
+    }
     if (editingId && editRevision !== revision) {
       const fresh = (data.servers || []).find(item => item.id === editingId);
       if (fresh && JSON.stringify(serverFormValues(fresh)) === editSnapshot) editRevision = revision;
@@ -363,6 +378,7 @@ export function initServerRegistryUi({ getJson, postJson, patchJson, deleteJson,
     if (form.elements.password) form.elements.password.value = "";
     const body = {
       name: data.name, address: data.address, sshPort: data.sshPort || 22, sshUser: data.sshUser,
+      sshJumpServerId: data.sshJumpServerId || "",
       ...(form.elements.sshIdentityFile ? { sshIdentityFile: data.sshIdentityFile || "" } : {}),
       ...(data.remotePort ? { remotePort: data.remotePort } : {}),
       tunnel: data.tunnel === "on", monitorEnabled: data.monitor === "on",
@@ -391,6 +407,7 @@ export function initServerRegistryUi({ getJson, postJson, patchJson, deleteJson,
     } finally { password = ""; setBusy(false); }
   });
   form.elements.tunnel?.addEventListener("change", syncTunnelField);
+  form.elements.sshJumpServerId?.addEventListener("change", syncTunnelField);
   cancel?.addEventListener("click", () => { if (!busy) { resetForm(); setHint("已取消编辑，可以添加新服务器。"); } });
   syncTunnelField();
   applyPlatform();

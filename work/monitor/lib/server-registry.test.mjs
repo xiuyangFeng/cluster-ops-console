@@ -429,3 +429,13 @@ test("ServerRegistry: 更换地址撤销旧密码绑定与hostkey，删除旧连
   settleTest({ code: 0, stdout: "", stderr: "" }); await test;
   assert.equal(registry.list().servers[0].state, "configured");
 });
+
+test("同名节点的不同 SSH 账号生成独立连接标识，可同时保留", async () => {
+  const { registry } = registryHarness();
+  const root = await registry.add({ name: "node04", address: "203.0.113.4", sshUser: "root", tunnel: false });
+  const user = await registry.add({ name: "node04", address: "203.0.113.4", sshUser: "user01", tunnel: false });
+  assert.notEqual(root.id, user.id);
+  assert.equal(user.id, "node04-user01");
+  const again = await registry.add({ name: "node04", address: "203.0.113.4", sshUser: "user01", tunnel: false });
+  assert.equal(again.id, user.id);
+});

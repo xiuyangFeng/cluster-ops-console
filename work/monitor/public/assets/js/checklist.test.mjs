@@ -278,3 +278,10 @@ test("探针退避：查看中的服务器探测已放慢时，断开横幅末�
   // 链路正常（退避只可能是刚恢复前的残留）：正常横幅不带这句。
   assert.equal(getDiagnosticMsg({ ...base, health: "ready", activeServerId: "server-01", probeBackoff: backedOff }).body.includes("探测已放慢"), false);
 });
+
+test("Windows 查询能力故障显示原因和下一次检查，不给重启所有连接按钮", () => {
+  const msg = getDiagnosticMsg({ health: "waiting", shouldBeRunning: true, layers: { channel: { detail: { processQueryDiagnostic: { message: "系统 PowerShell 无法启动，保留现有连接", nextRetryAt: Date.now() + 300000 } } } } });
+  assert.equal(msg.title, "Windows 进程检测暂不可用");
+  assert.match(msg.body, /PowerShell.*保留现有连接.*下次检查/);
+  assert.equal(msg.action.kind, "none");
+});

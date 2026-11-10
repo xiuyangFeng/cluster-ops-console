@@ -390,7 +390,8 @@ function directNode(name, status, stateRaw, kvLines, selfUser) {
   const memAvailKb = toInt(kv.mem_avail_kb);
   node.memTotalMb = memTotalKb == null ? null : Math.round(memTotalKb / 1024);
   node.memFreeMb = memAvailKb == null ? null : Math.round(memAvailKb / 1024);
-  node.gpus = buildDirectGpus(cards.sort((a, b) => a.index - b.index), apps, selfUser);
+  if (kv.user) node.sshUser = clip(kv.user, SHORT_MAX) || null;
+  node.gpus = buildDirectGpus(cards.sort((a, b) => a.index - b.index), apps, node.sshUser || selfUser);
   return node;
 }
 

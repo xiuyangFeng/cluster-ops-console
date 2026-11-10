@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { shellSingleQuote } from "./shell/quote.mjs";
 import { assertVaultPassword } from "./vault-ipc.mjs";
+import { replyToAskpass } from "./ssh-askpass-helper.mjs";
 
 const ASKPASS_SCRIPT = fileURLToPath(import.meta.url);
 
@@ -16,15 +17,13 @@ function clearAskpassSecret(filePath) {
 // SSH 密码只留在此进程内存中；磁盘上的 helper 不含凭据。每次连接使用独立、
 // 最多读取一次且有超时的本机通道，退出/异常统一 dispose，不把密码放进 argv/env。
 //
-// Windows：日常采集与隧道仍不支持密码（抛 password-unsupported，行为不变）。只有 App 内接入引导
-// "用一次密码装公钥"那一步显式传 allowWindows:true——helper 是一个纯 ASCII 的 .cmd，node 与脚本路径
-// 经环境变量交给它（路径可能含中文用户名，写进批处理文件会被 OEM 代码页读坏）。OpenSSH for Windows
-// 8.1 起才认 SSH_ASKPASS；更旧的版本这里会失败，引导页据此退到"在终端里输一次密码"。
+// Windows 显式启用时以原生 node/Electron + --import 应答，绕开批处理的代码页和启动限制。
 export async function createPasswordSshSession({
-  password, helperDir, env = process.env, platform = process.platform,
+  password, passwords = null, helperDir, env = process.env, platform = process.platform,
   nodePath = process.execPath, ttlMs = 60000, allowWindows = false,
 } = {}) {
-  let secret = assertVaultPassword(password);
+  let secret = passwords ? null : assertVaultPassword(password);
+  let credentials = passwords?.map((item) => ({ ...item, password: assertVaultPassword(item.password) })) || [];
   const windows = platform === "win32";
   if (windows && !allowWindows) {
     throw Object.assign(new Error("Windows 密码接入需要原生 SSH askpass 程序；请使用 SSH 密钥"), { code: "password-unsupported" });
@@ -32,22 +31,28 @@ export async function createPasswordSshSession({
   if (!helperDir) throw new Error("密码连接需要 helperDir");
   mkdirSync(helperDir, { recursive: true, mode: 0o700 });
   chmodSync(helperDir, 0o700);
-  const helper = join(helperDir, `broker-helper-${randomBytes(12).toString("hex")}${windows ? ".cmd" : ""}`);
-  const helperBody = windows
-    ? '@echo off\r\n"%CODEX_ASKPASS_NODE%" "%CODEX_ASKPASS_SCRIPT%" %*\r\n'
-    : `#!/bin/sh\nexec ${shellSingleQuote(nodePath)} ${shellSingleQuote(ASKPASS_SCRIPT)} "$@"\n`;
-  writeFileSync(helper, helperBody, { mode: 0o700, flag: "wx" });
+  const helper = windows ? null : join(helperDir, `broker-helper-${randomBytes(12).toString("hex")}`);
+  if (helper) writeFileSync(helper, `#!/bin/sh\nexec ${shellSingleQuote(nodePath)} ${shellSingleQuote(ASKPASS_SCRIPT)} "$@"\n`, { mode: 0o700, flag: "wx" });
   const token = randomBytes(32).toString("hex");
   const tokenBytes = Buffer.from(token);
-  const server = createServer((req, res) => {
+  const server = createServer(async (req, res) => {
     const received = Buffer.from(String(req.headers["x-askpass-token"] || ""));
     const authorized = received.length === tokenBytes.length && timingSafeEqual(received, tokenBytes);
-    if (req.method !== "POST" || req.url !== "/password" || req.headers.origin || !authorized || secret === null) {
+    if (req.method !== "POST" || req.url !== "/password" || req.headers.origin || !authorized || (secret === null && !credentials.length)) {
       res.writeHead(403, { "cache-control": "no-store" });
       return res.end();
     }
-    const value = secret;
-    secret = null;
+    let value = secret;
+    if (credentials.length) {
+      try {
+        let body = "";
+        for await (const chunk of req) { body += chunk; if (body.length > 4096) throw new Error("body too large"); }
+        const prompt = String(JSON.parse(body).prompt || "").trim();
+        const index = credentials.findIndex((item) => prompt === `${item.user}@${item.host}'s password:`);
+        if (index < 0) throw new Error("unexpected password prompt");
+        value = credentials.splice(index, 1)[0].password;
+      } catch { res.writeHead(403); return res.end(); }
+    } else secret = null;
     res.writeHead(200, { "content-type": "application/json", "cache-control": "no-store" });
     res.end(JSON.stringify({ password: value }));
   });
@@ -59,6 +64,7 @@ export async function createPasswordSshSession({
     if (closed) return;
     closed = true;
     secret = null;
+    credentials = [];
     clearTimeout(timer);
     clearAskpassSecret(helper);
     server.closeAllConnections();
@@ -77,8 +83,8 @@ export async function createPasswordSshSession({
     return {
       args: ["-o", "BatchMode=no", "-o", "NumberOfPasswordPrompts=1", "-o", "PreferredAuthentications=password", "-o", "PasswordAuthentication=yes", "-o", "KbdInteractiveAuthentication=no", "-o", "PubkeyAuthentication=no", "-o", "ControlMaster=no", "-o", "ControlPath=none"],
       env: {
-        ...sessionEnv, ELECTRON_RUN_AS_NODE: "1", DISPLAY: env.DISPLAY || ":0", SSH_ASKPASS: helper, SSH_ASKPASS_REQUIRE: "force", CODEX_ASKPASS_URL: `http://127.0.0.1:${server.address().port}`, CODEX_ASKPASS_TOKEN: token,
-        ...(windows ? { CODEX_ASKPASS_NODE: nodePath, CODEX_ASKPASS_SCRIPT: ASKPASS_SCRIPT } : {}),
+        ...sessionEnv, ELECTRON_RUN_AS_NODE: "1", DISPLAY: env.DISPLAY || ":0", SSH_ASKPASS: windows ? nodePath : helper, SSH_ASKPASS_REQUIRE: "force", CODEX_ASKPASS_URL: `http://127.0.0.1:${server.address().port}`, CODEX_ASKPASS_TOKEN: token,
+        ...(windows ? { NODE_OPTIONS: `${sessionEnv.NODE_OPTIONS || ""} --import=${JSON.stringify(new URL("./ssh-askpass-helper.mjs", import.meta.url).href)}`.trim(), CODEX_ASKPASS_NATIVE_ENTRY: "1" } : {}),
       },
       dispose,
     };
@@ -89,7 +95,7 @@ export async function createPasswordSshSession({
 }
 
 export async function runWithPasswordSsh({ password, helperDir, args, options = {}, execFileImpl } = {}) {
-  const session = await createPasswordSshSession({ password, helperDir, env: options.env || process.env });
+  const session = await createPasswordSshSession({ password, helperDir, env: options.env || process.env, allowWindows: true });
   try {
     return await execFileImpl("ssh", [...session.args, ...args], { ...options, env: session.env });
   } finally {
@@ -99,17 +105,5 @@ export async function runWithPasswordSsh({ password, helperDir, args, options = 
 
 const isMain = process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1];
 if (isMain) {
-  if (process.env.CODEX_ASKPASS_URL) {
-    try {
-      if (!/password[:?]?\s*$/i.test(process.argv.slice(2).join(" "))) process.exit(1);
-      const url = new URL(process.env.CODEX_ASKPASS_URL);
-      if (url.protocol !== "http:" || url.hostname !== "127.0.0.1" || url.username || url.password) process.exit(1);
-      const result = await fetch(`${url.origin}/password`, { method: "POST", redirect: "error", signal: AbortSignal.timeout(5000), headers: { "x-askpass-token": process.env.CODEX_ASKPASS_TOKEN || "" } });
-      if (!result.ok) process.exit(1);
-      const { password } = await result.json();
-      process.stdout.write(assertVaultPassword(password));
-    } catch { process.exit(1); }
-  } else {
-    process.exit(1);
-  }
+  process.exitCode = await replyToAskpass(process.argv.slice(2).join(" "));
 }

@@ -112,12 +112,15 @@ export function deriveChannelLevel({ main, shouldBeRunning, hasProcessesResult, 
 // detail.downSinceMs 由调用方（持有 channelErrorSince 状态）追加在最后。
 export function buildChannelLayer({ main, levelInfo, flags, procResult, remoteResult, proxyPort = null }) {
   const timing = [procResult, remoteResult];
+  const queryDiagnostic = procResult?.data?.processQueryIndeterminate ? procResult.data.processQueryDiagnostic : null;
   return {
     ...levelInfo,
+    ...(queryDiagnostic ? { level: "waiting", reason: queryDiagnostic.message } : {}),
     checkedAt: latestCheckedAt(timing),
     nextCheckAt: earliestNextCheckAt(timing),
     detail: {
       ...flags,
+      ...(queryDiagnostic ? { processQueryDiagnostic: queryDiagnostic } : {}),
       host: main.host,
       // supervisor 首拍后会把共享代理端口钉死；切换查看服务器不会重启它。
       // 有运行快照时优先展示实际端口，避免把新活跃服务器的配置端口误报成运行端口。

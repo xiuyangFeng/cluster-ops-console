@@ -3,12 +3,12 @@
 // 这里只负责：取 DOM、推进环比状态、就地修补、把统一口径的采样点交给 charts.js，
 // 再把 charts.js 那边的趋势摘要（范围内高低值、近 7 天磁盘序列）挂回明细行。
 import { claimTrendServer, getTrendSummary, onTrendChange, pushSample, trendRevision } from "../charts.js";
-import { ensureGpuTrend, GPU_TREND_SPAN_MS, gpuSeriesFor, gpuSparkSvg, gpuTrendRevision, isGpuIdleHoldingMemory, onGpuTrendChange } from "../gpu-trend.js";
+import { gpuTrendRevision, onGpuTrendChange } from "../gpu-trend.js";
 import { createElementLookup, morphInnerHtml, setAttr, setText } from "../dom-utils.js";
 import { clampPct } from "../thresholds.js";
 import { createMemoRender, timeBucket } from "./render-skip.js";
 import { buildResourcePanelModel, directGpuNodes, withSampleDeltas, withTrendNotes } from "./resources-model.js";
-import { buildGpuSummaryHtml, buildGpuTableHtml, buildResourceNoticeHtml, buildTileBodyHtml } from "./resources-view.js";
+import { buildResourceNoticeHtml, buildTileBodyHtml } from "./resources-view.js";
 import { buildTunnelEgressModel } from "./tunnel-egress-model.js";
 import { buildTunnelEgressHtml } from "./tunnel-egress-view.js";
 
@@ -102,22 +102,6 @@ function renderRemoteLoadImpl(load, activeServer, sampleKey = null, usage = null
     const tile = model.tiles[key];
     setAttr(getEl(`${prefix}Tile`), "data-level", tile.level);
     morphInnerHtml(getEl(`${prefix}Body`), buildTileBodyHtml(tile));
-  }
-
-  const gpuSection = getEl("resGpuSection");
-  if (gpuSection) {
-    const hasGpu = model.gpu.cards.length > 0;
-    if (gpuSection.hidden === hasGpu) gpuSection.hidden = !hasGpu;
-    morphInnerHtml(getEl("resGpuSummary"), buildGpuSummaryHtml(model.gpu.summary));
-    // 近 24 小时走势：按需增量拉取（60 秒内不重复），到货后 onGpuTrendChange 补渲一帧。
-    const serverId = activeServer?.id || null;
-    if (hasGpu && serverId) ensureGpuTrend(serverId);
-    const end = Date.now();
-    // 走势按分组取：key "" = 本机各卡，节点名 = 直连节点（node04）各卡
-    const trendFor = serverId ? (key, index) => gpuSparkSvg(gpuSeriesFor(serverId, index, key), { start: end - GPU_TREND_SPAN_MS, end }) : null;
-    const idleHoldFor = serverId ? (key, card) => isGpuIdleHoldingMemory(card, gpuSeriesFor(serverId, card.index, key), { now: end }) : null;
-    // 一张卡一行的列表（节点列合并同一节点的几行）
-    morphInnerHtml(getEl("resGpuList"), buildGpuTableHtml(model.gpu.groups, { trendFor, idleHoldFor }));
   }
 
   // 经隧道出网的程序（layers.resources[id].tunnelEgress）：旧采集脚本 / 还没采到 / 不建隧道的服务器整块隐藏。

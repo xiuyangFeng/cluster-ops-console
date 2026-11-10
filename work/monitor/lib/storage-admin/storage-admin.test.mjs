@@ -496,3 +496,36 @@ test("存储配置：root 不依赖管理员名单，可在页面保存；普通
   await assert.rejects(svc.overview(), (e) => e.status === 403);
   assert.equal(writes.length, 1);
 });
+
+test("存储节点可绑定不同用户名和直连/跳转配置；仅白名单只读命令，权限检查先于 SSH", async () => {
+  let admin = true;
+  const config = { servers: [
+    { id: "master-account", host: "master.example", sshUser: "kai", tunnel: false },
+    { id: "n4-root", host: "node04.example", sshUser: "root", authRef: "mem:root", tunnel: false },
+    { id: "n4-user", host: "node04", sshUser: "user01", sshJumpServerId: "master-account", tunnel: false },
+  ], storageAdmin: { targets: [
+    { id: "n4root", connectionId: "n4-root", roots: ["/mnt"] },
+    { id: "n4user", connectionId: "n4-user", roots: ["/mnt"] },
+  ] } };
+  const calls = [], store = createStorageAdminStore({});
+  const svc = createStorageAdminService({ getConfig: async () => config, isAdmin: () => admin, store, dir: os.tmpdir(),
+    exec: async (cmd, args, options) => { calls.push({ cmd, args, options }); return { code: 255, stdout: "", stderr: "Permission denied" }; } });
+  assert.equal((await svc.overview()).targets.length, 2);
+  assert.equal(calls.length, 0);
+  await svc.refresh("n4root"); await svc.refresh("n4user");
+  assert.deepEqual(calls.map((c) => c.options.server.sshUser), ["root", "user01"]);
+  assert.equal(calls[0].options.server.sshJumpServerId, undefined);
+  assert.equal(calls[1].options.server.sshJumpServerId, "master-account");
+  assert(calls.every((c) => c.args.at(-1) === "python3 /usr/local/lib/codex-storage-admin/storage-admin.py info"));
+  assert.equal(JSON.stringify(calls).includes("password"), false);
+  await store.patchTarget("n4root", { error: { message: "old account private result" }, scans: [{ job: { id: "oldjob123" } }] });
+  config.servers[1] = { ...config.servers[1], sshUser: "another-user" };
+  const overview = await svc.overview();
+  assert.equal(JSON.stringify(overview).includes("old account private result"), false);
+  assert.deepEqual(overview.targets[0].scans, []);
+  await assert.rejects(svc.scanView("n4root", "oldjob123", ""), /本机没有/);
+  admin = false;
+  const before = calls.length;
+  await assert.rejects(svc.refresh("n4root"), (e) => e.status === 403);
+  assert.equal(calls.length, before);
+});

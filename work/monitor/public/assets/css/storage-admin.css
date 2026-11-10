@@ -508,3 +508,10 @@ button.sa-tm-tile::after {
   .sa-idle-sum { margin-left: 0; flex-basis: 100%; }
   .sa-tm { aspect-ratio: 4 / 3; }
 }
+
+/* 节点账号多选：标签自动换行，每个已选连接独立分组。 */
+.resource-accounts { display: flex; flex-wrap: wrap; gap: 10px 16px; margin: 8px 0 14px; }
+.resource-accounts p { flex-basis: 100%; margin: 0; font-weight: 600; }
+.resource-accounts label, .sa-tabs .sa-tab { display: inline-flex; align-items: center; gap: 7px; cursor: pointer; }
+.gpu-connection { margin-top: 18px; padding-top: 12px; border-top: 1px solid var(--border, #ddd); }
+.gpu-connection h4 { margin: 0 0 6px; }

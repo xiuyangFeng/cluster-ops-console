@@ -1342,7 +1342,7 @@ function makeOrphanScenario({
     // 第一次是冷启动的远端端口探测（必须失败才会走到 spawn）；之后每一次都是
     // 孤儿判定或下一拍 ensure 的复核，由 remoteListening 决定。
     execFileImpl: async (command) => {
-      if (command === "powershell") {
+      if (command.endsWith("\\powershell.exe")) {
         scanned.push(true);
         const rows = typeof sshProcesses === "function" ? sshProcesses(scanned.length) : sshProcesses;
         return { code: 0, stdout: JSON.stringify(rows.map((p) => ({ ProcessId: p.pid, CommandLine: p.command }))) };

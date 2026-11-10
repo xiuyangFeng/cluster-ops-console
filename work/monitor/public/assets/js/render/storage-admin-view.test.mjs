@@ -178,14 +178,14 @@ test("按用户：不活跃的行加紫色标记与标签，时长切换与「�
   assert.match(unknown, /重新「按用户统计」一次/);
 });
 
-test("多台机器：标签页一次只展开一台，标签带最满那块盘的占用", () => {
+test("多台机器：勾选独立节点账号，同时分组展示", () => {
   const a = target();
   const b = target({ id: "node04", label: "node04", host: "n4", info: { ...target().info, mounts: [{ mount: "/mnt/data1", size: 100, used: 30, avail: 70, inodes: 1, iused: 1 }] }, users: [] });
-  const html = buildOverviewHtml({ key: { exists: true }, targets: [a, b] }, { now: NOW, selected: "node04" });
-  assert.match(html, /data-sa-target-tab="master" aria-selected="false"/);
-  assert.match(html, /data-sa-target-tab="node04" aria-selected="true"/);
+  const html = buildOverviewHtml({ key: { exists: true }, targets: [a, b] }, { now: NOW, selected: ["master", "node04"] });
+  assert.match(html, /data-sa-target-tab="master" checked/);
+  assert.match(html, /data-sa-target-tab="node04" checked/);
   assert.match(html, /<span class="sa-tab-pct" data-level="crit">93%<\/span>/);
-  assert.equal((html.match(/<section class="sa-target">/g) || []).length, 1);
+  assert.equal((html.match(/<section class="sa-target">/g) || []).length, 2);
   assert.match(html, /\/mnt\/data1/);
 });
 

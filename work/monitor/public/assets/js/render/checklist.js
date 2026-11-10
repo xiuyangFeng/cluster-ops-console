@@ -181,6 +181,12 @@ export function getDiagnosticMsg(status) {
     remotePort: activeServer.remotePort ?? null,
   };
 
+  const processDiagnostic = status.layers?.channel?.detail?.processQueryDiagnostic;
+  if (processDiagnostic) {
+    const retry = processDiagnostic.nextRetryAt ? ` 下次检查：${formatClock(processDiagnostic.nextRetryAt, { locale: "zh-CN", hour12: false })}。` : "";
+    return { title: "Windows 进程检测暂不可用", body: `${processDiagnostic.message}${retry}`, action: BANNER_ACTIONS.none };
+  }
+
   if (status.health === "waiting") {
     return {
       title: "正在检测连接…",

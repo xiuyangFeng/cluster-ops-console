@@ -93,7 +93,7 @@ test("Windows uses fixed noninteractive argv and returns all accessible process 
   let cpuMs = 0;
   const probe = createLocalResourceProbe({ platform: "win32", monotonicNow: () => clock,
     execFile: async (command, args, options) => {
-      assert.equal(command, "powershell.exe");
+      assert.match(command, /\\powershell\.exe$/i);
       assert.deepEqual(args.slice(0, 3), ["-NoProfile", "-NonInteractive", "-Command"]);
       assert.equal(options.maxOutputBytes, 256 * 1024);
       assert.equal(options.timeoutMs, 2000);
