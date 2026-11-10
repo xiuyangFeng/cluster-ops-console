@@ -421,7 +421,7 @@ test("registerProbes: processes 间隔为 5 秒，短于 lifecycle 的 6 秒 fre
   const def = registered.get("processes");
   assert.ok(def);
   assert.equal(def.intervalMs, 5000);
-  assert.equal(def.timeoutMs, 10000);
+  assert.equal(def.timeoutMs, process.platform === "win32" ? 40000 : 10000, "Windows 总预算覆盖 CIM / WMI / tasklist 及子进程退出宽限");
 });
 
 describe("registerProbes: log-signals", () => {
