@@ -497,6 +497,64 @@ test("存储配置：root 不依赖管理员名单，可在页面保存；普通
   assert.equal(writes.length, 1);
 });
 
+test("已配置节点可追加目录：保留扫描、提示同步服务器授权，检测到新范围才就绪", async () => {
+  const original = { id: "master", host: "master.example", roots: ["/public"] };
+  let config = { storageAdmin: { identityFile: "~/.ssh/special", targets: [original] } };
+  let remoteRoots = ["/public"], calls = 0;
+  const writes = [], store = createStorageAdminStore({});
+  const svc = createStorageAdminService({ getConfig: async () => config, isAdmin: () => true, store, dir: os.tmpdir(),
+    savePersonalConfig: async (patch) => { writes.push(patch); config = { ...config, ...patch }; },
+    exec: async () => { calls++; return { code: 0, stdout: JSON.stringify({ k: "info", v: scriptVersion(SOURCE), roots: remoteRoots.map((p) => ({ path: p, children: [] })), jobs: [], mounts: [] }) }; } });
+  await svc.refresh("master");
+  const oldScan = { job: { id: "oldjob123", root: "/public", state: "done" } };
+  await store.patchTarget("master", { scans: [oldScan] });
+  const saved = await svc.configureTarget({ ...original, roots: ["/public", "/data"] });
+  assert.equal(saved.scopeChanged, true);
+  assert.equal(calls, 1, "保存目录不发 SSH、不自动执行安装或扫描");
+  assert.equal(writes[0].storageAdmin.identityFile, "~/.ssh/special");
+  let view = (await svc.overview()).targets[0];
+  assert.equal(view.status.code, "roots-update");
+  assert.deepEqual(view.scans, [oldScan.job]);
+  assert.equal((await svc.refresh("master")).status.code, "roots-update", "只刷新不能替代服务器授权更新");
+  remoteRoots = ["/public", "/data"];
+  view = await svc.refresh("master");
+  assert.equal(view.status.state, "ok");
+  assert.deepEqual(view.info.roots.map((r) => r.path), remoteRoots);
+  assert.deepEqual(view.scans, [oldScan.job]);
+  assert.equal((await svc.configureTarget({ ...original, roots: ["/data", "/public"] })).scopeChanged, false);
+  assert.deepEqual((await svc.overview()).targets[0].scans, [oldScan.job], "仅重排目录不丢历史扫描");
+  await assert.rejects(svc.configureTarget({ ...original, host: "other.example", roots: remoteRoots }), (e) => e.status === 400);
+  await store.patchTarget("master", { jobs: [{ id: "runjob123", root: "/data", state: "running" }] });
+  await assert.rejects(svc.configureTarget({ ...original, roots: ["/data"] }), (e) => e.status === 409);
+  assert.equal(writes.length, 2, "扫描运行中拒绝改范围且不写配置");
+  await store.patchTarget("master", { jobs: [] });
+  await svc.configureTarget({ ...original, roots: ["/data"] });
+  view = (await svc.overview()).targets[0];
+  assert.deepEqual(view.scans, [], "移出范围的历史扫描不再展示");
+  assert.deepEqual(view.info.roots.map((r) => r.path), ["/data"]);
+  assert.equal(view.status.state, "ok", "服务器已有更宽授权时，缩小本机查看范围不要求覆盖其它客户端的授权");
+  await svc.configureTarget({ ...original, roots: ["/data/team"] });
+  view = (await svc.overview()).targets[0];
+  assert.equal(view.status.state, "ok", "已授权父目录内新增子目录不用重复安装");
+  assert.deepEqual(view.info.roots.map((r) => r.path), ["/data/team"]);
+});
+
+test("修改目录不能重新绑定旧账号的缓存", async () => {
+  const target = { id: "n4", connectionId: "n4-account", roots: ["/mnt"] };
+  let config = { servers: [{ id: "n4-account", host: "node04", sshUser: "root" }], storageAdmin: { targets: [target] } };
+  const store = createStorageAdminStore({});
+  const svc = createStorageAdminService({ getConfig: async () => config, isAdmin: () => true, store, dir: os.tmpdir(),
+    savePersonalConfig: async (patch) => { config = { ...config, ...patch }; },
+    exec: async () => ({ code: 0, stdout: JSON.stringify({ k: "info", v: scriptVersion(SOURCE), roots: [{ path: "/mnt", children: [] }], jobs: [] }) }) });
+  await svc.refresh("n4");
+  await store.patchTarget("n4", { scans: [{ job: { id: "secret123", root: "/mnt" } }] });
+  config.servers[0] = { ...config.servers[0], sshUser: "newuser" };
+  await svc.configureTarget({ ...target, roots: ["/mnt", "/data"] });
+  const view = (await svc.overview()).targets[0];
+  assert.equal(view.info, null);
+  assert.deepEqual(view.scans, []);
+});
+
 test("存储节点可绑定不同用户名和直连/跳转配置；仅白名单只读命令，权限检查先于 SSH", async () => {
   let admin = true;
   const config = { servers: [

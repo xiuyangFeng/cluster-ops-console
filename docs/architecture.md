@@ -143,6 +143,8 @@ v2.52 界面外壳：`app/sidebar.js` 管侧边栏开合 / 窄窗浮层 / 细栏
 
 v2.99：`onboarding-guide/local-readiness.mjs` 只检查本机密钥是否存在，不将文件存在当成网络或授权成功；缺失所配置密钥时，经引导摘要提示重检。引导的 `form.mode` 区分 `monitor`（完成 SSH 后查看资源，不新建工具通道）与 `full`（端口、通道与集群代理配置），旧版进度按完整模式继续。`render/onboarding-progress.js` 为前八步提供动态下一步，后续工具准备仍用 `onboarding-setup.js`；存储接入指引使用已有生成密钥、安装命令和检测动作。新电脑浏览器验收在 `scripts/lib/onboarding-device-browser-smoke.mjs`，使用独立 fixture 目录与假 SSH 流程。
 
+v2.99.1：存储目录范围可在原目标上修改，连接身份校验与范围变更分开；范围改变只保留当前连接且仍在范围内的扫描索引，服务器授权未覆盖新增范围时以 `roots-update` 提示更新授权，已授权父目录内的子目录直接投影为可用入口。保存仅写本机配置，不执行 SSH；服务器授权仍由既有安装命令明确执行。前端草稿独立于概览轮询，节点卡片提供目录管理入口，浏览器验收覆盖追加、失败重试与 520px 编辑布局。
+
 多个 Agent（或多人）同时改代码时，按下面的规则切分，基本不会互相冲突：
 
 1. **按目录认领**。一个任务尽量只动一个区域：前端某面板（`render/<panel>.js` + 对应 `assets/css/` 文件）、某组 API（`lib/http/routes/<领域>.mjs`）、某个探针（`lib/probes/*`）、数据面（`lib/supervisor/*` 或 `lib/proxy/*`）、桌面壳（`work/monitor/desktop/*`）、向导步骤（`scripts/setup/*`）。入口文件（`app.js`、`monitor-server.mjs`、`electron-main.mjs` 等）只在新增装配时才改，改动应是几行接线。

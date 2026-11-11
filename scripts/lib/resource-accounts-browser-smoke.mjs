@@ -31,8 +31,15 @@ export async function runResourceAccountsBrowserSmoke({ BrowserWindow, baseUrl }
       gpu.render(status, { servers });
       assert(document.querySelectorAll(".gpu-connection").length === 2, "全局视角切换不重置多选");
       const overview = { key: { exists: true }, connections: servers, setup: { id: "s1", label: "", host: "", port: 22 }, targets: servers.map((s) => ({ id: s.id, label: s.name, sshUser: s.sshUser, host: s.host, roots: ["/mnt"], status: { state: "unknown" }, users: [], scans: [], jobs: [] })) };
-      let posts = 0;
-      const storageCtrl = createStorageAdminController({ doc: document, getJson: async () => overview, postJson: async () => { posts++; }, storage, isViewVisible: () => true, isHidden: () => false });
+      let posts = 0, reads = 0, savedTarget = null;
+      const storageCtrl = createStorageAdminController({ doc: document, getJson: async () => { reads++; return overview; }, postJson: async (url, payload) => {
+        assert(url === "/api/storage-admin/targets", "编辑目录不应自动生成密钥、安装或扫描");
+        posts++;
+        if (posts === 1) throw new Error("模拟保存失败，重试应保留填写内容");
+        savedTarget = payload;
+        overview.targets = overview.targets.map((t) => t.id === payload.id ? { ...t, ...payload, status: { state: "outdated", code: "roots-update" } } : t);
+        return { saved: true, target: payload, scopeChanged: true };
+      }, storage, isViewVisible: () => true, isHidden: () => false });
       storageCtrl.bind(); storageCtrl.onStatus(status);
       await until(() => document.querySelectorAll(".sa-target").length === 2);
       document.querySelector('[data-sa-target-tab="master"]').click();
@@ -47,9 +54,34 @@ export async function runResourceAccountsBrowserSmoke({ BrowserWindow, baseUrl }
       assert(form.querySelector('[name="roots"]').value === "", "扫描目录由管理员选择");
       assert(form.closest("details").open, "点击后展开配置表单");
       assert(posts === 0, "配置入口不自动保存或扫描");
+      document.querySelector('[data-sa-edit-target="n4"]').click();
+      const editor = () => document.querySelector('[data-sa-target-form]');
+      assert(editor().querySelector('[name="roots"]').value === "/mnt", "管理目录保留原有范围");
+      assert(editor().querySelector('[name="id"]').readOnly, "管理目录不会意外更换节点标识");
+      const extra = editor().querySelector('[name="additionalRoots"]');
+      extra.value = "/data /mnt"; extra.dispatchEvent(new Event("input", { bubbles: true }));
+      const before = reads; storageCtrl.enter("storage");
+      await until(() => reads > before);
+      await new Promise((r) => setTimeout(r, 20));
+      assert(editor().querySelector('[name="additionalRoots"]').value === "/data /mnt", "重读概览不会清掉未保存目录");
+      document.querySelector('[data-sa-save-target]').click();
+      await until(() => posts === 1 && !document.querySelector('[data-sa-save-target]').disabled);
+      assert(editor().querySelector('[name="additionalRoots"]').value === "/data /mnt", "保存失败保留追加输入");
+      document.querySelector('[data-sa-save-target]').click();
+      await until(() => posts === 2 && document.querySelector('[data-sa-guide-stage="scope"]'));
+      assert(savedTarget.id === "n4" && savedTarget.roots.join(" ") === "/mnt /data", "同一节点追加目录并去重，不丢掉原目录");
+      assert(document.querySelector('[data-sa-installer="n4"]').textContent.includes("目录授权"), "保存后引导更新服务器授权");
       storageCtrl.stop?.();
       return { groups: document.querySelectorAll(".gpu-connection").length, storageGroups: document.querySelectorAll(".sa-target").length };
     }).toString()})()`);
     assert.deepEqual(result, { groups: 2, storageGroups: 1 });
+    win.setSize(520, 820);
+    await win.webContents.executeJavaScript(`(async () => {
+      for (let i = 0; i < 100 && window.innerWidth > 520; i++) await new Promise((r) => setTimeout(r, 20));
+      document.querySelector('[data-sa-edit-target="n4"]').click();
+      const form = document.querySelector('[data-sa-target-form]');
+      if (!form.closest('details').open || !form.querySelector('[name="additionalRoots"]')) throw new Error('窄窗口目录编辑未展开');
+      if (document.documentElement.scrollWidth > document.documentElement.clientWidth + 2) throw new Error('目录编辑在窄窗口横向溢出');
+    })()`);
   } finally { win.destroy(); }
 }

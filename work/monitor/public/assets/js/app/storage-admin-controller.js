@@ -22,6 +22,7 @@ export function createStorageAdminController({
   let admin = false;
   let activeServerId = null;
   let data = null;
+  let targetDraft = null;
   let loading = false;
   let error = "";
   const busy = {};
@@ -86,7 +87,7 @@ export function createStorageAdminController({
     if (body) {
       const open = new Set([...body.querySelectorAll("details[open]")].map((d) => d.querySelector("summary")?.textContent));
       const closed = new Set([...body.querySelectorAll("details:not([open])")].map((d) => d.querySelector("summary")?.textContent));
-      body.innerHTML = buildOverviewHtml(data, {
+      body.innerHTML = buildOverviewHtml(targetDraft && data ? { ...data, setup: targetDraft } : data, {
         installers, busy, error, loading, now: now(), fold, selected: prefs.targets ?? (prefs.target ? [prefs.target] : null),
         activity: { months: prefs.months, only: prefs.only },
       });
@@ -289,27 +290,49 @@ export function createStorageAdminController({
     const form = button.closest("[data-sa-target-form]");
     if (!form) return;
     const value = (name) => form.querySelector(`[name="${name}"]`)?.value?.trim() || "";
-    const target = { id: value("id"), label: value("label"), host: value("host"), port: Number(value("port")), roots: value("roots").split(/[\s,，]+/).filter(Boolean), ...(value("connectionId") ? { connectionId: value("connectionId") } : {}) };
-    data = { ...data, setup: { ...target, roots: target.roots.join(" ") } };
-    const saved = await act("target", () => postJson("/api/storage-admin/targets", target), { okToast: { title: "存储服务器已保存", message: "继续按接入步骤配置只读扫描。" } });
+    const roots = [...new Set(`${value("roots")} ${value("additionalRoots")}`.split(/[\s,，]+/).filter(Boolean))];
+    const target = { id: value("id"), label: value("label"), host: value("host"), port: Number(value("port")), roots, ...(value("connectionId") ? { connectionId: value("connectionId") } : {}) };
+    captureTargetForm(form);
+    const saved = await act("target", () => postJson("/api/storage-admin/targets", target));
     if (saved) {
       delete installers[saved.target.id];
+      targetDraft = null;
+      showToast?.({ type: "success", title: "存储目录已保存", message: saved.scopeChanged ? "请按页面提示检测或同步服务器目录授权；原有扫描结果保留。" : "继续按接入步骤检测或配置只读扫描。" });
       await load();
     }
+  }
+
+  function captureTargetForm(form) {
+    if (!form) return;
+    const draft = { ...(targetDraft || data?.setup || {}) };
+    for (const name of ["id", "label", "host", "port", "connectionId", "roots", "additionalRoots"]) {
+      const input = form.querySelector(`[name="${name}"]`);
+      if (input) draft[name] = input.value;
+    }
+    targetDraft = draft;
   }
 
   function showTargetForm() {
     const form = $("storageAdminBody")?.querySelector?.("[data-sa-target-form]");
     const details = form?.closest("details");
     if (details) details.open = true;
-    form?.querySelector('[name="roots"]')?.focus();
+    form?.scrollIntoView?.({ block: "center", behavior: "smooth" });
+    (form?.querySelector('[name="additionalRoots"]') || form?.querySelector('[name="roots"]'))?.focus();
+  }
+
+  function editTarget(id) {
+    const target = data?.targets?.find((item) => item.id === id);
+    if (!target || !data.setup || target.running || target.refreshing) return;
+    targetDraft = { ...target, roots: target.roots.join(" "), additionalRoots: "", editing: true };
+    render();
+    showTargetForm();
   }
 
   function configureConnection(id) {
     const connection = data?.connections?.find((item) => item.id === id);
     if (!connection) return;
-    data = { ...data, setup: { id: `${connection.id}-storage`, label: `${connection.name} · ${connection.sshUser}`,
-      connectionId: connection.id, host: connection.host, port: connection.port || 22, roots: "" } };
+    targetDraft = { id: `${connection.id}-storage`, label: `${connection.name} · ${connection.sshUser}`,
+      connectionId: connection.id, host: connection.host, port: connection.port || 22, roots: "" };
     render();
     showTargetForm();
   }
@@ -317,6 +340,7 @@ export function createStorageAdminController({
   const BODY_ACTIONS = [
     ["[data-sa-show-setup]", showTargetForm],
     ["[data-sa-configure]", (button) => configureConnection(button.dataset.saConfigure)],
+    ["[data-sa-edit-target]", (button) => editTarget(button.dataset.saEditTarget)],
     ["[data-sa-save-target]", saveTarget],
     ["[data-sa-fold]", toggleFold],
     ["[data-sa-target-tab]", (b) => {
@@ -440,6 +464,7 @@ export function createStorageAdminController({
     seq += 1;
     admin = next;
     data = null;
+    targetDraft = null;
     browser = null;
     for (const key of Object.keys(installers)) delete installers[key];
     render();
@@ -454,6 +479,7 @@ export function createStorageAdminController({
 
   function bind() {
     $("storageAdminBody")?.addEventListener("click", onClick);
+    $("storageAdminBody")?.addEventListener("input", (event) => captureTargetForm(event.target.closest?.("[data-sa-target-form]")));
     $("storageAdminBody")?.addEventListener("change", (event) => {
       if (!event.target.matches?.("[data-sa-connection]")) return;
       const connection = data?.connections?.find((s) => s.id === event.target.value);
@@ -463,6 +489,7 @@ export function createStorageAdminController({
         const input = form?.querySelector(`[name="${name}"]`);
         if (input) input.value = value;
       }
+      captureTargetForm(form);
     });
     $("storageAdminBrowser")?.addEventListener("click", onBrowserClick);
     bindTips($("storageAdminBody"));

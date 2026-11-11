@@ -89,6 +89,21 @@ test("接入步骤：没有密钥时给「生成密钥」，全部就绪后默�
   assert.match(win, /命令提示符」（cmd，<b>不是 PowerShell<\/b>）/);
 });
 
+test("已配置节点常驻目录管理入口，编辑保留原路径并可追加，待授权显示更新命令", () => {
+  const setup = { id: "master", label: "master", host: "master.example", roots: "/public", editing: true };
+  const html = buildOverviewHtml({ setup, key: { exists: true }, targets: [target()] });
+  assert.match(html, /data-sa-edit-target="master"/);
+  assert.match(html, /name="roots" value="\/public"/);
+  assert.match(html, /name="additionalRoots"/);
+  assert.match(html, /保存目录范围/);
+  assert.match(html, /name="id"[^>]*readonly/);
+  assert.match(html, /name="connectionId"[^>]*disabled/);
+  const updating = { key: { exists: true }, targets: [target({ status: { state: "outdated", code: "roots-update" } })] };
+  assert.match(buildStorageGuideHtml(updating), /data-sa-guide-stage="scope"/);
+  assert.match(buildStorageGuideHtml(updating), /生成目录授权更新命令/);
+  assert.match(buildStorageGuideHtml(updating, { installers: { master: { shell: "cmd" } } }), /data-sa-guide-stage="verify"/);
+});
+
 test("机器卡片：容量条按占比分级，按用户没有数据时给出开配额的说明，目录名转义", () => {
   const html = buildOverviewHtml({ key: { exists: true }, targets: [target()] }, { now: NOW });
   assert.match(html, /data-level="crit"/);

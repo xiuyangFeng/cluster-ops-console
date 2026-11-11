@@ -143,9 +143,17 @@ export function createStorageAdminService({
     const bindingKey = targetBinding(target, await getConfig());
     if (saved.bindingKey !== bindingKey && (saved.bindingKey || target.connectionId)) saved = {};
     const expected = scriptVersion(await script());
-    const info = saved.info ? { ...saved.info, mounts: pickMounts(saved.info.mounts, target.roots) } : null;
+    const remoteRoots = saved.info?.roots || [];
+    const roots = target.roots.flatMap((root) => {
+      const exact = remoteRoots.find((r) => r.path === root);
+      return exact ? [exact] : remoteRoots.some((r) => under(root, r.path)) ? [{ path: root, children: null }] : [];
+    });
+    const info = saved.info ? { ...saved.info, roots, mounts: pickMounts(saved.info.mounts, target.roots) } : null;
     let status = saved.error ? { state: "error", ...saved.error } : info ? { state: "ok" } : { state: "unknown" };
     if (info && info.version !== expected && !saved.error) status = { state: "outdated", message: `服务器端脚本是版本 ${info.version}，本机是 ${expected}：重新运行安装命令升级` };
+    if (info && !saved.error && target.roots.some((root) => !remoteRoots.some((r) => under(root, r.path)))) {
+      status = { state: "outdated", code: "roots-update", message: "目录范围已保存，服务器授权尚未同步：重新生成并运行安装命令，再点检测。原有扫描结果保留。" };
+    }
     const scans = Array.isArray(saved.scans) ? saved.scans : [];
     const jobs = Array.isArray(saved.jobs) ? saved.jobs : [];
     return {
@@ -179,10 +187,24 @@ export function createStorageAdminService({
     if (!target) throw fail("服务器标识、地址或 SSH 端口无效", 400);
     const rest = targets.filter((t) => t.id !== target.id);
     const previous = targets.find((t) => t.id === target.id);
-    if (previous && targetBinding(previous, config) !== targetBinding(target, config)) throw fail("请使用新的服务器标识保存另一个节点或账号，避免混用历史扫描数据", 400);
+    if (previous && targetBinding({ ...previous, roots: target.roots }, config) !== targetBinding(target, config)) throw fail("请使用新的服务器标识保存另一个节点或账号，避免混用历史扫描数据", 400);
+    const scopeChanged = Boolean(previous && JSON.stringify([...previous.roots].sort()) !== JSON.stringify([...target.roots].sort()));
+    if (previous && !scopeChanged) target.roots = previous.roots;
+    let retained = null;
+    if (scopeChanged) {
+      const saved = await store.getTarget(target.id);
+      if (busy.has(target.id) || saved.jobs?.some((job) => job.state === "running")) throw fail("正在检测或扫描这个节点，请结束后再修改目录范围", 409);
+      // 仅改变目录范围时保留同一连接的扫描；账号或路由已变的缓存不能借此重新绑定。
+      const sameBinding = saved.bindingKey === targetBinding(previous, config) || (!saved.bindingKey && !previous.connectionId);
+      retained = sameBinding ? saved : { info: null, checkedAt: null, quota: {} };
+      retained = { ...retained, error: null, bindingKey: targetBinding(target, config),
+        scans: (sameBinding ? saved.scans || [] : []).filter((s) => target.roots.some((root) => under(s.job?.root || "", root))),
+        jobs: (sameBinding ? saved.jobs || [] : []).filter((job) => target.roots.some((root) => under(job.root || "", root))) };
+    }
     if (rest.length >= MAX_TARGETS) throw fail(`最多配置 ${MAX_TARGETS} 台存储服务器`, 400);
     await savePersonalConfig({ storageAdmin: { ...config.storageAdmin, targets: [...rest, target] } });
-    return { saved: true, target };
+    if (retained) { await store.patchTarget(target.id, retained); viewCache = null; }
+    return { saved: true, target, scopeChanged };
   }
 
   async function refresh(targetId) {

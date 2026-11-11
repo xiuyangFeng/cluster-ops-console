@@ -198,11 +198,12 @@ function scansHtml(t, now, fold) {
   )).join("")}</ul>${folded.toggle}</div>`;
 }
 
-export function buildTargetHtml(t, { now = Date.now(), activity = { months: DEFAULT_IDLE_MONTHS, only: false }, fold = null } = {}) {
+export function buildTargetHtml(t, { now = Date.now(), activity = { months: DEFAULT_IDLE_MONTHS, only: false }, fold = null, editable = false } = {}) {
   const state = t.status?.state || "unknown";
   const head = `<div class="sa-target-head"><h3>${escapeHtml(t.label)}</h3><span class="sa-dim">${escapeHtml(t.sshUser || "root")}@${escapeHtml(t.host)} · 允许：${escapeHtml(t.roots.join(" "))}</span>` +
     `<span class="sa-status" data-state="${attr(state)}">${escapeHtml(STATUS_TEXT[state] || state)}</span>` +
     `${t.checkedAt ? `<span class="sa-dim">检测于 ${escapeHtml(formatRelativeTime(t.checkedAt, now) || "刚刚")}</span>` : ""}` +
+    `${editable ? `<button type="button" class="text-btn" data-sa-edit-target="${attr(t.id)}"${t.running || t.refreshing ? " disabled" : ""}>添加 / 管理目录</button>` : ""}` +
     `<button type="button" class="text-btn" data-sa-refresh="${attr(t.id)}"${t.refreshing ? " disabled" : ""}>${t.refreshing ? "刷新中…" : "刷新"}</button></div>`;
   const msg = state !== "ok" && t.status?.message ? `<p class="sa-note" data-level="warn">${escapeHtml(t.status.message)}</p>` : "";
   if (!t.info) return `<section class="sa-target">${head}${msg}<p class="sa-note">还没有数据：完成上面的接入步骤后点「刷新」。</p></section>`;
@@ -234,15 +235,18 @@ function targetTabsHtml(targets, selected) {
 export function buildStorageTargetForm(data, busy = {}) {
   if (!data?.setup) return "";
   const draft = data.setup;
+  const editing = draft.editing === true;
+  const locked = editing ? " readonly" : "";
   const field = (name, label, value, extra = "") => `<label>${label}<input name="${name}" value="${attr(String(value ?? ""))}" ${extra} /></label>`;
-  return `<details class="sa-setup"${data.targets?.length ? "" : " open"}><summary>配置存储服务器</summary>` +
-    '<p class="sa-note">已预填当前连接。选择允许查看的目录并保存，然后按接入步骤配置只读扫描。也可填写另一台服务器。</p>' +
+  return `<details class="sa-setup"${editing || !data.targets?.length ? " open" : ""}><summary>${editing ? `管理 ${escapeHtml(draft.label || draft.id)} 的目录` : "配置存储服务器"}</summary>` +
+    `<p class="sa-note">${editing ? "已保留原目录，可在「新增目录」中追加多个路径；也可修改已有列表。保存后按引导同步服务器授权，再检测。无需重新生成密钥，仍在范围内的扫描结果会保留。" : "已预填当前连接。选择允许查看的目录并保存，然后按接入步骤配置只读扫描。也可填写另一台服务器。"}</p>` +
     '<div class="sa-target-form" data-sa-target-form>' +
-    field("id", "服务器标识", draft.id, 'maxlength="64"') + field("label", "显示名称", draft.label, 'maxlength="64"') +
-    `<label>节点与登录账号<select name="connectionId" data-sa-connection><option value="">专用 root 受限密钥（手填地址）</option>${(data.connections || []).map((s) => `<option value="${attr(s.id)}"${draft.connectionId === s.id ? " selected" : ""}>${escapeHtml(s.name)} · ${escapeHtml(s.sshUser || "默认账号")}@${escapeHtml(s.host)}（${s.sshJumpServerId ? "内网跳转" : "直连"}）</option>`).join("")}</select></label>` +
-    field("host", "服务器地址或 SSH 别名", draft.host, 'autocomplete="off"') + field("port", "SSH 端口", draft.port || 22, 'type="number" min="1" max="65535"') +
-    `<label class="sa-target-roots">允许查看的目录<input name="roots" value="${attr(draft.roots || "")}" placeholder="例如 /home /public /mnt（空格分隔）" /></label>` +
-    `<button type="button" class="btn btn-secondary" data-sa-save-target${busy.target ? " disabled" : ""}>${busy.target ? "正在保存…" : "保存存储服务器"}</button></div></details>`;
+    field("id", "服务器标识", draft.id, `maxlength="64"${locked}`) + field("label", "显示名称", draft.label, 'maxlength="64"') +
+    `<label>节点与登录账号<select name="connectionId" data-sa-connection${editing ? " disabled" : ""}><option value="">专用 root 受限密钥（手填地址）</option>${(data.connections || []).map((s) => `<option value="${attr(s.id)}"${draft.connectionId === s.id ? " selected" : ""}>${escapeHtml(s.name)} · ${escapeHtml(s.sshUser || "默认账号")}@${escapeHtml(s.host)}（${s.sshJumpServerId ? "内网跳转" : "直连"}）</option>`).join("")}</select></label>` +
+    field("host", "服务器地址或 SSH 别名", draft.host, `autocomplete="off"${locked}`) + field("port", "SSH 端口", draft.port || 22, `type="number" min="1" max="65535"${locked}`) +
+    `<label class="sa-target-roots">${editing ? "已有目录（可修改）" : "允许查看的目录"}<input name="roots" value="${attr(draft.roots || "")}" placeholder="例如 /home /public /mnt（空格分隔）" /></label>` +
+    (editing ? `<label class="sa-target-roots">新增目录<input name="additionalRoots" value="${attr(draft.additionalRoots || "")}" placeholder="例如 /data /mnt/archive（空格分隔，合计最多 8 个）" /></label>` : "") +
+    `<button type="button" class="btn btn-secondary" data-sa-save-target${busy.target ? " disabled" : ""}>${busy.target ? "正在保存…" : editing ? "保存目录范围" : "保存存储服务器"}</button></div></details>`;
 }
 
 export function buildUnconfiguredConnectionsHtml(data) {
@@ -260,7 +264,7 @@ export function buildUnconfiguredConnectionsHtml(data) {
 export function buildStorageGuideHtml(data, { installers = {}, busy = {} } = {}) {
   if (!data) return "";
   const targets = data.targets || [];
-  const target = targets.find((t) => t.status?.state !== "ok");
+  const target = targets.find((t) => t.status?.code === "roots-update") || targets.find((t) => t.status?.state !== "ok");
   let stage, title, message, action = "";
   if (!targets.length) {
     stage = "target"; title = "1 · 先选择节点和允许扫描的目录";
@@ -281,6 +285,10 @@ export function buildStorageGuideHtml(data, { installers = {}, busy = {} } = {})
     stage = "key"; title = "2 · 准备这台电脑的存储专用密钥";
     message = "这是管理员存储功能的受限密钥。新电脑生成自己的密钥，再把公钥加入服务器即可；不用拷贝旧电脑的私钥，也不会移除旧电脑的授权。";
     action = `<button type="button" class="text-btn" data-sa-key${busy.key ? " disabled" : ""}>${busy.key ? "正在生成…" : "生成本机存储密钥"}</button>`;
+  } else if (target.status?.code === "roots-update" && !installers[target.id]) {
+    stage = "scope"; title = `为 ${target.label} 同步目录授权`;
+    message = "目录范围已在本机保存。重新生成并在本机执行安装命令，把完整目录范围同步到服务器；使用现有密钥，原有扫描结果保留。完成后点击检测。";
+    action = `<button type="button" class="text-btn" data-sa-installer="${attr(target.id)}"${busy[`inst:${target.id}`] ? " disabled" : ""}>生成目录授权更新命令</button>`;
   } else if (!installers[target.id]) {
     stage = "install"; title = `3 · 为 ${target.label} 准备公钥授权和只读服务`;
     message = "本机密钥已准备好。生成安装命令后，按提示在本机执行一次；服务器上只安装公钥和只读服务。该步骤需要管理员具备目标服务器的 root 登录权限。";
@@ -301,7 +309,7 @@ export function buildOverviewHtml(data, { installers = {}, busy = {}, error = ""
     return buildStorageGuideHtml(data, { installers, busy }) + buildStorageTargetForm(data, busy) + buildUnconfiguredConnectionsHtml(data);
   }
   const err = error ? `<p class="sa-note" data-level="warn">${escapeHtml(error)}</p>` : "";
-  const opts = { now, fold, ...(activity ? { activity } : {}) };
+  const opts = { now, fold, editable: Boolean(data.setup), ...(activity ? { activity } : {}) };
   const setup = buildStorageTargetForm(data, busy);
   const picks = Array.isArray(selected) ? selected : selected ? [selected] : data.targets.map((t) => t.id);
   return `${err}${buildStorageGuideHtml(data, { installers, busy })}${setup}${buildUnconfiguredConnectionsHtml(data)}${buildSetupHtml(data, { installers, busy })}${targetTabsHtml(data.targets, picks)}${data.targets.filter((t) => picks.includes(t.id)).map((t) => buildTargetHtml(t, opts)).join("") || '<p class="sa-note">勾选上方节点与账号以查看存储。</p>'}`;
