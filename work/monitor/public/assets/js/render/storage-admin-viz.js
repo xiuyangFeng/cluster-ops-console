@@ -9,6 +9,7 @@
 // 树图只用一种蓝色的深浅，不按属主上色（树图里任意两块都可能相邻，5 色在相邻判定之外过不了色盲校验）。
 // 所有动态文案一律 escapeHtml；悬停提示的内容放在 data-tip-* 上，由控制器用 textContent 填进提示框。
 import { escapeHtml, formatBytes } from "../store.js";
+import { dateTimeOf, dayKeyOf } from "./usage-model.js";
 
 const size = (n) => (Number.isFinite(n) ? formatBytes(n, { compact: true }) : "—");
 const num = (n) => (Number.isFinite(n) ? Math.round(n).toLocaleString("zh-CN") : "—");
@@ -105,7 +106,7 @@ export function splitBarHtml(u) {
 const USER_ROWS = 40;
 
 // ---------- 不活跃用户 ----------
-// 判定（与管理员约定）：SSH 最后登录与名下文件的最新修改时间都早于所选时长，才算「不活跃」。
+// 登录记录和文件修改均较旧，且没有近期正向活动证据时，只列为疑似不活跃（待核实）。
 //   - 系统账号（uid < 1000，如 root）不判定；没有对应账号的 uid（多半是已删的人）登录一项按「不可能登录」算；
 //   - 任一时间未知（lastlog 读不到 / 统计结果来自旧版本或 repquota，没有修改时间）就不下结论；
 //   - 占用不到 1 GiB 的不标（IDLE_MIN_BYTES）。
@@ -124,7 +125,9 @@ export function idleState(r, { now = Date.now(), months = DEFAULT_IDLE_MONTHS } 
   const writeKnown = r.lastWrite != null;
   const writeStale = writeKnown && r.lastWrite < limit;
   const small = !(r.bytes >= IDLE_MIN_BYTES);
-  return { judged: loginKnown && writeKnown, idle: loginStale && writeStale && !small, small, loginStale, writeStale, loginKnown, writeKnown };
+  const seenAt = r.activity?.lastObservedAt;
+  const recentActivity = Number.isFinite(seenAt) && seenAt <= now && seenAt > limit * 1000;
+  return { judged: loginKnown && writeKnown, idle: loginStale && writeStale && !small && !recentActivity, small, loginStale, writeStale, loginKnown, writeKnown, recentActivity };
 }
 
 // 「N 天前 / N 个月前 / N 年前」；秒。
@@ -139,16 +142,24 @@ export function agoText(sec, now = Date.now()) {
 
 const dateText = (sec) => {
   if (!Number.isFinite(sec) || sec <= 0) return "";
-  const t = new Date(sec * 1000);
-  return `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, "0")}-${String(t.getDate()).padStart(2, "0")}`;
+  return dayKeyOf(sec);
 };
 
 function loginCell(r, st, now) {
   if (r.account === "system") return '<td class="sa-num sa-dim sa-act">系统账号</td>';
   if (r.account === "none") return '<td class="sa-num sa-act" data-stale="true">已无账号</td>';
   if (r.lastLogin == null) return '<td class="sa-num sa-dim sa-act">未知</td>';
-  if (r.lastLogin === 0) return '<td class="sa-num sa-act" data-stale="true">从没登录</td>';
-  return `<td class="sa-num sa-act"${st.loginStale ? ' data-stale="true"' : ""} title="${attr(dateText(r.lastLogin))}">${escapeHtml(agoText(r.lastLogin, now))}</td>`;
+  if (r.lastLogin === 0) return '<td class="sa-num sa-act" title="lastlog 没有记录，不代表从未通过 SSH 登录">无记录</td>';
+  return `<td class="sa-num sa-act"${st.loginStale ? ' data-stale="true"' : ""} title="${attr(`${dateText(r.lastLogin)}（北京时间，lastlog 记录；不是完整 SSH 活动历史）`)}">${escapeHtml(agoText(r.lastLogin, now))}</td>`;
+}
+
+function activityCell(r, now) {
+  const a = r.activity;
+  const live = a?.active && a.checkedAt <= now && a.expiresAt >= now;
+  const labels = live ? [a.sshOnline ? "SSH 在线" : "", a.runningJobs ? `${a.runningJobs} 项作业运行中` : "", a.pendingJobs ? `${a.pendingJobs} 项作业排队中` : "", a.agentProcesses ? "Agent 进程运行中" : ""].filter(Boolean) : [];
+  const text = labels.length ? labels.join(" · ") : a?.lastObservedAt ? `${agoText(a.lastObservedAt / 1000, now)}观测到活动` : "暂无观测";
+  const at = labels.length ? a.checkedAt : a?.lastObservedAt;
+  return `<td class="sa-act sa-activity" title="${attr(at ? `最近活动观测 ${dateTimeOf(at / 1000)}（北京时间）；作业或进程不等于新的 SSH 登录` : "只融合已有团队与资源采样；暂无观测不代表没有活动")}">${escapeHtml(text)}</td>`;
 }
 
 function writeCell(r, st, now) {
@@ -173,14 +184,14 @@ export function idleToolbarHtml(u, { now = Date.now(), activity = {} } = {}) {
   const seg = IDLE_MONTHS.map((m) => (
     `<button type="button" class="sa-seg-btn" data-sa-idle-months="${m}" aria-pressed="${m === months ? "true" : "false"}">${m} 个月</button>`
   )).join("");
-  const only = `<button type="button" class="sa-seg-btn sa-idle-only" data-sa-idle-only aria-pressed="${activity.only ? "true" : "false"}"${s.count ? "" : " disabled"}>只看不活跃</button>`;
+  const only = `<button type="button" class="sa-seg-btn sa-idle-only" data-sa-idle-only aria-pressed="${activity.only ? "true" : "false"}"${s.count ? "" : " disabled"}>只看疑似不活跃</button>`;
   const sum = !s.writeKnown
     ? "数据最后修改时间还没有：重新「按用户统计」一次（服务器端版本 3）后才判定不活跃。"
     : s.count
-      ? `不活跃 ${num(s.count)} 位，共占 ${size(s.bytes)}（占已用 ${pct(s.share)}）`
-      : `${months} 个月内没有不活跃的用户`;
-  return `<div class="sa-idle-bar"><span class="sa-idle-label">不活跃 = 超过</span><span class="sa-seg-group" role="group" aria-label="不活跃时长">${seg}</span>` +
-    `<span class="sa-idle-label">没登录且名下文件没改动（占用 ≥ 1 GiB）</span>${only}<span class="sa-idle-sum"${s.count ? ' data-has="true"' : ""}>${escapeHtml(sum)}</span></div>`;
+      ? `疑似不活跃 ${num(s.count)} 位，共占 ${size(s.bytes)}（占已用 ${pct(s.share)}），需核实`
+      : `${months} 个月内没有符合条件的疑似不活跃用户`;
+  return `<div class="sa-idle-bar"><span class="sa-idle-label">疑似不活跃：超过</span><span class="sa-seg-group" role="group" aria-label="不活跃时长">${seg}</span>` +
+    `<span class="sa-idle-label">登录记录和文件修改均较旧，且未观测到近期活动（占用 ≥ 1 GiB，待核实）</span>${only}<span class="sa-idle-sum"${s.count ? ' data-has="true"' : ""}>${escapeHtml(sum)}</span></div>`;
 }
 
 export function userRowsHtml(u, { limit = USER_ROWS, shareLabel = "占已用", filesLabel = "文件数", activity = null, now = Date.now(), fold = null, foldKey = "" } = {}) {
@@ -194,18 +205,18 @@ export function userRowsHtml(u, { limit = USER_ROWS, shareLabel = "占已用", f
   const folded = foldKey ? foldList(visible, foldKey, fold) : { shown: visible.slice(0, limit), toggle: "" };
   const body = folded.shown.map(({ r, rank, st }) => {
     const slot = slots.get(r.uid);
-    const idleTag = st?.idle ? `<span class="sa-idle-tag">${r.account === "none" ? "已无账号 · 不活跃" : "不活跃"}</span>` : "";
+    const idleTag = st?.idle ? `<span class="sa-idle-tag">${r.account === "none" ? "已无账号 · 待核实" : "疑似不活跃"}</span>` : "";
     const meta = `${shareLabel} ${pct(r.share)} · ${filesLabel} ${num(r.files)}` +
-      (activity ? ` · 最后登录 ${r.lastLogin ? dateText(r.lastLogin) : r.lastLogin === 0 ? "从没登录" : r.account === "none" ? "已无账号" : "未知"} · 数据最后修改 ${r.lastWrite ? dateText(r.lastWrite) : "未知"}` : "");
+      (activity ? ` · 系统登录记录 ${r.lastLogin ? dateText(r.lastLogin) : r.lastLogin === 0 ? "无记录" : r.account === "none" ? "已无账号" : "未知"} · 数据最后修改 ${r.lastWrite ? dateText(r.lastWrite) : "未知"}` : "");
     return `<tr${st?.idle ? ' data-idle="true"' : ""}${tip(ownerName(r), size(r.bytes), meta)}>` +
       `<td class="sa-rank">${rank}</td>` +
       `<td class="sa-name"><span class="sa-swatch" data-kind="${slot ? "user" : "others"}"${slot ? ` data-slot="${slot}"` : ""}></span>${escapeHtml(ownerName(r))}${idleTag}</td>` +
       `<td class="sa-barcell"><span class="sa-rbar"><span class="sa-rbar-fill" style="width:${w(max ? r.bytes / max : 0)}"></span></span></td>` +
       `<td class="sa-num sa-strong-num">${escapeHtml(size(r.bytes))}</td><td class="sa-num">${pct(r.share)}</td><td class="sa-num sa-dim">${escapeHtml(num(r.files))}</td>` +
-      (activity ? `${loginCell(r, st, now)}${writeCell(r, st, now)}` : "") + "</tr>";
+      (activity ? `${activityCell(r, now)}${loginCell(r, st, now)}${writeCell(r, st, now)}` : "") + "</tr>";
   }).join("");
   const more = foldKey ? folded.toggle : visible.length > limit ? `<p class="sa-note">另有 ${num(visible.length - limit)} 个用户占用更少，未列出。</p>` : "";
-  const actHead = activity ? '<th class="sa-num sa-act">最后登录</th><th class="sa-num sa-act">数据最后修改</th>' : "";
+  const actHead = activity ? '<th class="sa-act">近期活动</th><th class="sa-num sa-act" title="来自 lastlog，可能漏记 SSH 连接，不是完整登录审计">系统登录记录</th><th class="sa-num sa-act">数据最后修改</th>' : "";
   return `<table class="sa-table sa-ranked"><thead><tr><th class="sa-rank">#</th><th>用户</th><th class="sa-barcell"><span class="sa-visually-hidden">相对占用</span></th>` +
     `<th class="sa-num">占用</th><th class="sa-num">${escapeHtml(shareLabel)}</th><th class="sa-num">${escapeHtml(filesLabel)}</th>${actHead}</tr></thead><tbody>${body}</tbody></table>${more}`;
 }

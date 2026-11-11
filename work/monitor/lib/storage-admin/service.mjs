@@ -16,6 +16,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { writeFileAtomic } from "../atomic-file.mjs";
+import { activityServer, observeUserActivity } from "./activity.mjs";
 import { isSafeRoot, MAX_TARGETS, resolveIdentityFile, resolveTargets, storageTargetDraft } from "./config.mjs";
 import { buildInstallCommand, buildInstallScript, buildUninstallScript, parsePublicKey, scriptVersion, REMOTE_SCRIPT_PATH } from "./install.mjs";
 import { attachPersonalSsh, buildPinnedProbeSshArgs } from "../ssh-args.mjs";
@@ -57,6 +58,7 @@ export function classifySshFailure(res, target) {
 export function createStorageAdminService({
   getConfig, isAdmin, store, exec, acquireSshSlot = null, dir, dataDir, log = null, platform = process.platform,
   savePersonalConfig = null,
+  getActivityFacts = () => null,
   now = Date.now, homeDir, scriptFile = REMOTE_SCRIPT_FILE,
   setTimer = (fn, ms) => { const t = setTimeout(fn, ms); t.unref?.(); return t; },
   clearTimer = (t) => clearTimeout(t),
@@ -80,7 +82,7 @@ export function createStorageAdminService({
     const bindingKey = targetBinding(target, ctx.config);
     const saved = await store.getTarget(target.id);
     if (saved.bindingKey !== bindingKey && (saved.bindingKey || target.connectionId)) {
-      await store.patchTarget(target.id, { bindingKey, info: null, error: null, checkedAt: null, scans: [], jobs: [], quota: {} });
+      await store.patchTarget(target.id, { bindingKey, info: null, error: null, checkedAt: null, scans: [], jobs: [], quota: {}, activity: {} });
       viewCache = null;
     } else if (!saved.bindingKey) await store.patchTarget(target.id, { bindingKey });
     return { ...ctx, target };
@@ -140,7 +142,8 @@ export function createStorageAdminService({
 
   async function targetView(target) {
     let saved = await store.getTarget(target.id);
-    const bindingKey = targetBinding(target, await getConfig());
+    const config = await getConfig();
+    const bindingKey = targetBinding(target, config);
     if (saved.bindingKey !== bindingKey && (saved.bindingKey || target.connectionId)) saved = {};
     const expected = scriptVersion(await script());
     const remoteRoots = saved.info?.roots || [];
@@ -156,11 +159,15 @@ export function createStorageAdminService({
     }
     const scans = Array.isArray(saved.scans) ? saved.scans : [];
     const jobs = Array.isArray(saved.jobs) ? saved.jobs : [];
+    const server = activityServer(target, config);
+    const facts = server ? getActivityFacts(server.id, config) : null;
+    const activity = observeUserActivity({ users: info?.users, infoHost: info?.host, ...facts, previous: saved.activity || {}, now: now() });
+    if (JSON.stringify(activity.records) !== JSON.stringify(saved.activity || {})) await store.patchTarget(target.id, { activity: activity.records });
     return {
       id: target.id, label: target.label, host: target.host, port: target.port, roots: target.roots,
       ...(target.connectionId ? { connectionId: target.connectionId, sshUser: target.sshUser, sshJumpServerId: target.sshJumpServerId } : {}),
       status, checkedAt: saved.checkedAt ?? null, info,
-      users: buildUsersView({ info, quota: saved.quota || {}, scans }),
+      users: buildUsersView({ info, quota: saved.quota || {}, scans, activity: activity.byUid }),
       running: jobs.find((j) => j.state === "running") || null,
       jobs,
       scans: scans.map((s) => s.job),
@@ -196,7 +203,7 @@ export function createStorageAdminService({
       if (busy.has(target.id) || saved.jobs?.some((job) => job.state === "running")) throw fail("正在检测或扫描这个节点，请结束后再修改目录范围", 409);
       // 仅改变目录范围时保留同一连接的扫描；账号或路由已变的缓存不能借此重新绑定。
       const sameBinding = saved.bindingKey === targetBinding(previous, config) || (!saved.bindingKey && !previous.connectionId);
-      retained = sameBinding ? saved : { info: null, checkedAt: null, quota: {} };
+      retained = sameBinding ? saved : { info: null, checkedAt: null, quota: {}, activity: {} };
       retained = { ...retained, error: null, bindingKey: targetBinding(target, config),
         scans: (sameBinding ? saved.scans || [] : []).filter((s) => target.roots.some((root) => under(s.job?.root || "", root))),
         jobs: (sameBinding ? saved.jobs || [] : []).filter((job) => target.roots.some((root) => under(job.root || "", root))) };

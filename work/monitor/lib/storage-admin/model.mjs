@@ -99,17 +99,17 @@ export function pickMounts(mounts = [], roots = []) {
 }
 
 // 账号与活跃信息：account = user（本机账号，uid 1000–59999）| system（uid < 1000，如 root）| none（没有对应账号，多半是已删的人）；
-// lastLogin 取自 info.users（SSH 最后登录，0 = 从没登录，null = 未知）。不活跃的判定按界面所选时长在前端做。
+// lastLogin 只代表 lastlog 中的系统记录（0 = 无记录，null = 未知），不是完整 SSH 活动历史。
 const SYSTEM_UID_MAX = 999;
 
-function withActivity(row, users) {
+function withActivity(row, users, activity) {
   const u = users.get(row.uid);
   const account = u ? "user" : row.uid <= SYSTEM_UID_MAX || (row.uid >= 60000 && row.uid < 65536) ? "system" : "none";
-  return { ...row, account, lastLogin: u ? (u.lastLogin ?? null) : null };
+  return { ...row, name: u?.name ?? row.name, account, lastLogin: u ? (u.lastLogin ?? null) : null, ...(u && activity[row.uid] ? { activity: activity[row.uid] } : {}) };
 }
 
 // 「按用户」表：每个挂载点一份。来源优先级：repquota（按属主、全盘、实时）> 扫描根正好是该挂载点的最近一次完整扫描。
-export function buildUsersView({ info, quota = {}, scans = [] } = {}) {
+export function buildUsersView({ info, quota = {}, scans = [], activity = {} } = {}) {
   const mounts = info?.mounts || [];
   const users = new Map((info?.users || []).map((u) => [u.uid, u]));
   return mounts.map((m) => {
@@ -118,7 +118,7 @@ export function buildUsersView({ info, quota = {}, scans = [] } = {}) {
       const total = q.rows.reduce((s, r) => s + r.bytes, 0);
       return {
         mount: m.mount, source: "quota", at: q.at, used: m.used, size: m.size, iused: m.iused, inodeScan: m.inodeScan ?? null,
-        rows: q.rows.map((r) => withActivity({ uid: r.uid, name: r.name ?? users.get(r.uid)?.name ?? null, bytes: r.bytes, files: r.files, lastWrite: null, share: m.used > 0 ? r.bytes / m.used : (total > 0 ? r.bytes / total : 0) }, users))
+        rows: q.rows.map((r) => withActivity({ uid: r.uid, name: r.name ?? users.get(r.uid)?.name ?? null, bytes: r.bytes, files: r.files, lastWrite: null, share: m.used > 0 ? r.bytes / m.used : (total > 0 ? r.bytes / total : 0) }, users, activity))
           .sort((a, b) => b.bytes - a.bytes),
       };
     }
@@ -127,7 +127,7 @@ export function buildUsersView({ info, quota = {}, scans = [] } = {}) {
     if (scan) {
       return {
         mount: m.mount, source: scan.job.kind === "inode" ? "inode" : "scan", at: scan.job.endedAt, jobId: scan.job.id, used: m.used, size: m.size, iused: m.iused, inodeScan: m.inodeScan ?? null,
-        rows: scan.owners.map((o) => withActivity({ ...o, name: o.name ?? users.get(o.uid)?.name ?? null, lastWrite: o.lastWrite ?? null, share: m.used > 0 ? o.bytes / m.used : o.share }, users)),
+        rows: scan.owners.map((o) => withActivity({ ...o, name: o.name ?? users.get(o.uid)?.name ?? null, lastWrite: o.lastWrite ?? null, share: m.used > 0 ? o.bytes / m.used : o.share }, users, activity)),
       };
     }
     return { mount: m.mount, source: null, quota: m.quota, used: m.used, size: m.size, iused: m.iused, inodeScan: m.inodeScan ?? null, rows: [] };

@@ -199,7 +199,7 @@ export function parseInfo(stdout) {
       mounts: (Array.isArray(r.mounts) ? r.mounts : []).slice(0, MOUNTS_CAP).map(parseMount).filter(Boolean),
       users: (Array.isArray(r.users) ? r.users : []).slice(0, USERS_CAP)
         .filter((u) => str(u?.name, 64) && intOrNull(u.uid) != null)
-        // lastLogin：SSH 最后登录（秒）；0 = 从没登录过；null = 服务器端读不到 lastlog 或版本 < 3。
+        // lastLogin：lastlog 系统登录记录（秒）；0 = 无记录，不能断言从未登录；null = 读不到或旧版。
         .map((u) => ({ name: u.name.slice(0, 64), uid: u.uid, home: str(u.home, 512) ?? "", lastLogin: u.lastLogin === 0 ? 0 : ts(u.lastLogin) })),
       repquota: r.repquota === true,
       jobs: parseJobs(r.jobs),

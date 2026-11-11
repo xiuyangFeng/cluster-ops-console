@@ -16,6 +16,7 @@ import { writeFileAtomic } from "../atomic-file.mjs";
 import { LoginError, normalizeApiLoginRequest } from "../cli/login-api.mjs";
 import { REVERSE_PORT_BASE, REVERSE_PORT_SPAN } from "../reverse-port.mjs";
 import { readSshConfigUser } from "../ssh-config-user.mjs";
+import { resolveSshRoute } from "../ssh-route.mjs";
 import { statusError } from "../status-error.mjs";
 import { toPort } from "../validators.mjs";
 import {
@@ -226,6 +227,8 @@ export function createTeamAdminService({
   now = Date.now,
 } = {}) {
   const surveyCache = new Map(); // serverId -> { at, survey }
+  const sourceKey = (server, config) => JSON.stringify(resolveSshRoute(server, config).map((s) =>
+    [s.id, s.host, s.sshHostName || "", s.sshPort || 22, s.sshUser || "", s.authRef || "", s.sshIdentityFile || ""]));
   const surveyInflight = new Map(); // serverId -> Promise<survey>：同一台服务器同时只跑一次采集
   let pendingData = { schemaVersion: 1, items: {} };
   let pendingLoaded = false;
@@ -350,7 +353,7 @@ export function createTeamAdminService({
       }
       const survey = parseAdminSurveyOutput(res.stdout);
       await flushPendingDeliveries(ctx, survey);
-      surveyCache.set(id, { at: now(), survey });
+      surveyCache.set(id, { at: now(), survey, sourceKey: sourceKey({ ...ctx.server, sshUser: ctx.sshUser }, ctx.config) });
       return survey;
     })();
     surveyInflight.set(id, job);
@@ -806,6 +809,16 @@ export function createTeamAdminService({
 
   return {
     getAdminRole,
+    // 只读已采样数据，不调用 getOverview，不触发 SSH 或待下发配置投递。
+    getCachedActivity({ serverId, config }) {
+      const cached = surveyCache.get(serverId);
+      const server = config?.servers?.find((s) => s.id === serverId && !s.disabled && s.monitorEnabled !== false);
+      if (!cached || !server) return null;
+      const sshUser = resolveEffectiveSshUser(config, server, { resolveSshUser });
+      if (!isAdminUser(config, sshUser)) return null;
+      try { if (sourceKey({ ...server, sshUser }, config) !== cached.sourceKey) return null; } catch { return null; }
+      return { checkedAt: cached.at, sshUsers: [...cached.survey.sshUsers], agentProcs: structuredClone(cached.survey.agentProcs) };
+    },
     getOverview,
     upsertMember,
     removeMember,

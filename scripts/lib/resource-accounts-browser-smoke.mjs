@@ -60,10 +60,12 @@ export async function runResourceAccountsBrowserSmoke({ BrowserWindow, baseUrl }
       assert(editor().querySelector('[name="id"]').readOnly, "管理目录不会意外更换节点标识");
       const extra = editor().querySelector('[name="additionalRoots"]');
       extra.value = "/data /mnt"; extra.dispatchEvent(new Event("input", { bubbles: true }));
+      extra.focus(); extra.setSelectionRange(3, 3);
       const before = reads; storageCtrl.enter("storage");
       await until(() => reads > before);
       await new Promise((r) => setTimeout(r, 20));
       assert(editor().querySelector('[name="additionalRoots"]').value === "/data /mnt", "重读概览不会清掉未保存目录");
+      assert(document.activeElement.name === 'additionalRoots' && document.activeElement.selectionStart === 3, '活动轮询保留正在编辑的焦点与光标');
       document.querySelector('[data-sa-save-target]').click();
       await until(() => posts === 1 && !document.querySelector('[data-sa-save-target]').disabled);
       assert(editor().querySelector('[name="additionalRoots"]').value === "/data /mnt", "保存失败保留追加输入");
@@ -71,6 +73,17 @@ export async function runResourceAccountsBrowserSmoke({ BrowserWindow, baseUrl }
       await until(() => posts === 2 && document.querySelector('[data-sa-guide-stage="scope"]'));
       assert(savedTarget.id === "n4" && savedTarget.roots.join(" ") === "/mnt /data", "同一节点追加目录并去重，不丢掉原目录");
       assert(document.querySelector('[data-sa-installer="n4"]').textContent.includes("目录授权"), "保存后引导更新服务器授权");
+      const sampleAt = Date.now();
+      const n4 = overview.targets.find((t) => t.id === 'n4');
+      n4.status = { state: 'ok' };
+      n4.info = { roots: [{ path: '/mnt', children: [] }, { path: '/data', children: [] }], mounts: [{ mount: '/mnt', fs: 'ext4', size: 8 * 1024 ** 3, used: 4 * 1024 ** 3, avail: 4 * 1024 ** 3 }] };
+      n4.users = [{ mount: '/mnt', source: 'inode', used: 4 * 1024 ** 3, size: 8 * 1024 ** 3, rows: [{ uid: 1029, name: 'active-student', account: 'user', bytes: 2 * 1024 ** 3, files: 42, share: 0.5,
+        lastLogin: sampleAt / 1000 - 44 * 86400, lastWrite: sampleAt / 1000 - 400 * 86400,
+        activity: { active: true, sshOnline: true, runningJobs: 2, checkedAt: sampleAt, expiresAt: sampleAt + 150000, lastObservedAt: sampleAt } }] }];
+      storageCtrl.enter('storage');
+      await until(() => document.querySelector('.sa-activity')?.textContent.includes('2 项作业运行中'));
+      assert(document.querySelector('.sa-ranked').textContent.includes('44 天前'), '旧系统记录仍按来源展示');
+      assert(!document.querySelector('[data-idle="true"]'), '有近期活动的用户不标为疑似不活跃');
       storageCtrl.stop?.();
       return { groups: document.querySelectorAll(".gpu-connection").length, storageGroups: document.querySelectorAll(".sa-target").length };
     }).toString()})()`);

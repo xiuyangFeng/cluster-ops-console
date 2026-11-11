@@ -637,6 +637,7 @@ export async function startMonitorServer({ env = process.env } = {}) {
       await refreshConfigIntoKernel();
     },
     isAdmin: (config) => teamAdminService.getAdminRole(config).isAdmin,
+    getActivityFacts: (serverId, config) => ({ resources: store.getLayers()?.resources?.[serverId], team: teamAdminService.getCachedActivity({ serverId, config }) }),
     store: createStorageAdminStore({ dir: storageAdminDir }),
     exec: (cmd, args, options = {}) => (options.server ? executeRuntime(cmd, args, options) : fixtureMode && cmd === "ssh"
       ? Promise.resolve({ code: 255, stdout: "", stderr: "fixture 模式不发起真实 SSH", timedOut: false, truncated: false })

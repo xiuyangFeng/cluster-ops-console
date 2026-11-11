@@ -145,6 +145,8 @@ v2.99：`onboarding-guide/local-readiness.mjs` 只检查本机密钥是否存在
 
 v2.99.1：存储目录范围可在原目标上修改，连接身份校验与范围变更分开；范围改变只保留当前连接且仍在范围内的扫描索引，服务器授权未覆盖新增范围时以 `roots-update` 提示更新授权，已授权父目录内的子目录直接投影为可用入口。保存仅写本机配置，不执行 SSH；服务器授权仍由既有安装命令明确执行。前端草稿独立于概览轮询，节点卡片提供目录管理入口，浏览器验收覆盖追加、失败重试与 520px 编辑布局。
 
+v2.99.2：`storage-admin/activity.mjs` 只融合现有资源与团队采样。资源须匹配实际 hostname、成功且不超过 150 秒；团队通过 `getCachedActivity` 仅读缓存并核对连接身份，不调用采集或下发。正向观测按 UID+账号名有界保存在原存储状态的 `activity` 中，重绑清除，目录调整保留同连接记录。原始 lastlog 不改写；近期活动、系统登录记录与文件修改各自展示，疑似不活跃只作为待核实线索。前端每 30 秒仅读本机概览（扫描时仍为 5 秒），时间格式复用北京时间函数。
+
 多个 Agent（或多人）同时改代码时，按下面的规则切分，基本不会互相冲突：
 
 1. **按目录认领**。一个任务尽量只动一个区域：前端某面板（`render/<panel>.js` + 对应 `assets/css/` 文件）、某组 API（`lib/http/routes/<领域>.mjs`）、某个探针（`lib/probes/*`）、数据面（`lib/supervisor/*` 或 `lib/proxy/*`）、桌面壳（`work/monitor/desktop/*`）、向导步骤（`scripts/setup/*`）。入口文件（`app.js`、`monitor-server.mjs`、`electron-main.mjs` 等）只在新增装配时才改，改动应是几行接线。

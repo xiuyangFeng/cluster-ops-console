@@ -215,6 +215,33 @@ test("不活跃判定：登录与数据都超过时长才算；系统账号不�
   assert.equal(tiny.count, 0);
 });
 
+test("旧登录记录与近期作业/会话分列；当前或已保存的近期观测排除疑似不活跃", () => {
+  const old = NOW_S - 400 * DAY;
+  const activity = { active: true, sshOnline: true, runningJobs: 2, checkedAt: NOW - 1000, expiresAt: NOW + 149000, lastObservedAt: NOW - 1000 };
+  const active = row({ name: "active-student", lastLogin: old, lastWrite: old, activity });
+  assert.equal(idleState(active, { now: NOW }).idle, false);
+  assert.equal(idleState({ ...active, activity: { ...activity, active: false } }, { now: NOW }).idle, false);
+  assert.equal(idleState({ ...active, activity: { lastObservedAt: NOW - 400 * DAY * 1000 } }, { now: NOW }).idle, true);
+  const html = buildOverviewHtml({ key: { exists: true }, targets: [usersTarget([active])] }, { now: NOW });
+  assert.match(html, /系统登录记录/);
+  assert.match(html, /2 项作业运行中/);
+  assert.match(html, /SSH 在线/);
+  assert.doesNotMatch(html, /data-idle="true"/);
+  assert.match(html, /13 个月前/);
+  const stale = buildOverviewHtml({ key: { exists: true }, targets: [usersTarget([active])] }, { now: NOW + 151000 });
+  assert.doesNotMatch(stale, /2 项作业运行中|SSH 在线/);
+  assert.match(stale, /观测到活动/);
+  const empty = buildOverviewHtml({ key: { exists: true }, targets: [usersTarget([row({ lastLogin: 0 })])] }, { now: NOW });
+  assert.match(empty, /无记录/);
+  assert.doesNotMatch(empty, />从没登录</);
+});
+
+test("系统登录记录提示使用北京时间，不随宿主时区跨日", () => {
+  const at = Date.UTC(2026, 10, 10, 20) / 1000;
+  const html = buildOverviewHtml({ key: { exists: true }, targets: [usersTarget([row({ lastLogin: at })])] }, { now: Date.UTC(2026, 10, 11, 8) });
+  assert.match(html, /2026-11-11（北京时间，lastlog 记录/);
+});
+
 const usersTarget = (rows, extra = {}) => target({ users: [{ mount: "/public", source: "inode", at: NOW_S, used: 1000, size: 2000, iused: 5, rows, inodeScan: { ok: true, fs: {} } }], ...extra });
 
 test("按用户：不活跃的行加紫色标记与标签，时长切换与「只看不活跃」，默认只列前 5 项可展开", () => {
@@ -222,7 +249,7 @@ test("按用户：不活跃的行加紫色标记与标签，时长切换与「�
   const rows = Array.from({ length: 8 }, (_, i) => row({ uid: 100 + i, name: `u${i}`, bytes: (1000 - i * 10) * GIB, share: 0.1, ...(i === 1 ? { lastLogin: old, lastWrite: old } : {}) }));
   const html = buildOverviewHtml({ key: { exists: true }, targets: [usersTarget(rows)] }, { now: NOW, activity: { months: 6, only: false } });
   assert.equal((html.match(/data-idle="true"/g) || []).length, 1);
-  assert.match(html, /<span class="sa-idle-tag">不活跃<\/span>/);
+  assert.match(html, /<span class="sa-idle-tag">疑似不活跃<\/span>/);
   assert.match(html, /data-sa-idle-months="6" aria-pressed="true"/);
   assert.match(html, /不活跃 1 位，共占/);
   assert.equal((html.match(/<td class="sa-rank">/g) || []).length, 5);

@@ -50,3 +50,22 @@ test("管理入口跟随当前服务器与角色：root 所在服务器改变时
   controller.enter("storage");
   assert.equal(reads, 2);
 });
+
+test("无扫描时可见存储页也定时重读本机活动；不触发 SSH 动作，停止后清理计时器", async () => {
+  let reads = 0, scheduled = null, cleared = 0;
+  const posts = [];
+  const controller = createStorageAdminController({ doc: { getElementById: () => null, hidden: false },
+    getJson: async () => { reads++; return { targets: [] }; }, postJson: async (...args) => posts.push(args), storage: null,
+    setTimer: (fn, ms) => { scheduled = { fn, ms }; return 1; }, clearTimer: () => { cleared++; } });
+  controller.onStatus({ activeServerId: "master", teamAdmin: { isAdmin: true } });
+  await new Promise((r) => setImmediate(r));
+  assert.equal(scheduled.ms, 30_000);
+  scheduled.fn();
+  await new Promise((r) => setImmediate(r));
+  assert.equal(reads, 2);
+  assert.deepEqual(posts, []);
+  controller.stop();
+  assert.ok(cleared > 0);
+  controller.enter("storage");
+  assert.equal(reads, 2);
+});

@@ -9,6 +9,7 @@ import { buildBrowserHtml, buildListHtml, buildOverviewHtml } from "../render/st
 import { DEFAULT_IDLE_MONTHS, diskEntryHtml, IDLE_MONTHS } from "../render/storage-admin-viz.js";
 
 export const STORAGE_ADMIN_POLL_MS = 5000;
+export const STORAGE_ADMIN_ACTIVITY_POLL_MS = 30_000;
 const PREFS_KEY = "storageAdminPrefs";
 const SSH_TIMEOUT_MS = 60_000;
 
@@ -52,12 +53,13 @@ export function createStorageAdminController({
     } catch {}
   }
   let timer = null;
+  let stopped = false;
   let seq = 0;
   // 磁盘卡片对应哪块盘：正在看的服务器地址 + 它 $HOME 所在挂载点（来自 /api/status）。
   let diskCtx = { hosts: [], mount: "" };
   let lastEntryHtml = null;
 
-  const shown = (view) => admin && isViewVisible(view) && !isHidden() && !doc.hidden;
+  const shown = (view) => !stopped && admin && isViewVisible(view) && !isHidden() && !doc.hidden;
   const visible = () => shown("storage") || shown("servers");
   const anyRunning = () => Boolean(data?.targets?.some((t) => t.running));
   const message = (err, fallback) => err?.serverMessage || err?.message || fallback;
@@ -85,6 +87,10 @@ export function createStorageAdminController({
     if (!panel || !admin) return;
     const body = $("storageAdminBody");
     if (body) {
+      const focused = doc.activeElement;
+      const keepFocus = body.contains?.(focused) && focused?.closest?.("[data-sa-target-form]")
+        && ["id", "label", "host", "port", "roots", "additionalRoots"].includes(focused.name)
+        ? { name: focused.name, start: focused.selectionStart, end: focused.selectionEnd } : null;
       const open = new Set([...body.querySelectorAll("details[open]")].map((d) => d.querySelector("summary")?.textContent));
       const closed = new Set([...body.querySelectorAll("details:not([open])")].map((d) => d.querySelector("summary")?.textContent));
       body.innerHTML = buildOverviewHtml(targetDraft && data ? { ...data, setup: targetDraft } : data, {
@@ -95,6 +101,11 @@ export function createStorageAdminController({
         const key = d.querySelector("summary")?.textContent;
         if (open.has(key)) d.open = true;
         else if (closed.has(key)) d.open = false;
+      }
+      if (keepFocus) {
+        const input = body.querySelector(`[data-sa-target-form] [name="${keepFocus.name}"]`);
+        input?.focus?.({ preventScroll: true });
+        if (Number.isInteger(keepFocus.start)) input?.setSelectionRange?.(keepFocus.start, keepFocus.end);
       }
     }
     const box = $("storageAdminBrowser");
@@ -111,11 +122,14 @@ export function createStorageAdminController({
   function schedule() {
     if (timer) clearTimer(timer);
     timer = null;
-    if (shown("storage") && anyRunning()) timer = setTimer(() => { timer = null; load({ quiet: true }); }, STORAGE_ADMIN_POLL_MS);
+    if (shown("storage")) {
+      timer = setTimer(() => { timer = null; load({ quiet: true }); }, anyRunning() ? STORAGE_ADMIN_POLL_MS : STORAGE_ADMIN_ACTIVITY_POLL_MS);
+      timer?.unref?.();
+    }
   }
 
   async function load({ quiet = false } = {}) {
-    if (!admin) return;
+    if (!admin || stopped) return;
     const ticket = ++seq;
     if (!quiet) {
       loading = true;
@@ -503,10 +517,10 @@ export function createStorageAdminController({
     });
     $("storageAdminReload")?.addEventListener("click", () => load());
     doc.addEventListener?.("visibilitychange", () => {
-      if (shown("storage") && anyRunning()) load({ quiet: true });
+      if (shown("storage")) load({ quiet: true });
       else schedule();
     });
   }
 
-  return { bind, onStatus, enter };
+  return { bind, onStatus, enter, stop() { stopped = true; seq += 1; if (timer) clearTimer(timer); timer = null; } };
 }

@@ -17,6 +17,27 @@ function withTempDir(fn) {
     });
 }
 
+test("存储活动只读团队缓存，不发 SSH；地址或账号变更后不复用旧在线状态", async () => {
+  const config = { adminUsers: ["admin2"], activeServerId: "s1", servers: [{ id: "s1", host: "master", sshUser: "root" }] };
+  let calls = 0;
+  const svc = createTeamAdminService({ getConfig: async () => config, now: () => 1_800_000_000_000,
+    runRemote: async () => { calls++; return { code: 0, stdout: "ME=root\nWHO-BEGIN\nactive-student\nWHO-END\nAGENTS-BEGIN\nactive-student\tcodex\t2\nAGENTS-END\n" }; } });
+  const read = () => svc.getCachedActivity({ serverId: "s1", config });
+  assert.equal(read(), null);
+  assert.equal(calls, 0);
+  await svc.getOverview();
+  assert.deepEqual(read().sshUsers, ["active-student"]);
+  assert.equal(read().agentProcs["active-student"].codex, 2);
+  read().sshUsers.push("forged");
+  assert.deepEqual(read().sshUsers, ["active-student"]);
+  config.servers[0].host = "other-cluster";
+  assert.equal(read(), null);
+  config.servers[0].host = "master";
+  config.servers[0].sshUser = "admin2";
+  assert.equal(read(), null);
+  assert.equal(calls, 1, "缓存读取不采集、不投递配置");
+});
+
 test("member-sync 纯函数提取：usage / cli / disk 字段与 model.mjs 完全对齐", () => {
   const usage = extractUsageForHeartbeat({
     today: "2026-10-16",

@@ -496,6 +496,7 @@ button.sa-tm-tile::after {
 }
 .sa-table tbody tr[data-idle="true"] td { background: var(--sa-idle-bg); }
 .sa-table tbody tr[data-idle="true"] td:first-child { box-shadow: inset 3px 0 0 var(--sa-idle); }
+.sa-table .sa-activity { max-width: 14em; white-space: normal; overflow-wrap: anywhere; }
 .sa-table td.sa-act[data-stale="true"] { color: var(--sa-idle); }
 
 /* 放在最后：比上面各处更具体的覆盖（禁用态、浏览区里字号稍大的目录按钮） */
