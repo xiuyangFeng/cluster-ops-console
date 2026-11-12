@@ -26,7 +26,7 @@ export function createGpuConnectionsController({ doc, storage = globalThis.local
     const choices = gpuConnections(status, config);
     if (selected === null) selected = [status.activeServerId || choices[0]?.id].filter(Boolean);
     section.hidden = choices.length === 0;
-    const nextSelectorHtml = '<p>GPU 节点与账号（可多选）</p>' + choices.map((s) => `<label><input type="checkbox" data-gpu-connection="${escapeHtml(s.id)}"${selected.includes(s.id) ? " checked" : ""}>${escapeHtml(s.name || s.host)} · ${escapeHtml(s.sshUser)}</label>`).join("");
+    const nextSelectorHtml = `<p title="可多选。普通账号显示本人进程与作业，root 显示全部；各连接独立采集。">GPU 节点与账号</p>${choices.map((s) => `<label><input type="checkbox" data-gpu-connection="${escapeHtml(s.id)}"${selected.includes(s.id) ? " checked" : ""}>${escapeHtml(s.name || s.host)} · ${escapeHtml(s.sshUser)}</label>`).join("")}`;
     if (selectorHtml !== nextSelectorHtml) { selectorHtml = nextSelectorHtml; selector.innerHTML = selectorHtml; }
     if (!bound) {
       bound = true;
@@ -40,7 +40,8 @@ export function createGpuConnectionsController({ doc, storage = globalThis.local
       });
     }
     const summary = doc.getElementById("resGpuSummary");
-    if (summary) summary.textContent = "普通账号显示本人进程与作业，root 显示全部；各连接独立采集。";
+    // 口径说明在「GPU 节点与账号」标题的悬停说明里，这一行不再常驻一句话。
+    if (summary?.textContent) summary.textContent = "";
     const now = Date.now();
     const html = choices.filter((s) => selected.includes(s.id)).map((s) => {
       const layer = status.layers?.resources?.[s.id];

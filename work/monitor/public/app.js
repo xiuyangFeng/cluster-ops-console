@@ -261,6 +261,7 @@ const storageAdmin = createStorageAdminController({
   doc, getJson, postJson, showToast, copyText,
   isViewVisible: viewTabs.isViewVisible, isHidden: isConsoleHidden,
   onOpen: () => viewTabs.switchView("storage"),
+  playEntrance: (el) => motion.playEntrance(el, { force: true }),
 });
 // Codex 详情里的「重启守护进程…」（v2.85）：只在用户确认后 POST，成功后补拉状态等 doctor 读回新端口。
 const codexAppServer = createCodexAppServerRestart({

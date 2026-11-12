@@ -71,14 +71,21 @@ test("无存储配置时在页面预填当前服务器，可保存目录范围�
   assert.doesNotMatch(html, /<img src=x>/);
 });
 
-test("接入步骤：没有密钥时给「生成密钥」，全部就绪后默认收起", () => {
+test("接入步骤：没有密钥时给「生成密钥」，全部就绪后「接入与配置」默认收起", () => {
   const html = buildSetupHtml({ key: { exists: false }, targets: [target({ status: { state: "error", message: "专用密钥还没有装到 root@h" } })] });
-  assert.match(html, /<details class="sa-setup" open>/);
+  assert.match(html, /class="sa-sub sa-steps" data-ready="false"/);
   assert.match(html, /data-sa-key/);
   assert.ok(!html.includes("data-sa-installer"));
   const ready = buildSetupHtml({ key: { exists: true, identityFile: "/k" }, targets: [target()] });
-  assert.match(ready, /<details class="sa-setup">/);
+  assert.match(ready, /data-ready="true"/);
   assert.match(ready, /已全部就绪/);
+  // 整页：就绪时没有「下一步」卡，接入与配置收成一行（不带 open）；没就绪时展开并给出下一步
+  const page = buildOverviewHtml({ key: { exists: true, identityFile: "/k" }, targets: [target()] }, { now: NOW });
+  assert.match(page, /<details class="sa-manage" data-sa-key="manage">/);
+  assert.doesNotMatch(page, /data-sa-guide-stage/);
+  const pending = buildOverviewHtml({ key: { exists: false }, targets: [target({ status: { state: "error" } })] }, { now: NOW });
+  assert.match(pending, /<details class="sa-manage" data-sa-key="manage" open>/);
+  assert.match(pending, /data-sa-guide-stage="key"/);
   const withCmd = buildSetupHtml({ key: { exists: true }, targets: [target({ status: { state: "error" } })] }, {
     installers: { master: { command: "ssh root@h 'sh -s' < '/x.sh'", uninstallCommand: "ssh root@h 'sh -s' < '/u.sh'" } },
   });
@@ -127,7 +134,8 @@ test("按用户：有数据时按占用列出，来源写清楚", () => {
   const html = buildOverviewHtml({ key: { exists: true }, targets: [t] }, { now: NOW });
   assert.match(html, /来源：repquota/);
   assert.match(html, /<td class="sa-name"><span class="sa-swatch" data-kind="user" data-slot="1"><\/span>kai<\/td>/);
-  assert.match(html, /class="sa-split" role="img" aria-label="\/public 容量构成：kai 50 B/);
+  assert.match(html, /class="sa-split sa-split-tall" role="img" aria-label="\/public 容量构成：kai 50 B/);
+  assert.match(html, /<span class="sa-seg-label">50%<\/span>/, "高分段条块内印占比");
   assert.match(quotaGuideHtml("/public", t), /quotacheck -cum \/public/);
 });
 
@@ -248,7 +256,7 @@ test("按用户：不活跃的行加紫色标记与标签，时长切换与「�
   const old = NOW_S - 400 * DAY;
   const rows = Array.from({ length: 8 }, (_, i) => row({ uid: 100 + i, name: `u${i}`, bytes: (1000 - i * 10) * GIB, share: 0.1, ...(i === 1 ? { lastLogin: old, lastWrite: old } : {}) }));
   const html = buildOverviewHtml({ key: { exists: true }, targets: [usersTarget(rows)] }, { now: NOW, activity: { months: 6, only: false } });
-  assert.equal((html.match(/data-idle="true"/g) || []).length, 1);
+  assert.equal((html.match(/<tr data-idle="true"/g) || []).length, 1);
   assert.match(html, /<span class="sa-idle-tag">疑似不活跃<\/span>/);
   assert.match(html, /data-sa-idle-months="6" aria-pressed="true"/);
   assert.match(html, /不活跃 1 位，共占/);
@@ -270,7 +278,7 @@ test("多台机器：勾选独立节点账号，同时分组展示", () => {
   assert.match(html, /data-sa-target-tab="master" checked/);
   assert.match(html, /data-sa-target-tab="node04" checked/);
   assert.match(html, /<span class="sa-tab-pct" data-level="crit">93%<\/span>/);
-  assert.equal((html.match(/<section class="sa-target">/g) || []).length, 2);
+  assert.equal((html.match(/<section class="sa-target" /g) || []).length, 2);
   assert.match(html, /\/mnt\/data1/);
 });
 
@@ -284,4 +292,37 @@ test("一台机器多块盘：只展开已用最多那块的「按用户」，�
   const open = buildOverviewHtml({ key: { exists: true }, targets: [t] }, { now: NOW, fold: { open: new Set(["ublock:master:/mnt/a"]) } });
   assert.equal((open.match(/<table class="sa-table sa-ranked">/g) || []).length, 2);
   assert.match(open, /data-sa-fold="ublock:master:\/mnt\/a" aria-expanded="true">收起/);
+});
+
+test("总览：所选节点合计、容量条按占用排序并可跳到对应的盘；取消勾选的节点不计入", () => {
+  const a = target();
+  const b = target({ id: "node04", label: "node04", host: "n4", info: { ...target().info, mounts: [
+    { mount: "/mnt/data1", size: 100, used: 30, avail: 70, inodes: 10, iused: 1 },
+    { mount: "/mnt/data2", size: 100, used: 86, avail: 14, inodes: 10, iused: 2 },
+  ] }, users: [] });
+  const html = buildOverviewHtml({ key: { exists: true }, targets: [a, b] }, { now: NOW, selected: ["master", "node04"] });
+  const order = [...html.matchAll(/data-sa-jump="disk:([^"]+)"/g)].map((m) => m[1]);
+  assert.deepEqual(order, ["master:/public", "node04:/mnt/data2", "node04:/mnt/data1"]);
+  assert.match(html, /<span class="sa-hero-value">\d+%<\/span>/);
+  assert.match(html, /≥ 80% 的盘<\/span><span class="sa-kpi-value">2 块/);
+  const only = buildOverviewHtml({ key: { exists: true }, targets: [a, b] }, { now: NOW, selected: ["node04"] });
+  assert.doesNotMatch(only, /data-sa-jump="disk:master/);
+  assert.doesNotMatch(only, /data-sa-anchor="target:master"/);
+});
+
+test("数据冷热：按最后修改时间分档，超过所选时长的几档标为冷数据并合计", () => {
+  const rows = [
+    row({ uid: 1, name: "fresh", bytes: 10 * GIB, lastWrite: NOW_S - 5 * DAY }),
+    row({ uid: 2, name: "mid", bytes: 20 * GIB, lastWrite: NOW_S - 100 * DAY }),
+    row({ uid: 3, name: "cold", bytes: 40 * GIB, lastWrite: NOW_S - 400 * DAY }),
+    row({ uid: 4, name: "zero", bytes: 5 * GIB, lastWrite: 0 }),
+  ];
+  const html = buildOverviewHtml({ key: { exists: true }, targets: [usersTarget(rows)] }, { now: NOW, activity: { months: 6, only: false } });
+  assert.match(html, /class="sa-cold"/);
+  assert.equal((html.match(/<li class="sa-cold-row" data-cold="true"/g) || []).length, 2, "6–12 个月与 1 年以上");
+  assert.match(html, /<b>45 GiB<\/b> 超过 6 个月未修改/);
+  const three = buildOverviewHtml({ key: { exists: true }, targets: [usersTarget(rows)] }, { now: NOW, activity: { months: 3, only: false } });
+  assert.match(three, /<b>65 GiB<\/b> 超过 3 个月未修改/);
+  const unknown = buildOverviewHtml({ key: { exists: true }, targets: [usersTarget(rows.map((r) => ({ ...r, lastWrite: null })))] }, { now: NOW });
+  assert.doesNotMatch(unknown, /class="sa-cold"/, "没有修改时间时不画冷热图");
 });

@@ -4,6 +4,8 @@
 // 服务器上有扫描在跑时，存储管理页可见期间每 5 秒重读概览（后端自己在问服务器进度，这里只读本机）。
 // 磁盘卡片：管理员看到一行入口摘要（这台服务器那块盘谁占得最多 + 容量构成小条），点卡片或这一行 → onOpen()。
 // 图上的悬停提示：元素带 data-tip-name / data-tip-value / data-tip-meta，这里用 textContent 填进 #storageAdminTip。
+// 入场动效：数据第一次画出来、换了所看的节点、打开 / 深入扫描结果时，各播一次（playEntrance，由 motion.js 注入）；
+// 定时重读只换内容不重播。
 import { createElementLookup } from "../dom-utils.js";
 import { buildBrowserHtml, buildListHtml, buildOverviewHtml } from "../render/storage-admin-view.js";
 import { DEFAULT_IDLE_MONTHS, diskEntryHtml, IDLE_MONTHS } from "../render/storage-admin-viz.js";
@@ -14,7 +16,7 @@ const PREFS_KEY = "storageAdminPrefs";
 const SSH_TIMEOUT_MS = 60_000;
 
 export function createStorageAdminController({
-  doc, getJson, postJson, showToast, isViewVisible = () => true, isHidden = () => false, onOpen = () => {},
+  doc, getJson, postJson, showToast, isViewVisible = () => true, isHidden = () => false, onOpen = () => {}, playEntrance = null,
   copyText = (text) => globalThis.navigator?.clipboard?.writeText?.(text),
   now = Date.now, setTimer = (fn, ms) => setTimeout(fn, ms), clearTimer = (id) => clearTimeout(id),
   storage = typeof localStorage !== "undefined" ? localStorage : null,
@@ -31,6 +33,8 @@ export function createStorageAdminController({
   // 浏览区：{ kind: "scan", targetId, jobId, rel, view } | { kind: "list", targetId, path, jobId, list }
   let browser = null;
   let browserBusy = false;
+  // 下一次绘制后要播入场的区域（"body" / "browser"）。
+  const intro = new Set();
   // 界面偏好（记在本机）：当前看的机器、不活跃时长与「只看不活跃」；展开了哪些列表只在本次会话里记。
   const fold = { open: new Set() };
   const prefs = readPrefs();
@@ -91,14 +95,16 @@ export function createStorageAdminController({
       const keepFocus = body.contains?.(focused) && focused?.closest?.("[data-sa-target-form]")
         && ["id", "label", "host", "port", "roots", "additionalRoots"].includes(focused.name)
         ? { name: focused.name, start: focused.selectionStart, end: focused.selectionEnd } : null;
-      const open = new Set([...body.querySelectorAll("details[open]")].map((d) => d.querySelector("summary")?.textContent));
-      const closed = new Set([...body.querySelectorAll("details:not([open])")].map((d) => d.querySelector("summary")?.textContent));
+      // 展开 / 收起的状态跨重绘保留：有 data-sa-key 的按它认（摘要里带会变的数字），其余按摘要文字认。
+      const keyOf = (d) => d.dataset?.saKey || d.querySelector("summary")?.textContent;
+      const open = new Set([...body.querySelectorAll("details[open]")].map(keyOf));
+      const closed = new Set([...body.querySelectorAll("details:not([open])")].map(keyOf));
       body.innerHTML = buildOverviewHtml(targetDraft && data ? { ...data, setup: targetDraft } : data, {
         installers, busy, error, loading, now: now(), fold, selected: prefs.targets ?? (prefs.target ? [prefs.target] : null),
         activity: { months: prefs.months, only: prefs.only },
       });
       for (const d of body.querySelectorAll("details")) {
-        const key = d.querySelector("summary")?.textContent;
+        const key = keyOf(d);
         if (open.has(key)) d.open = true;
         else if (closed.has(key)) d.open = false;
       }
@@ -116,6 +122,12 @@ export function createStorageAdminController({
         const inner = browser.kind === "scan" ? buildBrowserHtml(browser.view, { now: now(), fold }) : buildListHtml(browser.list, { fold });
         box.innerHTML = browserBusy ? `<p class="sa-note">正在读取…</p>${inner}` : inner;
       }
+    }
+    if (intro.size && typeof playEntrance === "function") {
+      if (intro.has("body") && data && body) playEntrance(body);
+      if (intro.has("browser") && browser && !browserBusy && box) playEntrance(box);
+      if (data) intro.delete("body");
+      if (browser && !browserBusy) intro.delete("browser");
     }
   }
 
@@ -139,6 +151,7 @@ export function createStorageAdminController({
       const next = await getJson("/api/storage-admin");
       if (ticket !== seq) return;
       const wasRunning = new Map((data?.targets || []).map((t) => [t.id, t.running?.id]));
+      if (!data || !quiet) intro.add("body");
       data = next;
       error = "";
       for (const t of next.targets || []) {
@@ -198,6 +211,7 @@ export function createStorageAdminController({
       const qs = new URLSearchParams({ targetId, jobId, rel });
       const view = await getJson(`/api/storage-admin/view?${qs}`);
       browser = { kind: "scan", targetId, jobId, rel, view };
+      intro.add("browser");
     } catch (err) {
       showToast?.({ type: "warn", title: "打不开这一层", message: message(err, "请重试") });
     } finally {
@@ -215,6 +229,7 @@ export function createStorageAdminController({
       if (jobId) qs.set("jobId", jobId);
       const list = await getJson(`/api/storage-admin/list?${qs}`, { timeoutMs: SSH_TIMEOUT_MS });
       browser = { kind: "list", targetId, path, jobId, list };
+      intro.add("browser");
     } catch (err) {
       showToast?.({ type: "warn", title: "列目录失败", message: message(err, "请重试") });
     } finally {
@@ -351,7 +366,24 @@ export function createStorageAdminController({
     showTargetForm();
   }
 
+  // 容量条列表里点一行：跳到那块盘的分析卡（收起的先展开）；没有对应的卡就跳到那台机器。
+  function jump(button) {
+    const key = button.dataset.saJump || "";
+    const [, targetId, ...rest] = key.split(":");
+    const mount = rest.join(":");
+    const block = `ublock:${targetId}:${mount}`;
+    const body = $("storageAdminBody");
+    const find = (anchor) => [...(body?.querySelectorAll?.("[data-sa-anchor]") || [])].find((el) => el.dataset.saAnchor === anchor);
+    if (find(key)?.classList?.contains("sa-users-collapsed")) {
+      fold.open.add(block);
+      render();
+    }
+    const el = find(key) || find(`target:${targetId}`);
+    el?.scrollIntoView?.({ block: "start", behavior: "smooth" });
+  }
+
   const BODY_ACTIONS = [
+    ["[data-sa-jump]", jump],
     ["[data-sa-show-setup]", showTargetForm],
     ["[data-sa-configure]", (button) => configureConnection(button.dataset.saConfigure)],
     ["[data-sa-edit-target]", (button) => editTarget(button.dataset.saEditTarget)],
@@ -362,6 +394,7 @@ export function createStorageAdminController({
       const current = prefs.targets ?? (prefs.target ? [prefs.target] : (data?.targets || []).map((t) => t.id));
       prefs.targets = current.includes(id) ? current.filter((s) => s !== id) : [...current, id];
       savePrefs();
+      intro.add("body");
       render();
     }],
     ["[data-sa-idle-months]", (b) => {

@@ -18,12 +18,12 @@ const EASE_OUT = "cubic-bezier(0.22, 0.8, 0.24, 1)";
 // 入场规格：选择器 → 关键帧 + 时长 + 错峰。测试据此检查只动允许的属性。
 export const ENTRANCE = Object.freeze([
   // 折线 / 面积 / 在线条：从左向右揭开，像被画出来
-  { name: "reveal", selector: ".res-spark svg, .res-gpu-trend svg, .cu-resp svg, .cu-bar, .us-chart svg, .us-split svg",
+  { name: "reveal", selector: ".res-spark svg, .res-gpu-trend svg, .cu-resp svg, .cu-bar, .us-chart svg, .us-split svg, .sa-split-tall",
     keyframes: () => [{ clipPath: "inset(0 100% 0 0)", opacity: 0.4 }, { clipPath: "inset(0 0% 0 0)", opacity: 1 }],
     duration: 450, delay: 0, step: 35, maxSteps: 6, maxAnimated: 12 },
   // 计量条 / 进度条：从起点长出（终点取元素当前的 transform）。横条（渲染器用 scaleX）从左长，
   // 竖条（概览服务器卡的 GPU 柱，scaleY）从底长——按元素的布局宽高判断朝向，不看 transform（满条时两者一样）。
-  { name: "grow", selector: ".res-meter-fill, .res-tile-meter-fill, .bar-progress, .cl-slot-fill, .us-context-fill, .us-seg",
+  { name: "grow", selector: ".res-meter-fill, .res-tile-meter-fill, .bar-progress, .cl-slot-fill, .us-context-fill, .us-seg, .sa-meter-fill, .sa-cold-fill, .sa-rbar-fill",
     keyframes: (end, vertical = false) => (vertical
       ? [{ transform: "scaleY(0)", transformOrigin: "center bottom" }, { transform: end, transformOrigin: "center bottom" }]
       : [{ transform: "scaleX(0)", transformOrigin: "left center" }, { transform: end, transformOrigin: "left center" }]),
@@ -36,9 +36,13 @@ export const ENTRANCE = Object.freeze([
   { name: "rise", selector: ".us-days > *",
     keyframes: () => [{ opacity: 0, transform: "translateY(3px)" }, { opacity: 1, transform: "none" }],
     duration: 240, delay: 40, step: 6, maxSteps: 40, maxAnimated: 70, fill: "backwards" },
+  // 存储管理的卡片与树图块：淡入并轻微上浮 / 放大，按位置错峰（块多时封顶，视口外直接终态）
+  { name: "pop", selector: ".sa-kpi, .sa-tm-tile",
+    keyframes: () => [{ opacity: 0, transform: "translateY(4px) scale(0.985)" }, { opacity: 1, transform: "none" }],
+    duration: 300, delay: 30, step: 18, maxSteps: 20, maxAnimated: 48, fill: "backwards" },
 ]);
 // 大数字：从 0 数到当前值
-export const COUNT_SELECTOR = ".res-tile-value, .cl-kpi-value, .us-figure > span:first-child, .bf-value";
+export const COUNT_SELECTOR = ".res-tile-value, .cl-kpi-value, .us-figure > span:first-child, .bf-value, .sa-hero-value";
 export const COUNT_MS = 420;
 export const CROSSFADE_MS = 200;
 // 切换范围 / 日期的控件 → 淡入它所在面板里的图
