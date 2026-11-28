@@ -26,6 +26,22 @@ function subText(d) {
   return parts.join(" · ");
 }
 
+function daemonStatePillHtml(d) {
+  const label = DAEMON_STATE_TEXT[d.state] || DAEMON_STATE_TEXT.unknown;
+  const ver = d.version ? `<span class="dm-ver">v${escapeHtml(d.version)}</span>` : "";
+  return `<span class="dm-state-pill" data-state="${escapeHtml(DAEMON_STATE_TEXT[d.state] ? d.state : "unknown")}">${escapeHtml(label)}</span>${ver}`;
+}
+
+function serviceGlyph(kindId) {
+  switch (kindId) {
+    case "jupyter": return "JN";
+    case "vscode": return "VS";
+    case "tensorboard": return "TB";
+    case "web": return "WB";
+    default: return "SV";
+  }
+}
+
 function actionHtml(d, { serverName, busy, confirmId, startingId }) {
   if (startingId === d.id) return '<span class="dm-busy" role="status">正在启动…</span>';
   if (d.state !== "stopped") return "";
@@ -82,21 +98,26 @@ function serviceRowHtml(svc, ctx) {
   const uptime = formatDuration(svc.uptimeSec);
   if (uptime) sub.push(`已运行 ${uptime}`);
   if (svc.procCount > 1) sub.push(`${svc.procCount} 个进程`);
+  const kindId = svc.kind?.id || "";
   const kindTag = svc.kind?.label
-    ? `<span class="dm-tag" data-kind="${escapeHtml(svc.kind.id || "")}">${escapeHtml(svc.kind.label)}</span>`
+    ? `<span class="dm-tag" data-kind="${escapeHtml(kindId)}">${escapeHtml(svc.kind.label)}</span>`
     : "";
   const open = svc.scope === "all"
     ? '<span class="dm-tag" data-level="warn" title="绑定在 0.0.0.0 / ::——同一网络里的其它机器也连得上，不是只有集群本机能访问">对所有网卡开放</span>'
-    : "";
+    : '<span class="dm-tag dm-tag-local" title="仅监听本机回环地址">仅本机</span>';
   // 单独一个 ~ 太不起眼，而「在家目录里起了个服务」正是值得看见的事：补上说明。
   const cwd = svc.cwd ? `<div class="dm-note-line dm-cwd" title="工作目录">${escapeHtml(svc.cwd === "~" ? "~（家目录）" : svc.cwd)}</div>` : "";
   return (
-    `<li class="dm-row dm-svc" data-state="${ctx.forward ? "forwarded" : "running"}">` +
-    '<span class="dm-dot" aria-hidden="true"></span>' +
-    '<div class="dm-main">' +
+    `<li class="dm-row dm-svc dm-svc-card" data-state="${ctx.forward ? "forwarded" : "running"}">` +
+    `<div class="dm-svc-top">` +
+    `<span class="dm-svc-glyph" data-kind="${escapeHtml(kindId)}" aria-hidden="true">${serviceGlyph(kindId)}</span>` +
+    `<div class="dm-main">` +
     `<div class="dm-title"><span class="dm-name"${svc.cmdline ? ` title="${escapeHtml(svc.cmdline)}"` : ""}>${escapeHtml(svc.name || "进程")}</span>` +
-    `<span class="dm-addr">:${escapeHtml(svc.port)}</span><span class="dm-sub">${escapeHtml(sub.filter(Boolean).join(" · "))}</span>${kindTag}${open}</div>${cwd}` +
-    "</div>" +
+    `<span class="dm-addr">:${escapeHtml(svc.port)}</span>${kindTag}${open}</div>` +
+    `<div class="dm-sub">${escapeHtml(sub.filter(Boolean).join(" · "))}</div>${cwd}` +
+    `</div>` +
+    `<span class="dm-dot" aria-hidden="true"></span>` +
+    `</div>` +
     `<div class="dm-act">${serviceActionHtml(svc, ctx)}</div>` +
     "</li>"
   );
@@ -136,12 +157,13 @@ export function buildServicesHtml(data, { pending = new Map(), collapsed = false
   }
   const total = services.length + Math.max(0, Number(data?.servicesMore) || 0);
   const exposed = services.filter((svc) => svc.scope === "all").length;
+  const fwdCount = forwards.length;
   const count = total
-    ? `<span class="dm-count">${total} 个</span>${exposed ? `<span class="dm-tag" data-level="warn">${exposed} 个对所有网卡开放</span>` : ""}`
+    ? `<span class="dm-count">${total} 个</span>${fwdCount ? `<span class="dm-tag dm-tag-fwd">${fwdCount} 个转发中</span>` : ""}${exposed ? `<span class="dm-tag" data-level="warn">${exposed} 个对所有网卡开放</span>` : ""}`
     : "";
   return (
     `<h3 class="dm-group"><button type="button" class="text-btn dm-group-toggle" data-dm-toggle aria-expanded="${collapsed ? "false" : "true"}">我在这台服务器上的服务</button>${count}</h3>` +
-    (rows.length ? `<ul class="dm-list">${rows.join("")}</ul>` : "") +
+    (rows.length ? `<ul class="dm-list dm-svc-grid">${rows.join("")}</ul>` : "") +
     notes.map((text) => `<p class="dm-note">${escapeHtml(text)}</p>`).join("")
   );
 }
@@ -158,19 +180,24 @@ export function buildDaemonsHtml(data, { busyId = null, confirmId = null, loadin
   const busy = Boolean(startingId);
   const serverName = data?.serverName || data?.serverId || "这台服务器";
   const rows = daemons.map((d) => {
-    const note = d.note ? `<div class="dm-note-line">${escapeHtml(d.note)}</div>` : "";
+    const state = DAEMON_STATE_TEXT[d.state] ? d.state : "unknown";
+    const note = d.note ? `<div class="dm-note-line">${escapeHtml(d.note)}</div>` : (d.state === "missing" ? '<div class="dm-note-line">服务器上没找到程序，需先安装</div>' : "");
+    const act = actionHtml(d, { serverName, busy, confirmId, startingId });
     return (
-      `<li class="dm-row" data-state="${escapeHtml(DAEMON_STATE_TEXT[d.state] ? d.state : "unknown")}">` +
-      '<span class="dm-dot" aria-hidden="true"></span>' +
-      '<div class="dm-main">' +
-      `<div class="dm-title"><span class="dm-name">${escapeHtml(d.label)}</span><span class="dm-addr">:${escapeHtml(d.port)}</span><span class="dm-sub">${escapeHtml(subText(d))}</span></div>${note}` +
-      "</div>" +
-      `<div class="dm-act">${actionHtml(d, { serverName, busy, confirmId, startingId })}</div>` +
+      `<li class="dm-row dm-card" data-state="${escapeHtml(state)}">` +
+      `<div class="dm-card-head">` +
+      `<span class="dm-dot" aria-hidden="true"></span>` +
+      `<span class="dm-name">${escapeHtml(d.label)}</span>` +
+      `<span class="dm-addr">:${escapeHtml(d.port)}</span>` +
+      `<span class="dm-card-pills">${daemonStatePillHtml(d)}</span>` +
+      `</div>` +
+      `${note}` +
+      `<div class="dm-card-foot"><span class="dm-card-bar" aria-hidden="true"></span>${act ? `<div class="dm-act">${act}</div>` : `<span class="dm-sub">${escapeHtml(subText(d))}</span>`}</div>` +
       "</li>"
     );
   }).join("");
   const warn = data?.reachable === false
     ? `<p class="dm-note" data-level="warn">这一轮取不到状态：${escapeHtml(data.error || "SSH 未返回结果")}</p>`
     : (error ? `<p class="dm-note" data-level="warn">${escapeHtml(error)}（下面是上一次的结果）</p>` : "");
-  return `${warn}<ul class="dm-list">${rows}</ul>${buildServicesHtml(data, { pending, collapsed: servicesCollapsed })}`;
+  return `${warn}<ul class="dm-list dm-cards">${rows}</ul>${buildServicesHtml(data, { pending, collapsed: servicesCollapsed })}`;
 }

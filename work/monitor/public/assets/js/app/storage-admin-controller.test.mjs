@@ -69,3 +69,71 @@ test("无扫描时可见存储页也定时重读本机活动；不触发 SSH 动
   controller.enter("storage");
   assert.equal(reads, 2);
 });
+
+test("可视化磁盘卡片定位、全部刷新与冷存储目录保存", async () => {
+  const listeners = {};
+  const posts = [];
+  let refreshAllClick = null;
+  const scrolled = [];
+  const refreshAllBtn = { disabled: false, textContent: "全部刷新", addEventListener: (ev, fn) => { if (ev === "click") refreshAllClick = fn; } };
+  const anchorEl = { dataset: { saAnchor: "disk:master:/data" }, classList: { contains: () => true }, scrollIntoView: (o) => scrolled.push(o) };
+  const form = {
+    querySelector: (sel) => {
+      const vals = {
+        '[name="id"]': "master", '[name="label"]': "master", '[name="connectionId"]': "",
+        '[name="host"]': "203.0.113.10", '[name="port"]': "22",
+        '[name="roots"]': "/public /data/user_data", '[name="additionalRoots"]': "",
+        '[name="coldMounts"]': "/data",
+      };
+      return sel in vals ? { value: vals[sel] } : null;
+    },
+  };
+  const body = {
+    innerHTML: "",
+    addEventListener: (ev, fn) => { listeners[ev] = fn; },
+    querySelector: (sel) => sel === "[data-sa-target-form]" ? form : null,
+    querySelectorAll: (sel) => sel === "[data-sa-anchor]" ? [anchorEl] : [],
+  };
+  const controller = createStorageAdminController({
+    doc: {
+      hidden: false,
+      getElementById: (id) => id === "storageAdminBody" ? body : id === "storageAdminRefreshAll" ? refreshAllBtn : id === "storageAdminPanel" ? {} : null,
+      addEventListener() {},
+    },
+    getJson: async () => ({
+      setup: { id: "master" },
+      targets: [
+        { id: "master", label: "master", host: "203.0.113.10", roots: ["/public", "/data/user_data"], coldMounts: ["/data"], status: { state: "ok" } },
+        { id: "node04", label: "node04", host: "203.0.113.11", roots: ["/mnt"], status: { state: "ok" } },
+      ],
+    }),
+    postJson: async (url, payload) => {
+      posts.push([url, payload]);
+      if (url === "/api/storage-admin/targets") return { saved: true, target: payload, scopeChanged: false };
+      return { id: payload?.targetId, status: { state: "ok" } };
+    },
+    storage: null,
+  });
+  controller.bind();
+  controller.onStatus({ activeServerId: "master", teamAdmin: { isAdmin: true, sshUser: "lin" } });
+  await new Promise((r) => setImmediate(r));
+
+  // 点击磁盘可视化卡片定位并展开
+  const focusBtn = { dataset: { saFocusDisk: "disk:master:/data" } };
+  listeners.click({ target: { closest: (sel) => sel === "[data-sa-focus-disk]" ? focusBtn : null }, preventDefault() {} });
+  assert.equal(scrolled.length, 1);
+
+  // 保存含 coldMounts 的配置
+  const saveBtn = { closest: (sel) => sel === "[data-sa-target-form]" ? form : null };
+  listeners.click({ target: { closest: (sel) => sel === "[data-sa-save-target]" ? saveBtn : null }, preventDefault() {} });
+  await new Promise((r) => setImmediate(r));
+  assert.deepEqual(posts[0][0], "/api/storage-admin/targets");
+  assert.deepEqual(posts[0][1].coldMounts, ["/data"]);
+
+  // 全部刷新并发触发所有节点刷新
+  assert.equal(typeof refreshAllClick, "function");
+  refreshAllClick();
+  await new Promise((r) => setImmediate(r));
+  const refreshed = posts.filter(([u]) => u === "/api/storage-admin/refresh").map(([, p]) => p.targetId);
+  assert.deepEqual(refreshed.sort(), ["master", "node04"]);
+});

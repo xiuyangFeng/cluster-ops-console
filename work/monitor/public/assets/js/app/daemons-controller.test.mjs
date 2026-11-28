@@ -208,12 +208,12 @@ test("服务组：没有服务也没有转发时整组不出现；有服务时�
   assert.equal(buildServicesHtml(withServices([])), "");
   assert.doesNotMatch(buildDaemonsHtml(view(["running", "running"])), /dm-group|dm-svc/, "旧版后端的响应没有 services 字段，照常只画两行");
   const html = buildDaemonsHtml(withServices([svc(8814), svc(8765, { binds: ["0.0.0.0", "::"], scope: "all", cwd: "", procCount: 3, uptimeSec: 190000 })]));
-  assert.match(html, /<h3 class="dm-group"><button type="button" class="text-btn dm-group-toggle" data-dm-toggle aria-expanded="true">我在这台服务器上的服务<\/button><span class="dm-count">2 个<\/span><span class="dm-tag" data-level="warn">1 个对所有网卡开放<\/span><\/h3><ul class="dm-list">/);
-  assert.equal(html.match(/class="dm-row dm-svc"/g).length, 2);
-  assert.match(html, /<span class="dm-name" title="python -m http\.server 8814 --bind 127\.0\.0\.1">python<\/span><span class="dm-addr">:8814<\/span><span class="dm-sub">127\.0\.0\.1 · 已运行 3 小时 12 分<\/span><\/div>/, "命令行在进程名的悬停提示里");
+  assert.match(html, /<h3 class="dm-group"><button type="button" class="text-btn dm-group-toggle" data-dm-toggle aria-expanded="true">我在这台服务器上的服务<\/button><span class="dm-count">2 个<\/span><span class="dm-tag" data-level="warn">1 个对所有网卡开放<\/span><\/h3><ul class="dm-list dm-svc-grid">/);
+  assert.equal(html.match(/class="dm-row dm-svc dm-svc-card"/g).length, 2);
+  assert.match(html, /<span class="dm-name" title="python -m http\.server 8814 --bind 127\.0\.0\.1">python<\/span><span class="dm-addr">:8814<\/span>[\s\S]*?<div class="dm-sub">127\.0\.0\.1 · 已运行 3 小时 12 分<\/div>/, "命令行在进程名的悬停提示里");
   assert.match(html, /<div class="dm-note-line dm-cwd" title="工作目录">~\/Digital_twin\/GNN\/outputs\/report<\/div>/);
   assert.match(html, /<button type="button" class="btn btn-secondary dm-btn" data-dm-open="8814" title="临时转发到这台电脑并在浏览器打开；最长 2 小时，可以随时关闭">打开<\/button>/);
-  assert.match(html, /<span class="dm-sub">0\.0\.0\.0、:: · 已运行 2 天 4 小时 · 3 个进程<\/span><span class="dm-tag" data-level="warn" title="[^"]*不是只有集群本机能访问">对所有网卡开放<\/span>/);
+  assert.match(html, /<span class="dm-tag" data-level="warn" title="[^"]*不是只有集群本机能访问">对所有网卡开放<\/span>[\s\S]*?<div class="dm-sub">0\.0\.0\.0、:: · 已运行 2 天 4 小时 · 3 个进程<\/div>/);
   assert.equal(html.match(/>对所有网卡开放</g).length, 1, "只绑回环的不标（组名那一行另有一句合计）");
   assert.equal(html.match(/dm-cwd/g).length, 1, "没有工作目录就不占一行");
   assert.match(buildServicesHtml(withServices([svc(8815, { cwd: "~", kind: { id: "jupyter", label: "Jupyter" } })])), /<span class="dm-tag" data-kind="jupyter">Jupyter<\/span>[\s\S]*title="工作目录">~（家目录）<\/div>/);
@@ -223,7 +223,7 @@ test("服务组：没有服务也没有转发时整组不出现；有服务时�
 
 test("服务组：已转发的显示本机地址（可点、新标签页打开）、「复制」与「关闭」；转发不了、密码连接、开满、没列全各有说法", () => {
   const forwarded = buildServicesHtml(withServices([svc(8814), svc(8815)], [fwd(8814, 51814)]));
-  assert.match(forwarded, /<li class="dm-row dm-svc" data-state="forwarded">/);
+  assert.match(forwarded, /<li class="dm-row dm-svc dm-svc-card" data-state="forwarded">/);
   assert.match(forwarded, /<a class="dm-fwd" href="http:\/\/127\.0\.0\.1:51814\/" target="_blank" rel="noopener noreferrer" title="在浏览器打开。[^"]*自动收回，也可以随时关闭">127\.0\.0\.1:51814<\/a><button type="button" class="text-btn dm-copy" data-dm-copy="http:\/\/127\.0\.0\.1:51814\/"[^>]*>复制<\/button><button type="button" class="text-btn dm-cancel" data-dm-close="8814">关闭<\/button>/);
   assert.doesNotMatch(forwarded, /data-dm-open="8814"/, "已转发的不再给「打开」");
   assert.match(forwarded, /data-dm-open="8815"/);
@@ -257,7 +257,7 @@ test("服务组：远端来的文字一律转义；进行中的动作显示进�
   assert.match(opening, /<span class="dm-busy" role="status">正在转发…<\/span>/);
   assert.match(opening, /<span class="dm-busy" role="status">正在关闭…<\/span>/);
   assert.doesNotMatch(opening, /data-dm-open|data-dm-close/);
-  assert.match(buildServicesHtml(withServices([svc(8814, { name: "", cmdline: "", uptimeSec: null })])), /<span class="dm-name">进程<\/span><span class="dm-addr">:8814<\/span><span class="dm-sub">127\.0\.0\.1<\/span>/, "没拿到名字 / 时长时不编");
+  assert.match(buildServicesHtml(withServices([svc(8814, { name: "", cmdline: "", uptimeSec: null })])), /<span class="dm-name">进程<\/span><span class="dm-addr">:8814<\/span>[\s\S]*?<div class="dm-sub">127\.0\.0\.1<\/div>/, "没拿到名字 / 时长时不编");
 });
 
 test("打开：POST 只带 serverId 与端口（数字）；成功后在浏览器打开按端口现拼的本机地址，用返回的状态重绘", async () => {
@@ -361,8 +361,8 @@ test("关闭：POST /api/daemons/forward/close，用返回的状态重绘；切�
 test("服务组收起：只留组名（个数、对所有网卡开放的提醒）与转发中 / 动作中的行，说明文字不出现", () => {
   const data = withServices([svc(8765, { scope: "all" }), svc(8814), svc(8815)], [fwd(8814, 51814), fwd(9000, 51900)], { servicesMore: 6, forwardBlocked: "password" });
   const html = buildServicesHtml(data, { collapsed: true, pending: new Map([[8815, "open"]]) });
-  assert.match(html, /aria-expanded="false">我在这台服务器上的服务<\/button><span class="dm-count">9 个<\/span><span class="dm-tag" data-level="warn">1 个对所有网卡开放<\/span>/, "个数含没列出的");
-  assert.equal(html.match(/class="dm-row dm-svc"/g).length, 3, "转发中的、正在转发的、列表外的转发各一行");
+  assert.match(html, /aria-expanded="false">我在这台服务器上的服务<\/button><span class="dm-count">9 个<\/span><span class="dm-tag dm-tag-fwd">2 个转发中<\/span><span class="dm-tag" data-level="warn">1 个对所有网卡开放<\/span>/, "个数含没列出的");
+  assert.equal(html.match(/class="dm-row dm-svc/g).length, 3, "转发中的、正在转发的、列表外的转发各一行");
   assert.doesNotMatch(html, /:8765|class="dm-note"/);
   assert.match(html, /data-dm-close="8814"/);
   assert.match(html, /data-dm-close="9000"/);

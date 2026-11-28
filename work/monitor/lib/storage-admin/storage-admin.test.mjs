@@ -8,7 +8,7 @@ import { test } from "node:test";
 
 import { isSafeRoot, resolveIdentityFile, resolveTargets } from "./config.mjs";
 import { buildInstallCommand, buildInstallScript, buildUninstallScript, KEY_COMMENT, parsePublicKey, scriptVersion } from "./install.mjs";
-import { buildScanView, buildUsersView, mergeListWithScan, pickMounts } from "./model.mjs";
+import { buildScanView, buildUsersView, isColdMount, mergeListWithScan, pickMounts } from "./model.mjs";
 import { buildRootSshArgs, parseInfo, parseJobReply, parseList, parseQuota, parseScanResult } from "./protocol.mjs";
 import { classifySshFailure, createStorageAdminService, REMOTE_SCRIPT_FILE } from "./service.mjs";
 import { createStorageAdminStore } from "./store.mjs";
@@ -588,4 +588,76 @@ test("存储节点可绑定不同用户名和直连/跳转配置；仅白名单�
   const before = calls.length;
   await assert.rejects(svc.refresh("n4root"), (e) => e.status === 403);
   assert.equal(calls.length, before);
+});
+
+test("冷存储标记与子目录扫描兜底：/data 标注为 cold 并复用 /data/user_data 扫描；scanView 标出已删除账号", async () => {
+  assert.equal(isColdMount("/data", ["/data"]), true);
+  assert.equal(isColdMount("/data", ["/data/user_data"]), true);
+  assert.equal(isColdMount("/public", ["/data"]), false);
+  assert.equal(isColdMount("/", ["/data"]), false);
+
+  const targets = resolveTargets({
+    storageAdmin: {
+      targets: [{ id: "master", host: "m.local", roots: ["/public", "/data/user_data"], coldMounts: ["/data", "/", "/data"] }],
+    },
+  });
+  assert.deepEqual(targets[0].coldMounts, ["/data"]);
+
+  const info = {
+    mounts: [
+      { mount: "/public", size: 1000, used: 900, avail: 100, iused: 10, inodes: 100, quota: false },
+      { mount: "/data", size: 2000, used: 1200, avail: 800, iused: 20, inodes: 100, quota: false, tier: "cold" },
+      { mount: "/data/sub", size: 500, used: 100, avail: 400, iused: 5, inodes: 100, quota: false },
+    ],
+    users: [{ uid: 1001, name: "alice", lastLogin: 1700000000 }, { uid: 0, name: "root", lastLogin: 0 }],
+  };
+  const scans = [
+    { job: { id: "s-sub", root: "/data/sub/dir", kind: "tree", state: "done", endedAt: 300 }, owners: [{ uid: 1001, bytes: 50, files: 1 }] },
+    { job: { id: "s-cold", root: "/data/user_data", kind: "tree", state: "done", endedAt: 200 }, owners: [
+      { uid: 1001, bytes: 600, files: 10 },
+      { uid: 1022, name: "mwb", bytes: 200, files: 4 },
+    ] },
+  ];
+  const users = buildUsersView({ info, scans });
+  const cold = users.find((u) => u.mount === "/data");
+  assert.equal(cold.tier, "cold");
+  assert.equal(cold.source, "scan");
+  assert.equal(cold.scanRoot, "/data/user_data", "跳过更深子挂载 /data/sub 下的扫描，命中 /data/user_data");
+  assert.equal(cold.rows.find((r) => r.uid === 1001).account, "user");
+  assert.equal(cold.rows.find((r) => r.uid === 1022).account, "none");
+
+  const view = buildScanView({
+    job: { id: "s-cold", root: "/data/user_data", bytes: 800 },
+    result: { rootTotals: [800, 800, 14, 1], records: [], top: [], owners: [[1001, 600, 10], [1022, 200, 4], [0, 10, 1]], names: { 1001: "alice", 1022: "mwb", 0: "root" } },
+  }, "", info.users);
+  assert.deepEqual(view.owners.map((o) => [o.uid, o.account]), [[1001, "user"], [1022, "none"], [0, "system"]]);
+
+  let config = { storageAdmin: { targets: [{ id: "master", host: "m.local", roots: ["/public", "/data/user_data"], coldMounts: ["/data"] }] } };
+  const store = createStorageAdminStore({});
+  const svc = createStorageAdminService({
+    getConfig: async () => config,
+    isAdmin: () => true,
+    store,
+    dir: os.tmpdir(),
+    savePersonalConfig: async (patch) => { config = { ...config, ...patch }; },
+    exec: async () => ({
+      code: 0,
+      stdout: JSON.stringify({
+        k: "info",
+        v: scriptVersion(SOURCE),
+        roots: [{ path: "/public", children: [] }, { path: "/data/user_data", children: [] }],
+        jobs: [],
+        mounts: [
+          { mount: "/public", size: 1000, used: 900, avail: 100, iused: 10, inodes: 100 },
+          { mount: "/data", size: 2000, used: 1200, avail: 800, iused: 20, inodes: 100 },
+        ],
+      }),
+    }),
+  });
+  const ref = await svc.refresh("master");
+  assert.equal(ref.info.mounts.find((m) => m.mount === "/data").tier, "cold");
+  assert.equal(ref.info.mounts.find((m) => m.mount === "/public").tier, undefined);
+  await assert.rejects(svc.configureTarget({ id: "master", host: "m.local", roots: ["/public"], coldMounts: ["/"] }), (e) => e.status === 400);
+  await svc.configureTarget({ id: "master", host: "m.local", roots: ["/public", "/data/user_data"] });
+  assert.deepEqual(config.storageAdmin.targets[0].coldMounts, ["/data"], "未传 coldMounts 时保留原有冷存储配置");
 });

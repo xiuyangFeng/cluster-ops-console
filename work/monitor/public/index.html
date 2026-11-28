@@ -628,10 +628,10 @@
         <div id="usageGalaxyStage" class="gx-observatory-stage"></div>
 
         <div class="us-metrics">
-          <article class="us-metric"><div class="us-metric-label">Token 总量 <span>含缓存读取</span></div><div class="us-figure"><span id="usageTotal">—</span><span class="us-unit" id="usageTotalUnit"></span></div><div class="us-metric-desc" id="usageTotalDesc"></div></article>
-          <article class="us-metric"><div class="us-metric-label">未命中输入 <span>普通输入 + 缓存写入</span></div><div class="us-figure"><span id="usageFresh">—</span><span class="us-unit" id="usageFreshUnit"></span><span class="us-delta" id="usageFreshDelta"></span></div><div class="us-metric-desc" id="usageFreshDesc"></div></article>
-          <article class="us-metric"><div class="us-metric-label">模型调用</div><div class="us-figure"><span id="usageCalls">—</span><span class="us-unit">次</span><span class="us-rate" id="usageCallsRate"></span></div><div class="us-metric-desc" id="usageCallsDesc"></div></article>
-          <article class="us-metric"><div class="us-metric-label">会话</div><div class="us-figure"><span id="usageSessions">—</span><span class="us-unit" id="usageSessionsUnit"></span></div><div class="us-metric-desc" id="usageSessionsDesc"></div></article>
+          <article class="us-metric"><div class="us-metric-label">Token 总量 <span>含缓存读取</span></div><div class="us-figure"><span id="usageTotal">—</span><span class="us-unit" id="usageTotalUnit"></span></div><div class="us-metric-desc" id="usageTotalDesc"></div><div class="us-metric-bar" id="usageTotalBar" aria-hidden="true"></div></article>
+          <article class="us-metric"><div class="us-metric-label">未命中输入 <span>普通输入 + 缓存写入</span></div><div class="us-figure"><span id="usageFresh">—</span><span class="us-unit" id="usageFreshUnit"></span><span class="us-delta" id="usageFreshDelta"></span></div><div class="us-metric-desc" id="usageFreshDesc"></div><div class="us-metric-bar" id="usageFreshBar" aria-hidden="true"></div></article>
+          <article class="us-metric"><div class="us-metric-label">模型调用</div><div class="us-figure"><span id="usageCalls">—</span><span class="us-unit">次</span><span class="us-rate" id="usageCallsRate"></span></div><div class="us-metric-desc" id="usageCallsDesc"></div><div class="us-metric-bar" id="usageCallsBar" aria-hidden="true"></div></article>
+          <article class="us-metric"><div class="us-metric-label">会话</div><div class="us-figure"><span id="usageSessions">—</span><span class="us-unit" id="usageSessionsUnit"></span></div><div class="us-metric-desc" id="usageSessionsDesc"></div><div class="us-metric-bar" id="usageSessionsBar" aria-hidden="true"></div></article>
         </div>
 
         <div class="us-analytics">
@@ -652,11 +652,13 @@
           </article>
         </div>
 
-        <article class="panel us-insights" id="usageInsights" aria-label="成本归因与同期对比"></article>
-        <article class="panel us-projects">
-          <div class="panel-header flex-header"><div class="header-left-side"><h2>按项目</h2><span class="panel-hint">会话日志的工作目录 · 点击筛选</span></div></div>
-          <div class="us-project-strip" id="usageProjects"></div>
-        </article>
+        <div class="us-attribution-grid">
+          <article class="panel us-insights" id="usageInsights" aria-label="成本归因与同期对比"></article>
+          <article class="panel us-projects">
+            <div class="panel-header flex-header"><div class="header-left-side"><h2>按项目</h2><span class="panel-hint">工作目录 · 点击筛选</span></div></div>
+            <div class="us-project-strip" id="usageProjects"></div>
+          </article>
+        </div>
 
         <article class="panel us-sessions" id="usageSessionsPanel">
           <div class="panel-header flex-header">
@@ -692,7 +694,10 @@
             <h2>存储管理</h2>
             <span class="badge">管理员 · root 只读</span>
           </div>
-          <button type="button" class="btn btn-secondary sa-reload" id="storageAdminReload" title="重读本机保存的结果（不连服务器）。连服务器请点各机器的「刷新」">重读</button>
+          <div class="header-right-actions sa-header-actions">
+            <button type="button" class="btn btn-secondary sa-reload" id="storageAdminRefreshAll" title="连所有已配置节点实时刷新磁盘容量、新挂载盘与任务状态">全部刷新</button>
+            <button type="button" class="btn btn-secondary sa-reload" id="storageAdminReload" title="重读本机保存的结果（不连服务器）。连服务器请点「全部刷新」或各机器的「刷新」">重读</button>
+          </div>
         </div>
         <div class="sa-body" id="storageAdminBody" aria-live="polite"></div>
       </article>

@@ -41,7 +41,7 @@ export function resolveIdentityFile(config, { homeDir = os.homedir() } = {}) {
   return p;
 }
 
-// → [{ id, label, host, port, roots }]；不合法的条目丢弃（团队层是手编文件）。
+// → [{ id, label, host, port, roots, coldMounts? }]；不合法的条目丢弃（团队层是手编文件）。
 export function resolveTargets(config) {
   const raw = config?.storageAdmin?.targets;
   if (!Array.isArray(raw)) return [];
@@ -61,9 +61,14 @@ export function resolveTargets(config) {
     if (!Number.isInteger(port) || port < 1 || port > 65535) continue;
     const roots = (Array.isArray(t.roots) ? t.roots : []).filter(isSafeRoot).slice(0, MAX_ROOTS);
     if (!roots.length) continue;
+    const coldMounts = [...new Set((Array.isArray(t.coldMounts) ? t.coldMounts : []).filter(isSafeRoot).slice(0, MAX_ROOTS))];
     seen.add(id);
     const label = typeof t.label === "string" && t.label.trim() ? t.label.trim().slice(0, 64) : id;
-    out.push({ id, label, host, port, roots: [...new Set(roots)], ...(connection ? { connectionId, sshUser: attachPersonalSsh(connection, config).sshUser || null, sshJumpServerId: connection.sshJumpServerId || "" } : {}) });
+    out.push({
+      id, label, host, port, roots: [...new Set(roots)],
+      ...(coldMounts.length ? { coldMounts } : {}),
+      ...(connection ? { connectionId, sshUser: attachPersonalSsh(connection, config).sshUser || null, sshJumpServerId: connection.sshJumpServerId || "" } : {}),
+    });
   }
   return out;
 }

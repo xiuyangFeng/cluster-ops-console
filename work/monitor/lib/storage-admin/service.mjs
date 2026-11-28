@@ -21,7 +21,7 @@ import { isSafeRoot, MAX_TARGETS, resolveIdentityFile, resolveTargets, storageTa
 import { buildInstallCommand, buildInstallScript, buildUninstallScript, parsePublicKey, scriptVersion, REMOTE_SCRIPT_PATH } from "./install.mjs";
 import { attachPersonalSsh, buildPinnedProbeSshArgs } from "../ssh-args.mjs";
 import { createHash } from "node:crypto";
-import { buildScanView, buildUsersView, mergeListWithScan, pickMounts } from "./model.mjs";
+import { buildScanView, buildUsersView, isColdMount, mergeListWithScan, pickMounts } from "./model.mjs";
 import {
   buildRootSshArgs, isAbsNormal, isJobId, isRelPath, MAX_OUT_BYTES, parseInfo, parseJobReply, parseList,
   parseQuota, parseScanResult, REMOTE_ERROR_TEXT, RESULT_TIMEOUT_MS, SSH_TIMEOUT_MS,
@@ -151,7 +151,10 @@ export function createStorageAdminService({
       const exact = remoteRoots.find((r) => r.path === root);
       return exact ? [exact] : remoteRoots.some((r) => under(root, r.path)) ? [{ path: root, children: null }] : [];
     });
-    const info = saved.info ? { ...saved.info, roots, mounts: pickMounts(saved.info.mounts, target.roots) } : null;
+    const pickedMounts = saved.info
+      ? pickMounts(saved.info.mounts, target.roots).map((m) => (isColdMount(m.mount, target.coldMounts) ? { ...m, tier: "cold" } : m))
+      : [];
+    const info = saved.info ? { ...saved.info, roots, mounts: pickedMounts } : null;
     let status = saved.error ? { state: "error", ...saved.error } : info ? { state: "ok" } : { state: "unknown" };
     if (info && info.version !== expected && !saved.error) status = { state: "outdated", message: `服务器端脚本是版本 ${info.version}，本机是 ${expected}：重新运行安装命令升级` };
     if (info && !saved.error && target.roots.some((root) => !remoteRoots.some((r) => under(root, r.path)))) {
@@ -165,6 +168,7 @@ export function createStorageAdminService({
     if (JSON.stringify(activity.records) !== JSON.stringify(saved.activity || {})) await store.patchTarget(target.id, { activity: activity.records });
     return {
       id: target.id, label: target.label, host: target.host, port: target.port, roots: target.roots,
+      ...(target.coldMounts?.length ? { coldMounts: target.coldMounts } : {}),
       ...(target.connectionId ? { connectionId: target.connectionId, sshUser: target.sshUser, sshJumpServerId: target.sshJumpServerId } : {}),
       status, checkedAt: saved.checkedAt ?? null, info,
       users: buildUsersView({ info, quota: saved.quota || {}, scans, activity: activity.byUid }),
@@ -190,10 +194,14 @@ export function createStorageAdminService({
     const { config, targets } = await context();
     if (typeof savePersonalConfig !== "function") throw fail("当前环境不支持保存存储配置", 503);
     if (!input || !Array.isArray(input.roots) || !input.roots.length || input.roots.length > 8 || !input.roots.every(isSafeRoot)) throw fail("请输入 1 至 8 个允许查看的绝对目录，例如 /home、/public；不支持根目录 /", 400);
-    const target = resolveTargets({ ...config, storageAdmin: { targets: [input] } })[0];
+    if (input.coldMounts !== undefined && (!Array.isArray(input.coldMounts) || input.coldMounts.length > 8 || !input.coldMounts.every(isSafeRoot))) {
+      throw fail("冷存储目录需为绝对路径，例如 /data；不支持根目录 /", 400);
+    }
+    const previous = targets.find((t) => t.id === (typeof input.id === "string" ? input.id.trim() : ""));
+    const mergedInput = input.coldMounts === undefined && previous?.coldMounts?.length ? { ...input, coldMounts: previous.coldMounts } : input;
+    const target = resolveTargets({ ...config, storageAdmin: { targets: [mergedInput] } })[0];
     if (!target) throw fail("服务器标识、地址或 SSH 端口无效", 400);
     const rest = targets.filter((t) => t.id !== target.id);
-    const previous = targets.find((t) => t.id === target.id);
     if (previous && targetBinding({ ...previous, roots: target.roots }, config) !== targetBinding(target, config)) throw fail("请使用新的服务器标识保存另一个节点或账号，避免混用历史扫描数据", 400);
     const scopeChanged = Boolean(previous && JSON.stringify([...previous.roots].sort()) !== JSON.stringify([...target.roots].sort()));
     if (previous && !scopeChanged) target.roots = previous.roots;
@@ -387,7 +395,8 @@ export function createStorageAdminService({
     if (!isJobId(jobId) || !isRelPath(rel)) throw fail("参数无效", 400);
     const entry = await loadScan(targetId, jobId);
     if (!entry) throw fail("本机没有这份扫描结果", 404);
-    const view = buildScanView(entry, rel);
+    const saved = await store.getTarget(targetId);
+    const view = buildScanView(entry, rel, saved.info?.users || null);
     if (!view) throw fail("这一层不在扫描结果里（可能小于阈值）", 404);
     return view;
   }

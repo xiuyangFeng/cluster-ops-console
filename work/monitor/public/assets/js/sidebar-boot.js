@@ -99,10 +99,10 @@
       ["cluster", "#clusterPanel", 1100],
       ["incidents", "#incidentsPanel", 360],
       ["usageMetrics", ".us-metrics", 112],
-      ["usageTrend", ".us-trend", 360],
-      ["usageCalendar", ".us-calendar", 360],
-      ["usageProjects", ".us-projects", 120],
-      ["usageSessions", "#usageSessionsPanel", 460],
+      ["usageTrend", ".us-trend", 240],
+      ["usageCalendar", ".us-calendar", 240],
+      ["usageProjects", ".us-projects", 204],
+      ["usageSessions", "#usageSessionsPanel", 420],
     ];
     const style = document.createElement("style");
     style.id = "bootSkeletonHeights";

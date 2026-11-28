@@ -79,6 +79,7 @@ export function buildCollectorInvocation({
   ports = [],
   platform = process.platform,
   knownHostsPath,
+  slurmAll = false,
 } = {}) {
   assertProfile(profile);
 
@@ -88,6 +89,7 @@ export function buildCollectorInvocation({
 
   const envParts = [`CT_PROFILE='${profile}'`];
   if (safePorts.length) envParts.push(`CT_PORTS='${safePorts.join(",")}'`);
+  if (profile === "slow" && slurmAll === true) envParts.push("CT_SLURM_ALL='1'");
 
   const remoteCommand = `env ${envParts.join(" ")} sh -s`;
   const args = [...buildProbeSshArgs(server, parsed, { platform, knownHostsPath }), remoteCommand];

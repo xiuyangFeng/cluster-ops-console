@@ -8,8 +8,9 @@
 // 所有动态文案一律 escapeHtml；按钮只带 data-sa-* 属性，由 app/storage-admin-controller.js 委托处理。
 import { escapeHtml, formatBytePair, formatBytes, formatRelativeTime } from "../store.js";
 import {
-  capacityRowsHtml, coldChartHtml, DEFAULT_IDLE_MONTHS, fleetSummary, foldList, idleToolbarHtml, kpiHtml, meterHtml, rankedRowsHtml,
-  splitBarHtml, splitSegments, toneLegendHtml, treemapHtml, usedRatio, userKpisHtml, userRowsHtml,
+  activeRows, capacityRowsHtml, coldChartHtml, DEFAULT_IDLE_MONTHS, diskGridHtml, diskTierChipHtml, fleetSummary, foldList,
+  footprintBarHtml, idleToolbarHtml, isColdTier, kpiHtml, meterHtml, rankedRowsHtml, ringGaugeHtml, splitBarHtml, splitSegments,
+  tierSplitHtml, toneLegendHtml, topOwnersStripHtml, treemapHtml, usedRatio, userKpisHtml, userRowsHtml,
 } from "./storage-admin-viz.js";
 import { clockOf, dayKeyOf } from "./usage-model.js";
 
@@ -102,20 +103,24 @@ function usageButton(u, target) {
     ` title="服务器上只读、顺序、限速地读 inode 表，按属主合计；不遍历目录、不改任何配置">${u.source === "inode" ? "重新统计" : "按用户统计"}</button>`;
 }
 
-// 盘头：挂载点 + 小容量条 + 占比与容量（容量来自 df；没有对应挂载时只写名字）。
+// 盘头：挂载点 + 冷存储/空闲徽章 + 小容量条 + 占比与容量（容量来自 df；没有对应挂载时只写名字）。
 function diskHeadHtml(u, mount, sub) {
   const ratio = mount ? usedRatio(mount) : null;
+  const tier = diskTierChipHtml(mount || u, ratio ?? 0);
   const cap = mount ? `<span class="sa-users-cap"><span class="sa-users-pct" data-level="${level(ratio)}">${pct(ratio)}</span>${escapeHtml(formatBytePair(mount.used, mount.size, { compact: true }))}</span>${meterHtml(ratio, `${u.mount} 已用 ${pct(ratio)}`)}` : "";
-  return `<h4><span class="sa-mono">${escapeHtml(u.mount)}</span><span class="sa-users-tag">${escapeHtml(sub)}</span></h4>${cap}`;
+  return `<h4><span class="sa-mono">${escapeHtml(u.mount)}</span>${tier}<span class="sa-users-tag">${escapeHtml(sub)}</span></h4>${cap}`;
 }
 
 // 一台机器多块盘时，次要的盘收成一行摘要（最多的人 + 有占用的用户数 + 细分段条），点「展开」看全部。
 function usersCollapsedHtml(u, target, mount) {
-  const top = [...(u.rows || [])].sort((a, b) => b.bytes - a.bytes)[0];
-  const sum = top ? `最多 ${top.name || `uid ${top.uid}`} ${size(top.bytes)} · ${num(u.rows.length)} 位用户` : "还没有按用户的数据";
-  const segs = u.rows?.length ? splitSegments({ ...u, avail: mount?.avail }) : [];
+  const rows = activeRows(u.rows);
+  const top = [...rows].sort((a, b) => b.bytes - a.bytes)[0];
+  const ratio = mount ? usedRatio(mount) : 0;
+  const sum = top ? `最多 ${top.name || `uid ${top.uid}`} ${size(top.bytes)} · ${num(rows.length)} 位用户` : "还没有按用户的数据";
+  const segs = rows.length ? splitSegments({ ...u, avail: mount?.avail }) : [];
   const mini = segs.length ? `<span class="sa-split sa-split-mini" aria-hidden="true">${segs.map((s) => `<span class="sa-seg" data-kind="${s.kind}"${s.slot ? ` data-slot="${s.slot}"` : ""} style="flex-grow:${(s.ratio * 1000).toFixed(2)}"></span>`).join("")}</span>` : "";
-  return `<article class="sa-users sa-users-collapsed" data-sa-anchor="${attr(`disk:${target.id}:${u.mount}`)}"><div class="sa-users-head"><h4><span class="sa-mono">${escapeHtml(u.mount)}</span><span class="sa-users-tag">按用户</span></h4>` +
+  const tierAttr = isColdTier(mount || u) ? ' data-tier="cold"' : "";
+  return `<article class="sa-users sa-users-collapsed"${tierAttr} data-sa-anchor="${attr(`disk:${target.id}:${u.mount}`)}"><div class="sa-users-head"><h4><span class="sa-mono">${escapeHtml(u.mount)}</span>${diskTierChipHtml(mount || u, ratio)}<span class="sa-users-tag">按用户</span></h4>` +
     `${mini}<span class="sa-dim">${escapeHtml(sum)}</span>` +
     `<button type="button" class="sa-fold" data-sa-fold="${attr(`ublock:${target.id}:${u.mount}`)}" aria-expanded="false">展开</button></div></article>`;
 }
@@ -128,14 +133,18 @@ const SOURCE = {
 
 function usersHtml(u, target, now, activity, fold, collapsible = false) {
   const mount = (target.info?.mounts || []).find((m) => m.mount === u.mount);
+  const rows = activeRows(u.rows);
   const src = SOURCE[u.source];
-  const source = src ? `<span class="sa-src" title="${attr(`${src[1]}，${when(u.at, now)}）；占已用 = 占这块盘已用空间。`)}">${escapeHtml(src[0])} · ${escapeHtml(ago(u.at, now))}</span>` : "";
+  const srcLabel = u.scanRoot ? `目录扫描 ${u.scanRoot}` : src?.[0];
+  const srcTip = u.scanRoot ? `来源：${u.scanRoot} 目录树扫描的属主合计` : src?.[1];
+  const source = src ? `<span class="sa-src" title="${attr(`${srcTip}，${when(u.at, now)}）；占已用 = 占这块盘已用空间。`)}">${escapeHtml(srcLabel)} · ${escapeHtml(ago(u.at, now))}</span>` : "";
   const collapse = collapsible
     ? `<button type="button" class="sa-fold" data-sa-fold="${attr(`ublock:${target.id}:${u.mount}`)}" aria-expanded="true">收起</button>`
     : "";
   const action = `<span class="sa-actions">${usageButton(u, target)}${collapse}</span>`;
-  const anchor = ` data-sa-anchor="${attr(`disk:${target.id}:${u.mount}`)}"`;
-  if (!u.rows.length) {
+  const cold = isColdTier(mount || u);
+  const anchor = ` data-sa-anchor="${attr(`disk:${target.id}:${u.mount}`)}"${cold ? ' data-tier="cold"' : ""}`;
+  if (!rows.length) {
     const big = u.iused >= QUOTA_HINT_MIN_INODES;
     const inodeOk = Boolean(u.inodeScan?.ok);
     const hint = u.quota
@@ -152,11 +161,11 @@ function usersHtml(u, target, now, activity, fold, collapsible = false) {
   // 读 inode 表的统计把目录也算作一个 inode，表头写清楚。
   const filesLabel = u.source === "inode" ? "文件和目录数" : "文件数";
   const months = activity?.months || DEFAULT_IDLE_MONTHS;
-  const cold = coldChartHtml(u, { now, months });
+  const coldChart = coldChartHtml(u, { now, months });
   const capacity = mount ? usedRatio(mount) : null;
-  return `<article class="sa-users"${anchor}><div class="sa-users-head">${diskHeadHtml(u, mount, `按用户 · ${num(u.rows.length)} 位`)}${source}${action}</div>` +
-    `<div class="sa-users-top${cold ? "" : " sa-users-top-solo"}"><div class="sa-users-main">${userKpisHtml(u, { now, months, capacity })}` +
-    `<div class="sa-split-wrap">${splitBarHtml({ ...u, avail: mount?.avail }, { tall: true })}</div></div>${cold}</div>` +
+  return `<article class="sa-users"${anchor}><div class="sa-users-head">${diskHeadHtml(u, mount, `按用户 · ${num(rows.length)} 位`)}${source}${action}</div>` +
+    `<div class="sa-users-top${coldChart ? "" : " sa-users-top-solo"}"><div class="sa-users-main">${userKpisHtml(u, { now, months, capacity })}` +
+    `<div class="sa-split-wrap">${splitBarHtml({ ...u, avail: mount?.avail }, { tall: true })}</div>${topOwnersStripHtml(u)}</div>${coldChart}</div>` +
     `${idleToolbarHtml(u, { now, activity })}${userRowsHtml(u, { filesLabel, activity, now, fold, foldKey: `users:${target.id}:${u.mount}` })}` +
     `${u.source === "scan" && !u.quota && !u.inodeScan?.ok && u.iused >= QUOTA_HINT_MIN_INODES ? quotaGuideHtml(u.mount, target) : ""}</article>`;
 }
@@ -211,10 +220,11 @@ function rootsHtml(t, running, fold) {
         `<span class="sa-actions"><button type="button" class="text-btn" data-sa-list="${attr(t.id)}" data-path="${attr(full)}">查看</button>` +
         `<button type="button" class="text-btn" data-sa-scan="${attr(t.id)}" data-root="${attr(full)}"${running ? " disabled" : ""}>扫描</button></span></li>`;
     }).join("");
-    return `<div class="sa-root"><div class="sa-root-head"><b class="sa-mono">${escapeHtml(r.path)}</b><span class="sa-dim">${num((r.children || []).length)} 项</span><span class="sa-actions">${rootBtns}</span></div>` +
-      (kids ? `<ul class="sa-kids">${kids}</ul>${folded.toggle}` : '<p class="sa-note">（没有子目录或读不到）</p>') + "</div>";
+    return `<details class="sa-root" data-sa-key="${attr(`root:${t.id}:${r.path}`)}"><summary class="sa-root-head"><b class="sa-mono">${escapeHtml(r.path)}</b>` +
+      `<span class="sa-dim">${num((r.children || []).length)} 项</span><span class="sa-actions">${rootBtns}</span></summary>` +
+      `<div class="sa-root-body">${kids ? `<ul class="sa-kids">${kids}</ul>${folded.toggle}` : '<p class="sa-note">（没有子目录或读不到）</p>'}</div></details>`;
   }).join("");
-  return `<section class="sa-card sa-roots"><div class="sa-card-head"><h4>可扫描目录</h4>${info("「查看」即时列出目录（发一次 SSH）；「扫描」在服务器后台统计整棵目录树，结果保存在本机，可在「扫描记录」里逐层浏览。")}</div>${body}</section>`;
+  return `<section class="sa-card sa-roots"><div class="sa-card-head"><h4>可扫描目录</h4><span class="sa-dim">点击目录展开子项</span>${info("「查看」即时列出目录（发一次 SSH）；「扫描」在服务器后台统计整棵目录树，结果保存在本机，可在「扫描记录」里逐层浏览。")}</div>${body}</section>`;
 }
 
 function scansHtml(t, now, fold) {
@@ -240,41 +250,61 @@ function scansHtml(t, now, fold) {
 export function buildTargetHtml(t, { now = Date.now(), activity = { months: DEFAULT_IDLE_MONTHS, only: false }, fold = null, editable = false } = {}) {
   const state = t.status?.state || "unknown";
   const roots = (t.roots || []).map((r) => `<span class="sa-chip sa-mono">${escapeHtml(r)}</span>`).join("");
+  const mountList = t.info?.mounts || [];
+  const totalUsed = mountList.reduce((s, m) => s + (Number(m.used) || 0), 0);
+  const totalSize = mountList.reduce((s, m) => s + (Number(m.size) || 0), 0);
+  const capBadge = mountList.length
+    ? `<span class="sa-chip sa-node-cap">${num(mountList.length)} 块盘 · ${escapeHtml(formatBytePair(totalUsed, totalSize, { compact: true }))}</span>`
+    : "";
   const head = `<div class="sa-target-head"><span class="sa-status" data-state="${attr(state)}">${escapeHtml(STATUS_TEXT[state] || state)}</span>` +
     `<h3>${escapeHtml(t.label)}</h3><span class="sa-dim sa-mono">${escapeHtml(t.sshUser || "root")}@${escapeHtml(t.host)}</span>` +
-    `<span class="sa-target-scope" title="允许查看的目录">${roots}</span>` +
+    `${capBadge}<span class="sa-target-scope" title="允许查看的目录">${roots}</span>` +
     `${t.checkedAt ? `<span class="sa-dim">检测于 ${escapeHtml(formatRelativeTime(t.checkedAt, now) || "刚刚")}</span>` : ""}` +
     `<span class="sa-actions">${editable ? `<button type="button" class="text-btn" data-sa-edit-target="${attr(t.id)}"${t.running || t.refreshing ? " disabled" : ""}>添加 / 管理目录</button>` : ""}` +
     `<button type="button" class="btn btn-secondary sa-btn" data-sa-refresh="${attr(t.id)}"${t.refreshing ? " disabled" : ""}>${t.refreshing ? "刷新中…" : "刷新"}</button></span></div>`;
   const msg = state !== "ok" && t.status?.message ? `<p class="sa-banner" data-level="warn">${escapeHtml(t.status.message)}</p>` : "";
   const anchor = ` data-sa-anchor="${attr(`target:${t.id}`)}"`;
   if (!t.info) return `<section class="sa-target"${anchor}>${head}${msg}<p class="sa-empty">还没有数据：完成接入步骤后点「刷新」。</p></section>`;
-  const mounts = t.info.mounts.length ? "" : '<p class="sa-empty">没有找到相关的磁盘。</p>';
-  // 多块盘：默认只展开已用最多的那块的「按用户」，其余收成一行（展开状态记在 fold 里）。
+  const mounts = mountList.length ? "" : '<p class="sa-empty">没有找到相关的磁盘。</p>';
+  // 多块盘：默认只展开已用最多的那块的「按用户」，其余收成一行（展开状态记在 fold 里），上方用磁盘可视化矩阵卡片展示全部盘。
   const list = t.users || [];
   const primary = list.length > 1 ? [...list].sort((a, b) => (b.used || 0) - (a.used || 0))[0].mount : null;
+  const expandedMounts = new Set(list.filter((u) => !primary || u.mount === primary || fold?.open?.has(`ublock:${t.id}:${u.mount}`)).map((u) => u.mount));
+  const diskGrid = mountList.length ? diskGridHtml(t, { expandedMounts }) : "";
   const users = list.map((u) => (
-    !primary || u.mount === primary || fold?.open?.has(`ublock:${t.id}:${u.mount}`)
+    expandedMounts.has(u.mount)
       ? usersHtml(u, t, now, activity, fold, Boolean(primary) && u.mount !== primary)
-      : usersCollapsedHtml(u, t, t.info.mounts.find((m) => m.mount === u.mount))
+      : usersCollapsedHtml(u, t, mountList.find((m) => m.mount === u.mount))
   )).join("");
   const side = `${rootsHtml(t, Boolean(t.running), fold)}${scansHtml(t, now, fold)}`;
-  return `<section class="sa-target"${anchor}>${head}${msg}${mounts}${jobHtml(t.running, now, t)}${users}${side ? `<div class="sa-target-grid">${side}</div>` : ""}</section>`;
+  return `<section class="sa-target"${anchor}>${head}${msg}${mounts}${jobHtml(t.running, now, t)}${diskGrid}${users}${side ? `<div class="sa-target-grid">${side}</div>` : ""}</section>`;
 }
 
-// 节点选择（可多选）：每个节点一枚胶囊，带最满那块盘的占用、连接状态与「扫描中」。
+// 节点选择（可多选）：可视化节点微卡，带磁盘数、冷存储标识、合计容量条、最满那块盘的占用、连接状态与「扫描中」。
 function targetTabsHtml(targets, selected) {
   return `<div class="sa-tabs" role="group" aria-label="存储节点和账号（可多选）">${targets.map((t) => {
-    const worst = (t.info?.mounts || []).reduce((m, d) => Math.max(m, usedRatio(d)), 0);
-    const badge = t.info?.mounts?.length ? `<span class="sa-tab-pct" data-level="${level(worst)}">${Math.round(worst * 100)}%</span>` : "";
+    const mounts = t.info?.mounts || [];
+    const worst = mounts.reduce((m, d) => Math.max(m, usedRatio(d)), 0);
+    const used = mounts.reduce((s, d) => s + (Number(d.used) || 0), 0);
+    const avail = mounts.reduce((s, d) => s + (Number(d.avail) || 0), 0);
+    const total = mounts.reduce((s, d) => s + (Number(d.size) || 0), 0);
+    const ratio = used + avail > 0 ? used / (used + avail) : 0;
+    const hasCold = mounts.some((d) => isColdTier(d));
+    const badge = mounts.length ? `<span class="sa-tab-pct" data-level="${level(worst)}">${Math.round(worst * 100)}%</span>` : "";
     const busyDot = t.running ? '<span class="sa-tab-busy" title="有任务在跑"></span>' : "";
     const bad = t.status?.state && t.status.state !== "ok" ? '<span class="sa-tab-warn" title="连接或版本有问题">!</span>' : "";
-    return `<label class="sa-tab" title="${attr(`${t.sshUser || "root"}@${t.host}`)}"><input type="checkbox" data-sa-target-tab="${attr(t.id)}"${selected.includes(t.id) ? " checked" : ""}>` +
-      `<b>${escapeHtml(t.label)}</b><span class="sa-tab-host">${escapeHtml(t.sshUser || "root")}@${escapeHtml(t.host)}</span>${badge}${busyDot}${bad}</label>`;
+    const meta = mounts.length
+      ? `<span class="sa-tab-sub"><span class="sa-tab-count">${num(mounts.length)} 块盘</span>${hasCold ? '<span class="sa-tier-chip" data-tier="cold">含冷存储</span>' : ""}` +
+        `<span class="sa-tab-cap">${escapeHtml(formatBytePair(used, total, { compact: true }))}</span></span>` +
+        `<span class="sa-tab-bar"><span class="sa-tab-fill sa-meter-fill" data-level="${level(worst)}" style="width:${(Math.min(1, ratio) * 100).toFixed(1)}%"></span></span>`
+      : "";
+    return `<label class="sa-tab" title="${attr(`${t.sshUser || "root"}@${t.host}`)}">` +
+      `<span class="sa-tab-top"><input type="checkbox" data-sa-target-tab="${attr(t.id)}"${selected.includes(t.id) ? " checked" : ""}>` +
+      `<b>${escapeHtml(t.label)}</b><span class="sa-tab-host">${escapeHtml(t.sshUser || "root")}@${escapeHtml(t.host)}</span>${badge}${busyDot}${bad}</span>${meta}</label>`;
   }).join("")}</div>`;
 }
 
-// ② 总览：已用容量大数字 + 统计 + 所有磁盘的容量条。
+// ② 总览：左舱环形容量仪表 + 热冷分层条 + 统计格；右舱物理容量版图 + 按占用排序的磁盘容量条。
 export function buildFleetHtml(targets) {
   const s = fleetSummary(targets);
   if (!s.disks.length) return "";
@@ -286,11 +316,14 @@ export function buildFleetHtml(targets) {
     kpiHtml("最满的盘", f ? pct(f.ratio) : "—", f ? `${f.target.label} ${f.mount.mount}` : "", f ? ` data-level="${level(f.ratio)}"` : ""),
     kpiHtml("≥ 80% 的盘", `${num(s.hot)} 块`, `共 ${num(s.disks.length)} 块 · ${num(s.nodes)} 台节点`, s.hot ? ' data-level="warn"' : ""),
   ].join("");
-  return `<div class="sa-fleet-grid"><section class="sa-hero" data-level="${lv}"><span class="sa-hero-label">已用容量</span>` +
-    `<div class="sa-hero-figure"><span class="sa-hero-value">${pct(s.ratio)}</span><span class="sa-hero-cap">${escapeHtml(formatBytePair(s.used, s.size, { compact: true }))}</span></div>` +
-    `${meterHtml(s.ratio, `所选节点合计已用 ${pct(s.ratio)}`, { large: true })}<div class="sa-kpis sa-kpis-2">${stats}</div></section>` +
-    `<section class="sa-capacity"><div class="sa-card-head"><h4>磁盘容量</h4><span class="sa-dim">按占用排序 · 刻度 80% / 90% · 点一行查看该盘用户</span></div>` +
-    `${capacityRowsHtml(s.disks, { multiNode: s.nodes > 1 || targets.length > 1 })}</section></div>`;
+  const multiNode = s.nodes > 1 || targets.length > 1;
+  return `<div class="sa-fleet-grid"><section class="sa-hero" data-level="${lv}">` +
+    `<div class="sa-hero-top">${ringGaugeHtml(s.ratio, { size: "hero", tone: lv })}` +
+    `<div class="sa-hero-head"><span class="sa-hero-label">集群总已用容量</span>` +
+    `<div class="sa-hero-figure"><span class="sa-hero-value">${pct(s.ratio)}</span><span class="sa-hero-cap">${escapeHtml(formatBytePair(s.used, s.size, { compact: true }))}</span></div></div></div>` +
+    `${meterHtml(s.ratio, `所选节点合计已用 ${pct(s.ratio)}`, { large: true })}${tierSplitHtml(s)}<div class="sa-kpis sa-kpis-2">${stats}</div></section>` +
+    `<section class="sa-capacity"><div class="sa-card-head"><h4>磁盘容量全景</h4><span class="sa-dim">按占用排序 · 刻度 80% / 90% · 点一块盘直达分析</span></div>` +
+    `${footprintBarHtml(s.disks, { multiNode })}${capacityRowsHtml(s.disks, { multiNode })}</section></div>`;
 }
 
 export function buildStorageTargetForm(data, busy = {}) {
@@ -309,6 +342,7 @@ export function buildStorageTargetForm(data, busy = {}) {
     field("host", "服务器地址或 SSH 别名", draft.host, `autocomplete="off"${locked}`) + field("port", "SSH 端口", draft.port || 22, `type="number" min="1" max="65535"${locked}`) +
     `<label class="sa-target-roots">${editing ? "已有目录（可修改）" : "允许查看的目录"}<input name="roots" value="${attr(draft.roots || "")}" placeholder="例如 /home /public /mnt（空格分隔）" /></label>` +
     (editing ? `<label class="sa-target-roots">新增目录<input name="additionalRoots" value="${attr(draft.additionalRoots || "")}" placeholder="例如 /data /mnt/archive（空格分隔，合计最多 8 个）" /></label>` : "") +
+    `<label class="sa-target-roots">冷存储目录（可选）<input name="coldMounts" value="${attr(draft.coldMounts || "")}" placeholder="例如 /data（空格分隔，界面标为冷存储并单独汇总）" /></label>` +
     `<button type="button" class="btn btn-secondary" data-sa-save-target${busy.target ? " disabled" : ""}>${busy.target ? "正在保存…" : editing ? "保存目录范围" : "保存存储服务器"}</button></div></details>`;
 }
 
@@ -428,10 +462,11 @@ export function buildBrowserHtml(view, { now = Date.now(), fold = null } = {}) {
       `<td class="sa-num sa-strong-num">${escapeHtml(size(f.blocks))}</td><td class="sa-num sa-dim sa-mtime">${escapeHtml(clockText(f.mtime))}</td></tr>`
     )).join("")}</tbody></table></div>${topFold.toggle}</section>`
     : "";
-  const owners = view.owners?.length
+  const activeOwners = activeRows(view.owners);
+  const owners = activeOwners.length
     ? `<section class="sa-card sa-files"><div class="sa-card-head"><h4>按属主</h4><span class="sa-dim">这次扫描范围内</span></div>` +
-      `<div class="sa-split-wrap">${splitBarHtml({ rows: view.owners, used: n.blocks, avail: 0 }, { tall: true, name: view.path, scope: "扫描范围" })}</div>` +
-      `${userRowsHtml({ rows: view.owners }, { shareLabel: "占扫描范围", fold, foldKey: `owners:${view.path}` })}</section>`
+      `<div class="sa-split-wrap">${splitBarHtml({ rows: activeOwners, used: n.blocks, avail: 0 }, { tall: true, name: view.path, scope: "扫描范围" })}</div>` +
+      `${userRowsHtml({ rows: activeOwners }, { shareLabel: "占扫描范围", fold, foldKey: `owners:${view.path}` })}</section>`
     : "";
   const map = treemapHtml(view);
   const note = `占用 = 磁盘块（st_blocks × 512）；不跟随符号链接、不跨文件系统，硬链接只计一次。为控制体积，只保留第一层的全部目录和更深处 ≥ ${size(view.threshold)} 的最大 3 万个目录。`;

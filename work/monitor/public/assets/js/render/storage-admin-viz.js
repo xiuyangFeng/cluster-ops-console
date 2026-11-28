@@ -22,6 +22,35 @@ const w = (r) => `${(clamp01(r) * 100).toFixed(2)}%`;
 
 export const OWNER_SLOTS = 5;
 
+// 已删除的账号（服务器 /etc/passwd 里已不存在的 uid）从列表与统计图里去掉；
+// 残留磁盘块仍由容量条的「未归属」段吸收，保证整盘已用合计与 df 一致。
+export const isDeletedAccount = (r) => Boolean(r && (r.account === "none" || (r.account === "system" && r.name === null)));
+export const activeRows = (rows) => (rows || []).filter((r) => !isDeletedAccount(r));
+
+export const isColdTier = (m) => m?.tier === "cold";
+export const isFreshDisk = (m, ratio) => !isColdTier(m) && ratio < 0.01 && (Number(m?.size) || 0) >= 100 * 1024 ** 3;
+
+export function diskTierChipHtml(m, ratio = usedRatio(m || {})) {
+  if (isColdTier(m)) return '<span class="sa-tier-chip" data-tier="cold">冷存储</span>';
+  if (isFreshDisk(m, ratio)) return '<span class="sa-tier-chip" data-tier="fresh">空闲新盘</span>';
+  return "";
+}
+
+// 环形进度指示器（SVG，pathLength=100，供总览大环与每块盘的微卡使用）。
+export function ringGaugeHtml(ratio, { size: kind = "card", tone: ringTone = "ok", label = "" } = {}) {
+  const r = clamp01(ratio);
+  const dash = `${(r * 100).toFixed(1)} 100`;
+  const box = kind === "hero" ? 96 : 48;
+  const cx = box / 2;
+  const radius = kind === "hero" ? 40 : 19;
+  const stroke = kind === "hero" ? 8 : 4.5;
+  return `<svg class="sa-ring sa-ring-${kind}" viewBox="0 0 ${box} ${box}" aria-hidden="true">` +
+    `<circle class="sa-ring-track" cx="${cx}" cy="${cx}" r="${radius}" stroke-width="${stroke}" />` +
+    `<circle class="sa-ring-arc" data-tone="${attr(ringTone)}" cx="${cx}" cy="${cx}" r="${radius}" stroke-width="${stroke}" pathLength="100" style="stroke-dasharray:${dash}" />` +
+    (label ? `<text class="sa-ring-text" x="${cx}" y="${cx}" text-anchor="middle" dominant-baseline="central">${escapeHtml(label)}</text>` : "") +
+    "</svg>";
+}
+
 // ---------- 折叠：每个列表默认只显示前几项，「展开全部」看其余 ----------
 // fold.open：已展开的列表键（控制器持有，重绘不丢）；key 在整页唯一（如 users:master:/public）。
 export const FOLD_DEFAULT = 5;
@@ -51,7 +80,14 @@ export function meterHtml(ratio, label, { large = false } = {}) {
     `<span class="sa-meter-fill" style="width:${w(ratio)}"></span><span class="sa-meter-tick" style="left:80%"></span><span class="sa-meter-tick" style="left:90%"></span></span>`;
 }
 
-// ---------- 所有磁盘：合计与容量条列表 ----------
+// ---------- 所有磁盘：合计、热冷分层、物理容量版图与容量条列表 ----------
+
+function tierAggregate(list) {
+  const sum = (key) => list.reduce((s, d) => s + (Number(d.mount[key]) || 0), 0);
+  const used = sum("used");
+  const avail = sum("avail");
+  return { count: list.length, size: sum("size"), used, avail, ratio: used + avail > 0 ? used / (used + avail) : 0 };
+}
 
 export function fleetSummary(targets) {
   const disks = [];
@@ -66,22 +102,130 @@ export function fleetSummary(targets) {
     size: sum("size"), used, avail, ratio: used + avail > 0 ? used / (used + avail) : 0,
     iused: sum("iused"), inodes: sum("inodes"), fullest,
     hot: disks.filter((d) => d.ratio >= 0.8).length,
+    cold: tierAggregate(disks.filter((d) => isColdTier(d.mount))),
+    hotTier: tierAggregate(disks.filter((d) => !isColdTier(d.mount))),
   };
 }
 
-// 一盘一行：名字（挂载点 + 节点）· 计量条 · 百分比 · 已用 / 总量。整行是按钮，点了跳到这块盘的按用户。
+// 热存储 vs 冷存储分层对比条（只在配置了冷存储盘时展示）。
+export function tierSplitHtml(summary) {
+  if (!summary?.cold?.count) return "";
+  const item = (title, tone, data) => (
+    `<div class="sa-tier-box" data-tier="${tone}"${tip(title, `${pct(data.ratio)}`, `${formatBytePair(data.used, data.size, { compact: true })} · 剩余 ${size(data.avail)} · ${num(data.count)} 块盘`)}>` +
+    `<div class="sa-tier-head"><span class="sa-tier-dot" data-tier="${tone}"></span><b>${escapeHtml(title)}</b><span class="sa-tier-pct">${pct(data.ratio)}</span></div>` +
+    `<span class="sa-tier-track"><span class="sa-tier-fill sa-meter-fill" data-tier="${tone}" style="width:${w(data.ratio)}"></span></span>` +
+    `<span class="sa-tier-sub">${escapeHtml(formatBytePair(data.used, data.size, { compact: true }))} · ${num(data.count)} 块</span></div>`
+  );
+  return `<div class="sa-tier-strip">${item("热存储", "hot", summary.hotTier)}${item("冷存储", "cold", summary.cold)}</div>`;
+}
+
+// 物理容量版图：按每块盘的物理容量占比铺成一行可视化色块，块内填充表达已用比例；
+// 占比极小（< 2.5%，例如 183 GiB 系统盘相对 150+ TiB 数据盘）的盘收成右侧紧凑胶囊，避免条尾出现挤扁截断的细条。
+export function footprintBarHtml(disks, { multiNode = true } = {}) {
+  const valid = (disks || []).filter((d) => (Number(d.mount?.size) || 0) > 0);
+  const total = valid.reduce((s, d) => s + (Number(d.mount.size) || 0), 0);
+  if (!(total > 0) || valid.length < 2) return "";
+  const bySize = [...valid].sort((a, b) => (b.mount.size || 0) - (a.mount.size || 0));
+  const shortName = (mount) => {
+    if (!mount || mount === "/") return "/";
+    const parts = mount.split("/").filter(Boolean);
+    return parts.length > 1 ? parts[parts.length - 1] : mount;
+  };
+  const main = bySize.filter((d) => d.mount.size / total >= 0.025);
+  const barDisks = main.length >= 2 ? main : bySize;
+  const tiny = main.length >= 2 ? bySize.filter((d) => d.mount.size / total < 0.025) : [];
+  const barTotal = barDisks.reduce((s, d) => s + (Number(d.mount.size) || 0), 0);
+  const blocks = barDisks.map(({ target: t, mount: m, ratio }) => {
+    const share = m.size / total;
+    const barShare = barTotal > 0 ? m.size / barTotal : 0;
+    const cold = isColdTier(m);
+    const lv = level(ratio);
+    const toneKey = cold ? "cold" : lv;
+    const meta = [cold ? "冷存储" : "热存储", `已用 ${formatBytePair(m.used, m.size, { compact: true })}`, `占总物理容量 ${pct(share)}`, `剩余 ${size(m.avail)}`].join(" · ");
+    const basis = barDisks.length <= 6 ? "58px" : "0px";
+    return `<button type="button" class="sa-fp-seg" data-tone="${toneKey}" data-sa-focus-disk="${attr(`disk:${t.id}:${m.mount}`)}"` +
+      ` style="flex:${(barShare * 1000).toFixed(2)} 1 ${basis}"${tip(`${multiNode ? `${t.label} ` : ""}${m.mount}`, `${size(m.size)} · 已用 ${pct(ratio)}`, meta)}>` +
+      `<span class="sa-fp-fill" style="width:${w(ratio)}"></span>` +
+      `<span class="sa-fp-label"><b>${escapeHtml(shortName(m.mount))}</b><span>${escapeHtml(size(m.size))}</span></span></button>`;
+  }).join("");
+  const tinyHtml = tiny.length
+    ? `<span class="sa-fp-tiny"><span class="sa-dim">小盘</span>${tiny.map(({ target: t, mount: m, ratio }) => {
+      const meta = [`已用 ${formatBytePair(m.used, m.size, { compact: true })}`, `占总物理容量 ${pct(m.size / total)}`, `剩余 ${size(m.avail)}`].join(" · ");
+      return `<button type="button" class="sa-fp-chip" data-level="${level(ratio)}" data-sa-focus-disk="${attr(`disk:${t.id}:${m.mount}`)}"` +
+        `${tip(`${multiNode ? `${t.label} ` : ""}${m.mount}`, `${size(m.size)} · 已用 ${pct(ratio)}`, meta)}>` +
+        `<b class="sa-mono">${escapeHtml(shortName(m.mount))}</b><span>${escapeHtml(size(m.size))}</span></button>`;
+    }).join("")}</span>`
+    : "";
+  return `<div class="sa-fp-wrap"><div class="sa-fp-head"><span class="sa-dim">物理容量版图（宽度 = 磁盘容量，填充 = 已用比例）</span>${tinyHtml}</div>` +
+    `<div class="sa-fp-bar" role="group" aria-label="各磁盘物理容量占比">${blocks}</div></div>`;
+}
+
+// 一盘一行：名字（挂载点 + 节点 + 冷存储/空闲徽章）· 计量条 · 百分比 · 已用 / 总量。整行是按钮，点了跳到这块盘的按用户。
 export function capacityRowsHtml(disks, { multiNode = true } = {}) {
   if (!disks?.length) return "";
   return `<div class="sa-cap-list" role="list">${disks.map(({ target: t, mount: m, ratio }) => {
     const lv = level(ratio);
+    const cold = isColdTier(m);
     const iratio = m.inodes > 0 ? m.iused / m.inodes : 0;
-    const meta = [`剩余 ${size(m.avail)}`, `${num(m.iused)} 个文件（inode ${pct(iratio)}）`, `${m.fs || ""} ${m.device || ""}`.trim(), m.quota ? "配额统计已开" : ""].filter(Boolean).join(" · ");
-    return `<button type="button" role="listitem" class="sa-cap-row" data-level="${lv}" data-sa-jump="${attr(`disk:${t.id}:${m.mount}`)}"${tip(`${t.label} ${m.mount}`, `已用 ${pct(ratio)}`, meta)}>` +
-      `<span class="sa-cap-name"><b>${escapeHtml(m.mount)}</b>${multiNode ? `<small>${escapeHtml(t.label)}</small>` : ""}</span>` +
+    const meta = [cold ? "冷存储" : "", `剩余 ${size(m.avail)}`, `${num(m.iused)} 个文件（inode ${pct(iratio)}）`, `${m.fs || ""} ${m.device || ""}`.trim(), m.quota ? "配额统计已开" : ""].filter(Boolean).join(" · ");
+    return `<button type="button" role="listitem" class="sa-cap-row" data-level="${lv}"${cold ? ' data-tier="cold"' : ""} data-sa-jump="${attr(`disk:${t.id}:${m.mount}`)}"${tip(`${t.label} ${m.mount}`, `已用 ${pct(ratio)}`, meta)}>` +
+      `<span class="sa-cap-name"><span class="sa-cap-title"><b>${escapeHtml(m.mount)}</b>${diskTierChipHtml(m, ratio)}</span>${multiNode ? `<small>${escapeHtml(t.label)}</small>` : ""}</span>` +
       meterHtml(ratio, `${t.label} ${m.mount} 已用 ${pct(ratio)}`) +
       `<span class="sa-cap-pct" data-level="${lv}">${pct(ratio)}</span>` +
       `<span class="sa-cap-size">${escapeHtml(formatBytePair(m.used, m.size, { compact: true }) || size(m.used))}</span></button>`;
   }).join("")}</div>`;
+}
+
+// 单台机器的可视化磁盘矩阵卡片：每块盘一张带环形占比表、冷/热标签、剩余空间与用户构成微条的卡片，点卡定位并展开分析。
+export function diskGridHtml(target, { expandedMounts = new Set() } = {}) {
+  const mounts = target?.info?.mounts || [];
+  if (!mounts.length) return "";
+  const userByMount = new Map((target.users || []).map((u) => [u.mount, u]));
+  const cards = mounts.map((m) => {
+    const ratio = usedRatio(m);
+    const lv = level(ratio);
+    const cold = isColdTier(m);
+    const fresh = isFreshDisk(m, ratio);
+    const ringTone = cold ? "cold" : lv;
+    const u = userByMount.get(m.mount);
+    const rows = activeRows(u?.rows);
+    const top = [...rows].sort((a, b) => b.bytes - a.bytes)[0];
+    const segs = rows.length ? splitSegments({ ...u, avail: m.avail }) : [];
+    const mini = segs.length
+      ? `<span class="sa-split sa-split-mini" aria-hidden="true">${segs.map((s) => `<span class="sa-seg" data-kind="${s.kind}"${s.slot ? ` data-slot="${s.slot}"` : ""} style="flex-grow:${(s.ratio * 1000).toFixed(2)}"></span>`).join("")}</span>`
+      : `<span class="sa-disk-bar-empty"><span class="sa-meter-fill" data-level="${lv}" style="width:${w(ratio)}"></span></span>`;
+    const foot = top
+      ? `最多 ${ownerName(top)} ${size(top.bytes)} · ${num(rows.length)} 位`
+      : fresh ? "新盘空闲 · 暂无数据" : "点击展开按用户统计";
+    const expanded = expandedMounts.has(m.mount);
+    const meta = [cold ? "冷存储" : "热存储", `剩余 ${size(m.avail)}`, `${num(m.iused)} 个文件`, m.fs || ""].filter(Boolean).join(" · ");
+    return `<button type="button" class="sa-disk-card" data-level="${lv}" data-tier="${cold ? "cold" : "hot"}" data-expanded="${expanded ? "true" : "false"}"` +
+      ` data-sa-focus-disk="${attr(`disk:${target.id}:${m.mount}`)}"${tip(`${target.label} ${m.mount}`, `已用 ${pct(ratio)}`, meta)}>` +
+      `<div class="sa-disk-card-top">${ringGaugeHtml(ratio, { size: "card", tone: ringTone, label: pct(ratio) })}` +
+      `<div class="sa-disk-card-meta"><span class="sa-disk-card-path"><b class="sa-mono">${escapeHtml(m.mount)}</b>${diskTierChipHtml(m, ratio)}</span>` +
+      `<span class="sa-disk-card-cap">${escapeHtml(formatBytePair(m.used, m.size, { compact: true }))}</span>` +
+      `<span class="sa-disk-card-sub">剩余 ${escapeHtml(size(m.avail))}${m.fs ? ` · ${escapeHtml(m.fs)}` : ""}</span></div></div>` +
+      `<div class="sa-disk-card-foot">${mini}<span class="sa-disk-card-topuser">${escapeHtml(foot)}</span></div></button>`;
+  }).join("");
+  return `<div class="sa-disk-grid" role="group" aria-label="${attr(`${target.label} 磁盘可视化概览`)}">${cards}</div>`;
+}
+
+// 磁盘分析卡内的「占用前 5 成员」可视化微卡条：配色与上方分段条一一对应，无需扫表格即可直观看到头部大户占比。
+export function topOwnersStripHtml(u) {
+  const rows = [...activeRows(u.rows)].sort((a, b) => b.bytes - a.bytes);
+  if (!rows.length) return "";
+  const top = rows.slice(0, OWNER_SLOTS);
+  const max = top[0]?.bytes || 0;
+  const items = top.map((r, i) => {
+    const slot = i + 1;
+    const fill = max > 0 ? r.bytes / max : 0;
+    return `<div class="sa-owner-pill" data-slot="${slot}"${tip(ownerName(r), size(r.bytes), `占已用 ${pct(r.share)} · ${num(r.files)} 个文件`)}>` +
+      `<div class="sa-owner-pill-head"><span class="sa-swatch" data-kind="user" data-slot="${slot}"></span>` +
+      `<b class="sa-owner-pill-name">${escapeHtml(ownerName(r))}</b><span class="sa-owner-pill-pct">${pct(r.share)}</span></div>` +
+      `<span class="sa-owner-pill-track"><span class="sa-owner-pill-fill sa-meter-fill" data-slot="${slot}" style="width:${w(fill)}"></span></span>` +
+      `<span class="sa-owner-pill-size">${escapeHtml(size(r.bytes))}</span></div>`;
+  }).join("");
+  return `<div class="sa-top-owners" role="list" aria-label="占用前 ${top.length} 位成员">${items}</div>`;
 }
 
 // ---------- 按用户：分段条 + 名单 ----------
@@ -94,10 +238,10 @@ export function ownerSlots(rows) {
 
 const ownerName = (r) => r.name || `uid ${r.uid}`;
 
-// 分段条的各段：前 5 人、其他用户、未归属（已用里名单没覆盖到的，如保留块 / 元数据 / 扫描没覆盖的部分）、剩余。
+// 分段条的各段：前 5 人、其他用户、未归属（已用里名单没覆盖到的，如保留块 / 元数据 / 已删账号残留 / 扫描没覆盖的部分）、剩余。
 // 宽度一律按「已用 + 可用」（与百分比同一口径）。
 export function splitSegments(u) {
-  const rows = [...(u.rows || [])].sort((a, b) => b.bytes - a.bytes);
+  const rows = [...activeRows(u.rows)].sort((a, b) => b.bytes - a.bytes);
   const used = Number(u.used) || 0;
   const cap = used + (Number(u.avail) || Math.max(0, (Number(u.size) || 0) - used));
   if (!(cap > 0)) return [];
@@ -195,9 +339,9 @@ function writeCell(r, st, now) {
   return `<td class="sa-num sa-act"${st.writeStale ? ' data-stale="true"' : ""} title="${attr(dateText(r.lastWrite))}">${escapeHtml(agoText(r.lastWrite, now))}</td>`;
 }
 
-// 这块盘按所选时长算出的不活跃用户合计。
+// 这块盘按所选时长算出的不活跃用户合计（已删除账号不计入列表）。
 export function idleSummary(u, { now = Date.now(), months = DEFAULT_IDLE_MONTHS } = {}) {
-  const rows = u.rows || [];
+  const rows = activeRows(u.rows);
   const idle = rows.filter((r) => idleState(r, { now, months }).idle);
   const bytes = idle.reduce((s, r) => s + r.bytes, 0);
   const writeKnown = rows.some((r) => r.lastWrite != null);
@@ -223,7 +367,7 @@ export function idleToolbarHtml(u, { now = Date.now(), activity = {} } = {}) {
 }
 
 export function userRowsHtml(u, { limit = USER_ROWS, shareLabel = "占已用", filesLabel = "文件数", activity = null, now = Date.now(), fold = null, foldKey = "" } = {}) {
-  const rows = [...(u.rows || [])].sort((a, b) => b.bytes - a.bytes);
+  const rows = [...activeRows(u.rows)].sort((a, b) => b.bytes - a.bytes);
   const slots = ownerSlots(rows);
   const max = rows[0]?.bytes || 0;
   const months = activity?.months || DEFAULT_IDLE_MONTHS;
@@ -251,7 +395,7 @@ export function userRowsHtml(u, { limit = USER_ROWS, shareLabel = "占已用", f
 
 // 这块盘的摘要数字：前 5 人合计占已用多少、名单覆盖多少人。
 export function userSummary(u) {
-  const rows = [...(u.rows || [])].sort((a, b) => b.bytes - a.bytes);
+  const rows = [...activeRows(u.rows)].sort((a, b) => b.bytes - a.bytes);
   const used = Number(u.used) || 0;
   const top = rows.slice(0, OWNER_SLOTS).reduce((s, r) => s + r.bytes, 0);
   return { count: rows.length, topShare: used > 0 ? top / used : 0, top: rows[0] || null };
@@ -300,7 +444,7 @@ export function coldBuckets(rows, { now = Date.now() } = {}) {
 }
 
 export function coldChartHtml(u, { now = Date.now(), months = DEFAULT_IDLE_MONTHS } = {}) {
-  const rows = u.rows || [];
+  const rows = activeRows(u.rows);
   if (!rows.some((r) => r.lastWrite != null)) return "";
   const buckets = coldBuckets(rows, { now }).filter((b) => b.key !== "unknown" || b.bytes > 0);
   const total = buckets.reduce((s, b) => s + b.bytes, 0);
@@ -487,7 +631,7 @@ export function diskEntryHtml(data, ctx = {}) {
   if (!pick) return `${head}<span class="res-sa-sum">各盘按用户占用与目录树</span>${go}`;
   const { target, mount, users } = pick;
   const where = `${target.label} ${mount.mount}`;
-  const u = users?.rows?.length ? users : null;
+  const u = activeRows(users?.rows).length ? users : null;
   const s = u ? userSummary(u) : null;
   const sum = s?.top
     ? `${where} · 最多 ${ownerName(s.top)} ${size(s.top.bytes)}`

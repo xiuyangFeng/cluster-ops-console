@@ -2,7 +2,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { hitRateOf, observatoryHtml, observatoryModels, observatoryTitle } from "./usage-observatory.js";
+import { astrolabeSvg, hitRateOf, observatoryAgents, observatoryHtml, observatoryModels, observatorySpectrum, observatoryTitle } from "./usage-observatory.js";
 
 const model = (name, agent, total, extra = {}) => ({ model: name, agent, total, calls: 10, errors: 0, fresh: total * 0.1, cacheRead: total * 0.9, output: 1000, costUsd: total / 1e6, ...extra });
 
@@ -82,4 +82,54 @@ test("observatoryHtml: 有失败时给直达按钮；没有调用时不造数；
   assert.match(empty, /暂无调用/);
 
   assert.match(observatoryHtml(null, null), /class="ob-hero is-empty" aria-busy="true"/);
+});
+
+test("observatorySpectrum / observatoryAgents / astrolabeSvg / 同期对比胶囊：只用真实数据，零值维度不造假段", () => {
+  const spec = observatorySpectrum(SUMMARY.kpis);
+  assert.equal(spec.segments.length, 4);
+  assert.equal(spec.segments[0].key, "cacheRead");
+  assert.ok(spec.segments.reduce((s, x) => s + x.share, 0) > 0.99);
+  assert.deepEqual(observatorySpectrum({ cacheRead: 0, inFresh: 0, cacheWrite: 0, output: 0 }).segments, []);
+
+  // 缺省 byAgent 时从 models 归并 Agent 占比
+  const agents = observatoryAgents(SUMMARY);
+  assert.equal(agents.length, 3);
+  assert.equal(agents[0].agent, "codex");
+  assert.ok(agents[0].share > 0.9);
+
+  // 优先使用后端精确聚合的 byAgent（含 ctxRatio）
+  const withByAgent = {
+    ...SUMMARY,
+    byAgent: [
+      { agent: "claude", total: 600, costUsd: 3.5, calls: 5, hitRate: 0.8, ctxRatio: 0.42 },
+      { agent: "codex", total: 400, costUsd: 1.5, calls: 4, hitRate: 0.9, ctxRatio: 0.25 },
+    ],
+    insights: {
+      comparison: {
+        covered: true,
+        scanIncomplete: false,
+        sameTime: true,
+        previousScope: { start: "2026-10-21", end: "2026-10-21" },
+        previous: { costUsd: 20, total: 20e6 },
+        current: { costUsd: 24.23, total: 32.9e6 },
+        costRatio: 1.2115,
+        tokenRatio: 1.645,
+      },
+    },
+  };
+  const exactAgents = observatoryAgents(withByAgent);
+  assert.equal(exactAgents[0].agent, "claude");
+  assert.equal(exactAgents[0].ctxRatio, 0.42);
+
+  const svg = astrolabeSvg(SUMMARY.kpis);
+  assert.match(svg, /class="ob-astrolabe"/);
+  assert.match(svg, /class="ob-ring-arc is-hit"/);
+
+  const richHtml = observatoryHtml(withByAgent, { agent: "all", date: null });
+  assert.match(richHtml, /class="ob-spectrum"/);
+  assert.match(richHtml, /class="ob-constellation"/);
+  assert.match(richHtml, /class="ob-comp-pills"/);
+  assert.match(richHtml, /花费 ▲21\.2%/);
+  assert.match(richHtml, /class="ob-comet-hitbar"/);
+  assert.match(richHtml, /净省 <b class="is-saved">\$58\.09<\/b>/);
 });

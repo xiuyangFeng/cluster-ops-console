@@ -78,10 +78,10 @@ export const SKELETON_PANELS = Object.freeze([
   // 初始占位带 data-skeleton-wait（index.html）；渲染器第一次写列表就把它换掉
   { id: "incidents", host: "#incidentsPanel", shape: "incidents", height: 360, ready: (doc) => !doc.getElementById("incidentList")?.querySelector("[data-skeleton-wait]") },
   { id: "usageMetrics", host: ".us-metrics", shape: "usageMetrics", height: 112, bare: true, ready: usageReady, watch: "#view-usage" },
-  { id: "usageTrend", host: ".us-trend", shape: "chart", height: 360, ready: usageReady, watch: "#view-usage" },
-  { id: "usageCalendar", host: ".us-calendar", shape: "calendar", height: 360, ready: usageReady, watch: "#view-usage" },
-  { id: "usageProjects", host: ".us-projects", shape: "strip", height: 120, ready: usageReady, watch: "#view-usage" },
-  { id: "usageSessions", host: "#usageSessionsPanel", shape: "table", height: 460, ready: usageReady, watch: "#view-usage" },
+  { id: "usageTrend", host: ".us-trend", shape: "chart", height: 240, ready: usageReady, watch: "#view-usage" },
+  { id: "usageCalendar", host: ".us-calendar", shape: "calendar", height: 240, ready: usageReady, watch: "#view-usage" },
+  { id: "usageProjects", host: ".us-projects", shape: "strip", height: 204, ready: usageReady, watch: "#view-usage" },
+  { id: "usageSessions", host: "#usageSessionsPanel", shape: "table", height: 420, ready: usageReady, watch: "#view-usage" },
 ]);
 
 const isShown = (el) => typeof el.getClientRects === "function" && el.getClientRects().length > 0;

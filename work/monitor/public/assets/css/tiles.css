@@ -622,35 +622,185 @@ col.res-gpu-c-owner { width: 108px; }
 .gpu-proc-kind[data-kind="python"],
 .gpu-proc-kind[data-kind="other"] { color: var(--yellow); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--yellow) 35%, transparent); }
 
-/* ---- 4. 经隧道出网的程序（render/tunnel-egress-view.js）：一程序一行「名字 · N 条连接 · ↑… ↓…」+ 合计 ---- */
+/* ---- 4. 经隧道出网的程序（render/tunnel-egress-view.js）：分段分布条 + 程序连接比例条 + 双色流量胶囊 ---- */
 
 .res-egress {
   display: flex;
   flex-direction: column;
-  gap: var(--space-2);
+  gap: 8px;
   padding-top: var(--space-4);
   border-top: 1px solid var(--hud-border);
 }
-.res-egress-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-1) var(--space-2); }
-.res-egress-head h3 { font-size: var(--text-sm); font-weight: 600; color: var(--text-strong); }
-.res-egress-meta { font-size: var(--text-xs); color: var(--muted); }
-.res-egress-note { margin: 0; font-size: var(--text-sm); color: var(--muted-strong); }
-.res-egress-note[data-state="error"] { color: var(--red); }
-.res-egress-list { display: flex; flex-direction: column; gap: 2px; margin: 0; padding: 0; list-style: none; }
-.res-egress-row {
+.res-egress-head {
   display: flex;
   flex-wrap: wrap;
-  align-items: baseline;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-1) var(--space-2);
+}
+.res-egress-head-left {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+}
+.res-egress-head h3 { font-size: var(--text-sm); font-weight: 600; color: var(--text-strong); margin: 0; }
+.res-egress-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--muted-strong);
+  background: rgba(var(--surface-rgb), 0.04);
+  border: 1px solid var(--hud-border);
+}
+.res-egress-pulse {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--muted);
+  flex: none;
+}
+.res-egress-pulse[data-state="ok"],
+.res-egress-pulse[data-state="basic"] {
+  background: var(--green);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--green) 22%, transparent);
+}
+.res-egress-pulse[data-state="error"] { background: var(--red); }
+.res-egress-total-pill {
+  padding: 2px 9px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-soft);
+  background: color-mix(in srgb, var(--cyan) 9%, transparent);
+  border: 1px solid color-mix(in srgb, var(--cyan) 28%, transparent);
+}
+.res-egress-note { margin: 0; font-size: var(--text-sm); color: var(--muted-strong); }
+.res-egress-note[data-state="error"] { color: var(--red); }
+.res-egress-dist {
+  display: flex;
+  height: 6px;
+  gap: 2px;
+  border-radius: 999px;
+  overflow: hidden;
+  background: rgba(var(--surface-rgb), 0.06);
+}
+.res-egress-seg {
+  height: 100%;
+  min-width: 4px;
+  border-radius: 2px;
+  opacity: 0.88;
+  transition: opacity 0.15s ease;
+}
+.res-egress-seg:hover { opacity: 1; }
+.res-egress-list {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.res-egress-row {
+  display: grid;
+  grid-template-columns: 20px minmax(72px, 140px) minmax(48px, 1fr) auto auto;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--hud-border);
+  background: rgba(var(--surface-rgb), 0.025);
   font-size: var(--text-sm);
   color: var(--muted-strong);
   font-variant-numeric: tabular-nums;
+  transition: border-color 0.15s ease, background-color 0.15s ease;
 }
-.res-egress-name { font-family: var(--font-mono); font-weight: 600; color: var(--text-strong); overflow-wrap: anywhere; }
-.res-egress-row[data-other="true"] .res-egress-name { font-family: inherit; font-weight: 400; color: var(--muted); }
-.res-egress-sep { white-space: pre; color: var(--muted); }
-.res-egress-bytes { white-space: nowrap; }
+.res-egress-row:hover {
+  border-color: var(--hud-border-strong);
+  background: rgba(var(--surface-rgb), 0.045);
+}
+.res-egress-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 6px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--egress-color, var(--cyan));
+  background: color-mix(in srgb, var(--egress-color, var(--cyan)) 14%, transparent);
+  border: 1px solid color-mix(in srgb, var(--egress-color, var(--cyan)) 34%, transparent);
+}
+.res-egress-name {
+  font-family: var(--font-mono);
+  font-weight: 600;
+  color: var(--text-strong);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.res-egress-row[data-other="true"] .res-egress-name { font-family: inherit; font-weight: 500; color: var(--muted); }
+.res-egress-bar {
+  position: relative;
+  height: 6px;
+  border-radius: 999px;
+  background: rgba(var(--surface-rgb), 0.07);
+  overflow: hidden;
+}
+.res-egress-bar-fill {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: var(--egress-color, var(--cyan));
+  opacity: 0.86;
+}
+.res-egress-conns {
+  font-size: var(--text-xs);
+  color: var(--text-soft);
+  white-space: nowrap;
+}
+.res-egress-conns b {
+  margin-left: 3px;
+  font-weight: 600;
+  color: var(--muted);
+}
+.res-egress-bytes {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  white-space: nowrap;
+}
+.res-egress-chip {
+  padding: 1px 7px;
+  border-radius: 999px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  border: 1px solid var(--hud-border);
+  background: rgba(var(--surface-rgb), 0.04);
+}
+.res-egress-chip[data-dir="up"] {
+  color: var(--cyan);
+  border-color: color-mix(in srgb, var(--cyan) 32%, transparent);
+  background: color-mix(in srgb, var(--cyan) 8%, transparent);
+}
+.res-egress-chip[data-dir="down"] {
+  color: var(--green);
+  border-color: color-mix(in srgb, var(--green) 32%, transparent);
+  background: color-mix(in srgb, var(--green) 8%, transparent);
+}
 .res-egress-more,
 .res-egress-total { margin: 0; font-size: var(--text-xs); color: var(--muted); font-variant-numeric: tabular-nums; }
+@media (max-width: 640px) {
+  .res-egress-row { grid-template-columns: 20px minmax(0, 1fr) auto; }
+  .res-egress-bar { grid-column: 2 / -1; order: 4; }
+  .res-egress-bytes { grid-column: 2 / -1; order: 5; }
+}
 
 /* ---- 5. 说明小字（设置浮层的配置说明、服务器登记表的密码说明复用） ---- */
 

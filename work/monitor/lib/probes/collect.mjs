@@ -14,6 +14,7 @@ import { buildResourceUsage } from "../resource-usage.mjs";
 import { createDirectNodeWatch } from "./direct-nodes.mjs";
 import { filterGpuVisibility } from "./gpu-visibility.mjs";
 import { parseSlurmSection } from "../slurm.mjs";
+import { isAdminUser, resolveEffectiveSshUser } from "../team-admin/protocol.mjs";
 import { parseTunnelEgress } from "../tunnel-egress.mjs";
 import { toPort } from "../validators.mjs";
 
@@ -37,7 +38,7 @@ export function collectorPortsFor(server) {
 }
 
 // slow 结果的 data 形状（v2.18 起逐字不变；usage 为 v2.20、slurm 为 v2.32、procTop 为 v2.62、tunnelEgress 为之后的加法字段）。
-function buildSlowData({ server, sections, sysText, parsedSys, listening, usage }) {
+function buildSlowData({ server, config, sections, sysText, parsedSys, listening, usage }) {
   // 段缺失（输出被截断）时给 null 而不是"全都没装"的默认对象——
   // 没采到与真的没装是两回事，前端据此显示"未知"而非误报缺失。
   const agents = sections.agents === undefined ? null : parseAgentsInstalled(sections.agents);
@@ -70,7 +71,7 @@ function buildSlowData({ server, sections, sysText, parsedSys, listening, usage 
     // 经隧道出网的程序（登录节点上连着 127.0.0.1:<remotePort> 的连接，按程序名汇总，lib/tunnel-egress.mjs）。
     // 段缺失（旧采集脚本）或空段给 null；远端没有 ss / 查询失败是 { state: "absent" | "error" }。
     tunnelEgress: sections["tunnel-egress"] === undefined ? null : parseTunnelEgress(sections["tunnel-egress"]),
-  }, agents?.user || slurm?.user || server.sshUser || null);
+  }, agents?.user || slurm?.user || server.sshUser || null, { adminUsers: config?.adminUsers });
 }
 
 // onSlurmSection(serverId, text)：slurm 段原文的旁路观察者（v2.49 失败作业诊断的登记，见
@@ -84,12 +85,14 @@ export function createCollectProbes({ getConfig, dataDir, execCollector, getMain
   const prevCpuByServer = new Map();
 
   function invocationFor(server, config, profile, ports) {
+    const slurmAll = profile === "slow" && isAdminUser(config, resolveEffectiveSshUser(config, server));
     return buildCollectorInvocation({
       server,
       parsed: config,
       profile,
       ports,
       knownHostsPath: resolveKnownHostsIfPresent(dataDir, server?.id),
+      slurmAll,
     });
   }
 
@@ -175,7 +178,7 @@ export function createCollectProbes({ getConfig, dataDir, execCollector, getMain
     const parsedSys = sysText ? parseRemoteProbeOutput(`__PORT_OPEN__\n${sysText}`) : null;
     const listening = parseListeningPorts(sections.ports || "", ports);
     const usage = sampleUsage(serverId, sections, sysText);
-    const data = buildSlowData({ server, sections, sysText, parsedSys, listening, usage });
+    const data = buildSlowData({ server, config, sections, sysText, parsedSys, listening, usage });
     directNodeWatch.observe(server.id, data.slurm);
     if (onSlurmSection && sections.slurm !== undefined) {
       try {

@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { diskEntryHtml, ownerSlots, pickEntryDisk, splitSegments, squarify, tone, treemapHtml, userRowsHtml } from "./storage-admin-viz.js";
+import {
+  activeRows, coldChartHtml, diskEntryHtml, diskGridHtml, fleetSummary, footprintBarHtml, isDeletedAccount,
+  ownerSlots, pickEntryDisk, splitSegments, squarify, tierSplitHtml, tone, topOwnersStripHtml, treemapHtml, userRowsHtml,
+} from "./storage-admin-viz.js";
 
 test("squarify：块铺满整个矩形、互不重叠、面积与数值成正比", () => {
   const values = [600, 300, 200, 120, 80, 40, 20, 10];
@@ -76,4 +79,76 @@ test("磁盘卡片入口：先按主机地址、再按挂载点对上那块盘�
   assert.match(html, /master \/public · 最多 kai 40 B/);
   assert.match(html, /class="res-sa-split"/);
   assert.match(diskEntryHtml(null), /各盘按用户占用与目录树/);
+});
+
+test("已删除账号从列表、分段条、头部成员卡与冷热图中剔除，残留归入未归属", () => {
+  const now = Date.UTC(2026, 10, 25);
+  const oldSec = now / 1000 - 400 * 86400;
+  const rows = [
+    { uid: 1001, name: "alice", account: "user", bytes: 50, files: 10, share: 0.5, lastWrite: oldSec },
+    { uid: 1022, name: "mwb", account: "none", bytes: 30, files: 5, share: 0.3, lastWrite: oldSec },
+    { uid: 500, name: null, account: "system", bytes: 10, files: 2, share: 0.1, lastWrite: oldSec },
+    { uid: 0, name: "root", account: "system", bytes: 5, files: 1, share: 0.05, lastWrite: oldSec },
+  ];
+  assert.equal(isDeletedAccount(rows[0]), false);
+  assert.equal(isDeletedAccount(rows[1]), true);
+  assert.equal(isDeletedAccount(rows[2]), true);
+  assert.equal(isDeletedAccount(rows[3]), false);
+  assert.deepEqual(activeRows(rows).map((r) => r.uid), [1001, 0]);
+
+  const segs = splitSegments({ used: 100, avail: 100, size: 200, rows });
+  assert.deepEqual(segs.map((s) => s.name), ["alice", "root", "未归属", "剩余"]);
+  assert.equal(segs.find((s) => s.kind === "unassigned").bytes, 45, "已删账号的 40B 与其他 5B 归入未归属");
+
+  const tableHtml = userRowsHtml({ rows });
+  assert.match(tableHtml, /alice/);
+  assert.match(tableHtml, /root/);
+  assert.doesNotMatch(tableHtml, /mwb/);
+  assert.doesNotMatch(tableHtml, /uid 500/);
+
+  const stripHtml = topOwnersStripHtml({ rows });
+  assert.match(stripHtml, /sa-owner-pill/);
+  assert.doesNotMatch(stripHtml, /mwb/);
+
+  const coldHtml = coldChartHtml({ used: 100, rows }, { now, months: 6 });
+  assert.match(coldHtml, /<b>55 B<\/b>/, "冷数据只统计活跃账号，不计已删除账号");
+});
+
+test("冷热分层、物理容量版图与单节点可视化磁盘矩阵（含冷存储与空闲新盘徽章）", () => {
+  const TB = 1024 ** 4;
+  const targets = [
+    {
+      id: "master", label: "master", host: "1.1.1.1",
+      info: { mounts: [
+        { mount: "/public", size: 48 * TB, used: 44 * TB, avail: 2 * TB, fs: "ext4", iused: 100, inodes: 1000 },
+        { mount: "/data", size: 57 * TB, used: 39 * TB, avail: 18 * TB, fs: "nfs4", tier: "cold", iused: 50, inodes: 1000 },
+      ] },
+      users: [{ mount: "/data", used: 39 * TB, rows: [{ uid: 1, name: "alice", account: "user", bytes: 10 * TB, share: 0.25, files: 5 }] }],
+    },
+    {
+      id: "node04", label: "node04", host: "2.2.2.2",
+      info: { mounts: [
+        { mount: "/mnt/data3", size: 16 * TB, used: 0, avail: 15 * TB, fs: "ext4", iused: 11, inodes: 1000 },
+        { mount: "/mnt/sda2", size: 200 * 1024 ** 3, used: 120 * 1024 ** 3, avail: 70 * 1024 ** 3, fs: "ext4", iused: 10, inodes: 1000 },
+      ] },
+      users: [],
+    },
+  ];
+  const fleet = fleetSummary(targets);
+  assert.equal(fleet.cold.count, 1);
+  assert.equal(fleet.hotTier.count, 3);
+  const split = tierSplitHtml(fleet);
+  assert.match(split, /热存储/);
+  assert.match(split, /冷存储/);
+  const fp = footprintBarHtml(fleet.disks);
+  assert.match(fp, /data-tone="cold"/);
+  assert.match(fp, /data-sa-focus-disk="disk:master:\/data"/);
+  assert.match(fp, /class="sa-fp-chip"[^>]*data-sa-focus-disk="disk:node04:\/mnt\/sda2"/, "极小容量盘收成紧凑胶囊，不挤成细条");
+  const gridMaster = diskGridHtml(targets[0], { expandedMounts: new Set(["/public"]) });
+  assert.match(gridMaster, /data-tier="cold"/);
+  assert.match(gridMaster, /冷存储/);
+  assert.match(gridMaster, /sa-ring-card/);
+  const gridNode04 = diskGridHtml(targets[1]);
+  assert.match(gridNode04, /空闲新盘/);
+  assert.match(gridNode04, /新盘空闲 · 暂无数据/);
 });

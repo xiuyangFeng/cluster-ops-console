@@ -610,7 +610,7 @@ ct_slurm() (
   ct_sl_jobs=
   ct_sl_user=$(id -un 2>/dev/null)
   ct_scope_squeue() {
-    if [ "$ct_sl_user" = root ]; then $ct_to squeue "$@";
+    if [ "$ct_sl_user" = root ] || [ "${CT_SLURM_ALL:-}" = 1 ]; then $ct_to squeue "$@";
     else $ct_to squeue -u "$ct_sl_user" "$@"; fi
   }
 

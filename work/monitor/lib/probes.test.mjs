@@ -1320,6 +1320,51 @@ test("slow 采集：直连节点断开 / 恢复经注入的 appendLog 各记一�
   assert.equal(logs[1].serverId, "server-01");
 });
 
+test("collect:slow：adminUsers 透传 CT_SLURM_ALL=1 且保留全员 Slurm 作业，普通账号仅保留本人", async () => {
+  const slurmOutput = (remoteUser) => [
+    "__CT_BEGIN sys__", "master", " 10:00:00 up 1 day,  2 users,  load average: 0.10, 0.20, 0.30", "__CT_END sys__",
+    "__CT_BEGIN agents__", `user=${remoteUser}`, "__CT_END agents__",
+    "__CT_BEGIN slurm__",
+    "state=ok", `user=${remoteUser}`, "now=1700000000", "tz=+0800", "jobs_total=2", "count=RUNNING=1", "count=PENDING=1",
+    "job=101|zcr|GPU|RUNNING|10:00|UNLIMITED|1|8|gpu=1|N/A|0|2026-11-25T10:00:00|2026-11-25T10:01:00|None|node01|train",
+    "job=102|alice|CPU|PENDING|0:00|1:00:00|1|4||N/A|0|2026-11-25T10:05:00|N/A|Resources||eval",
+    "__CT_END slurm__",
+  ].join("\n");
+
+  const runFor = async (sshUser) => {
+    const cmds = [];
+    const cfg = { ...baseConfig(), sshUser, adminUsers: ["lin"] };
+    const toolkit = createChannelToolkit({
+      rootDir: "/tmp",
+      getConfig: async () => cfg,
+      execFileImpl: async (_file, args) => {
+        cmds.push(args.at(-1));
+        return { code: 0, stderr: "", stdout: slurmOutput(sshUser) };
+      },
+    });
+    const specs = new Map();
+    toolkit.registerLoadProbes({
+      scheduler: { registerProbe: (spec) => specs.set(spec.id, spec) },
+      servers: cfg.servers,
+      getShouldBeRunning: () => true,
+    });
+    const result = await specs.get("collect:slow:server-01").run();
+    return { cmd: cmds[0], slurm: result.data.slurm };
+  };
+
+  const adminRes = await runFor("lin");
+  assert.match(adminRes.cmd, /CT_SLURM_ALL='1'/);
+  assert.deepEqual(adminRes.slurm.jobs.map((j) => j.user), ["zcr", "alice"]);
+  assert.equal(adminRes.slurm.jobsTotal, 2);
+  assert.deepEqual(adminRes.slurm.counts, { running: 1, pending: 1, other: 0 });
+
+  const memberRes = await runFor("alice");
+  assert.doesNotMatch(memberRes.cmd, /CT_SLURM_ALL/);
+  assert.deepEqual(memberRes.slurm.jobs.map((j) => j.user), ["alice"]);
+  assert.equal(memberRes.slurm.jobsTotal, 1);
+  assert.deepEqual(memberRes.slurm.counts, { running: 0, pending: 1, other: 0 });
+});
+
 test("fixture 模式的工具箱：CLI 最新版本不联网，取不到就是 latest:null + error", async () => {
   const toolkit = createChannelToolkit({ rootDir: "/tmp", getConfig: async () => baseConfig(), fixtureMode: true });
   const latest = await toolkit.cliVersions.getLatest({ wait: true });

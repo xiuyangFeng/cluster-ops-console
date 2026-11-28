@@ -55,7 +55,7 @@ test("buildCollectorInvocation: fast 形态与超时", () => {
   assert.ok(inv.input.startsWith("#!/bin/sh"), "脚本正文经 stdin 送达");
 });
 
-test("buildCollectorInvocation: slow 形态只带 profile 与端口，超时 20s", () => {
+test("buildCollectorInvocation: slow 形态只带 profile 与端口，超时 20s；slurmAll 仅对 slow 生效", () => {
   const inv = buildCollectorInvocation({
     server: SERVER,
     parsed: {},
@@ -65,6 +65,24 @@ test("buildCollectorInvocation: slow 形态只带 profile 与端口，超时 20s
   assert.equal(inv.timeoutMs, 20000);
   assert.equal(inv.timeoutMs, COLLECTOR_TIMEOUT_MS.slow);
   assert.equal(inv.args.at(-1), "env CT_PROFILE='slow' CT_PORTS='7891' sh -s");
+
+  const adminSlow = buildCollectorInvocation({
+    server: SERVER,
+    parsed: {},
+    profile: "slow",
+    ports: [7891],
+    slurmAll: true,
+  });
+  assert.equal(adminSlow.args.at(-1), "env CT_PROFILE='slow' CT_PORTS='7891' CT_SLURM_ALL='1' sh -s");
+
+  const adminFast = buildCollectorInvocation({
+    server: SERVER,
+    parsed: {},
+    profile: "fast",
+    ports: [7891],
+    slurmAll: true,
+  });
+  assert.equal(adminFast.args.at(-1), "env CT_PROFILE='fast' CT_PORTS='7891' sh -s");
 });
 
 test("buildCollectorInvocation: 参数经数组传递，命令串是单个元素、值全部单引号包裹", () => {

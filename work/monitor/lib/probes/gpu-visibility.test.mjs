@@ -19,11 +19,18 @@ test("内网跳转节点使用实际登录账号过滤，不沿用主集群用�
   assert.equal(data.slurm.nodes[0].gpus.cards[0].users[0].user, "user01");
 });
 
-test("普通账号的队列与数量只包含本人，root 保留全量", () => {
-  const make = () => ({ gpu: [], slurm: { nodes: [], jobs: [{ id: "1", user: "kai", state: "RUNNING" }, { id: "2", user: "user01", state: "PENDING" }], jobsTotal: 2, counts: { running: 1, pending: 1, other: 0 } } });
-  const self = filterGpuVisibility(make(), "kai");
+test("普通账号的队列与数量只包含本人，root 与 adminUsers 保留全量", () => {
+  const make = () => ({ gpu: cards, slurm: { nodes: [{ name: "node04", sshUser: "user01", gpus: { cards } }], jobs: [{ id: "1", user: "kai", state: "RUNNING" }, { id: "2", user: "user01", state: "PENDING" }], jobsTotal: 2, counts: { running: 1, pending: 1, other: 0 } } });
+  const self = filterGpuVisibility(make(), "kai", { adminUsers: ["lin"] });
   assert.deepEqual(self.slurm.jobs.map((j) => j.id), ["1"]);
   assert.equal(self.slurm.jobsTotal, 1);
   assert.deepEqual(self.slurm.counts, { running: 1, pending: 0, other: 0 });
   assert.equal(filterGpuVisibility(make(), "root").slurm.jobs.length, 2);
+
+  const admin = filterGpuVisibility(make(), "lin", { adminUsers: ["lin"] });
+  assert.equal(admin.slurm.jobs.length, 2);
+  assert.equal(admin.slurm.jobsTotal, 2);
+  assert.deepEqual(admin.slurm.counts, { running: 1, pending: 1, other: 0 });
+  assert.equal(admin.gpu[0].users.length, 2, "管理员账号在主节点保留全部 GPU 用户");
+  assert.deepEqual(admin.slurm.nodes[0].gpus.cards[0].users.map((u) => u.user), ["user01"], "跳转节点若以非管理员账号登录，仍只留该账号本人");
 });

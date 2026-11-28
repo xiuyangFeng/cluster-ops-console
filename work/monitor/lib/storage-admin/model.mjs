@@ -14,7 +14,7 @@ const TOP_SHOW = 15;
 const parentOf = (rel) => (rel.includes("/") ? rel.slice(0, rel.lastIndexOf("/")) : "");
 
 // 扫描结果 + 当前所在的相对路径 → 这一层的视图。
-export function buildScanView(entry, rel = "") {
+export function buildScanView(entry, rel = "", activeUsers = null) {
   if (!entry?.result || !isRelPath(rel)) return null;
   const { job, result } = entry;
   const records = result.records;
@@ -58,6 +58,7 @@ export function buildScanView(entry, rel = "") {
     const parts = rel.split("/");
     for (let i = 0; i < parts.length; i += 1) crumbs.push({ rel: parts.slice(0, i + 1).join("/"), name: parts[i] });
   }
+  const usersMap = Array.isArray(activeUsers) && activeUsers.length ? new Map(activeUsers.map((u) => [u.uid, u])) : null;
   return {
     job,
     rel,
@@ -69,22 +70,34 @@ export function buildScanView(entry, rel = "") {
     hiddenChildren: Math.max(0, kids.length - children.length),
     rest: Math.max(0, node.blocks - shownBlocks),
     top,
-    owners: rel === "" ? ownersView(result, node.blocks) : null,
+    owners: rel === "" ? ownersView(result, node.blocks, usersMap) : null,
     threshold: job.threshold,
   };
 }
 
-function ownersView(result, total) {
+function accountKind(uid, users) {
+  if (uid <= SYSTEM_UID_MAX || (uid >= 60000 && uid < 65536)) return "system";
+  return users.has(uid) ? "user" : "none";
+}
+
+function ownersView(result, total, users = null) {
   const names = result.names || {};
   return result.owners.slice(0, 200).map(([uid, blocks, files]) => ({
-    uid, name: names[String(uid)] ?? null, bytes: blocks, files, share: total > 0 ? blocks / total : 0,
+    uid, name: users?.get(uid)?.name ?? names[String(uid)] ?? null, bytes: blocks, files, share: total > 0 ? blocks / total : 0,
+    ...(users ? { account: accountKind(uid, users) } : {}),
   }));
 }
 
 const under = (p, root) => root === "/" || p === root || p.startsWith(`${root}/`);
 
+// 判断某个挂载点是否标记为冷存储（如 master 的 /data 或其下的 /data/user_data）；不把根目录 / 误判为冷存储。
+export function isColdMount(mount, coldMounts = []) {
+  if (typeof mount !== "string" || !mount || mount === "/" || !Array.isArray(coldMounts) || !coldMounts.length) return false;
+  return coldMounts.some((c) => typeof c === "string" && c.length > 1 && (mount === c || under(mount, c) || under(c, mount)));
+}
+
 // 要显示的挂载点：允许的根本身或其下的挂载点；某个根下一块独立挂载都没有时，才显示它所在的那块盘
-// （例如 node04 的 /mnt 下是 data1 / data2 / sda2 三块盘，就不再带出 /mnt 所在的系统盘 /）。
+// （例如 node04 的 /mnt 下是 data1 / data2 / data3 / data4 / sda2，就不再带出 /mnt 所在的系统盘 /）。
 export function pickMounts(mounts = [], roots = []) {
   const keep = new Set();
   for (const r of roots) {
@@ -104,33 +117,40 @@ const SYSTEM_UID_MAX = 999;
 
 function withActivity(row, users, activity) {
   const u = users.get(row.uid);
-  const account = u ? "user" : row.uid <= SYSTEM_UID_MAX || (row.uid >= 60000 && row.uid < 65536) ? "system" : "none";
+  const account = accountKind(row.uid, users);
   return { ...row, name: u?.name ?? row.name, account, lastLogin: u ? (u.lastLogin ?? null) : null, ...(u && activity[row.uid] ? { activity: activity[row.uid] } : {}) };
 }
 
-// 「按用户」表：每个挂载点一份。来源优先级：repquota（按属主、全盘、实时）> 扫描根正好是该挂载点的最近一次完整扫描。
+// 「按用户」表：每个挂载点一份。来源优先级：repquota（按属主、全盘、实时）> 扫描根正好是该挂载点的最近一次完整扫描
+// > 该挂载点下直属子目录的最近一次完整扫描（例如 /data 挂载点下授权扫描 /data/user_data）。
 export function buildUsersView({ info, quota = {}, scans = [], activity = {} } = {}) {
   const mounts = info?.mounts || [];
   const users = new Map((info?.users || []).map((u) => [u.uid, u]));
+  const directSubRoot = (root, mount) => root !== mount && under(root, mount)
+    && !mounts.some((other) => other.mount !== mount && under(other.mount, mount) && under(root, other.mount));
   return mounts.map((m) => {
+    const tierProp = m.tier ? { tier: m.tier } : {};
     const q = quota[m.mount];
     if (q && Array.isArray(q.rows)) {
       const total = q.rows.reduce((s, r) => s + r.bytes, 0);
       return {
-        mount: m.mount, source: "quota", at: q.at, used: m.used, size: m.size, iused: m.iused, inodeScan: m.inodeScan ?? null,
+        mount: m.mount, ...tierProp, source: "quota", at: q.at, used: m.used, size: m.size, iused: m.iused, inodeScan: m.inodeScan ?? null,
         rows: q.rows.map((r) => withActivity({ uid: r.uid, name: r.name ?? users.get(r.uid)?.name ?? null, bytes: r.bytes, files: r.files, lastWrite: null, share: m.used > 0 ? r.bytes / m.used : (total > 0 ? r.bytes / total : 0) }, users, activity))
           .sort((a, b) => b.bytes - a.bytes),
       };
     }
     // 扫描根正好是这块盘的最近一次完整结果：读 inode 表的按用户统计，或整盘目录扫描（scans 已按新→旧排列）。
-    const scan = scans.find((s) => s.job.root === m.mount && s.job.state === "done" && s.owners);
+    const scan = scans.find((s) => s.job.root === m.mount && s.job.state === "done" && s.owners)
+      || scans.find((s) => s.job.state === "done" && s.owners && directSubRoot(s.job.root, m.mount));
     if (scan) {
       return {
-        mount: m.mount, source: scan.job.kind === "inode" ? "inode" : "scan", at: scan.job.endedAt, jobId: scan.job.id, used: m.used, size: m.size, iused: m.iused, inodeScan: m.inodeScan ?? null,
+        mount: m.mount, ...tierProp,
+        ...(scan.job.root !== m.mount ? { scanRoot: scan.job.root } : {}),
+        source: scan.job.kind === "inode" ? "inode" : "scan", at: scan.job.endedAt, jobId: scan.job.id, used: m.used, size: m.size, iused: m.iused, inodeScan: m.inodeScan ?? null,
         rows: scan.owners.map((o) => withActivity({ ...o, name: o.name ?? users.get(o.uid)?.name ?? null, lastWrite: o.lastWrite ?? null, share: m.used > 0 ? o.bytes / m.used : o.share }, users, activity)),
       };
     }
-    return { mount: m.mount, source: null, quota: m.quota, used: m.used, size: m.size, iused: m.iused, inodeScan: m.inodeScan ?? null, rows: [] };
+    return { mount: m.mount, ...tierProp, source: null, quota: m.quota, used: m.used, size: m.size, iused: m.iused, inodeScan: m.inodeScan ?? null, rows: [] };
   });
 }
 

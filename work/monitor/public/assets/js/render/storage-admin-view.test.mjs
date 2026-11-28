@@ -326,3 +326,64 @@ test("数据冷热：按最后修改时间分档，超过所选时长的几档�
   const unknown = buildOverviewHtml({ key: { exists: true }, targets: [usersTarget(rows.map((r) => ({ ...r, lastWrite: null })))] }, { now: NOW });
   assert.doesNotMatch(unknown, /class="sa-cold"/, "没有修改时间时不画冷热图");
 });
+
+test("总览与目录浏览：剔除已删除账号，展示冷存储分层、物理版图、磁盘矩阵与子目录扫描来源", () => {
+  const TB = 1024 ** 4;
+  const master = target({
+    roots: ["/public", "/data/user_data"],
+    coldMounts: ["/data"],
+    info: {
+      mounts: [
+        { mount: "/public", size: 48 * TB, used: 44 * TB, avail: 2 * TB, inodes: 1000, iused: 500, fs: "ext4" },
+        { mount: "/data", size: 57 * TB, used: 39 * TB, avail: 18 * TB, inodes: 1000, iused: 200, fs: "nfs4", tier: "cold" },
+      ],
+      roots: [],
+    },
+    users: [
+      {
+        mount: "/public", source: "inode", at: NOW_S, used: 44 * TB, size: 48 * TB, iused: 500,
+        rows: [
+          row({ uid: 1001, name: "alice", bytes: 20 * TB, share: 0.45 }),
+          row({ uid: 100006, name: null, account: "none", bytes: 5 * TB, share: 0.11 }),
+        ],
+      },
+      {
+        mount: "/data", tier: "cold", source: "scan", scanRoot: "/data/user_data", at: NOW_S, used: 39 * TB, size: 57 * TB, iused: 200,
+        rows: [
+          row({ uid: 1002, name: "bob", bytes: 15 * TB, share: 0.38 }),
+          row({ uid: 1022, name: "mwb", account: "none", bytes: 4 * TB, share: 0.1 }),
+        ],
+      },
+    ],
+  });
+  const html = buildOverviewHtml(
+    { key: { exists: true }, setup: { id: "master", coldMounts: "/data" }, targets: [master] },
+    { now: NOW, fold: { open: new Set(["ublock:master:/data"]) } },
+  );
+  assert.match(html, /sa-ring-hero/);
+  assert.match(html, /sa-tier-strip/);
+  assert.match(html, /sa-fp-bar/);
+  assert.match(html, /sa-disk-grid/);
+  assert.match(html, /sa-top-owners/);
+  assert.match(html, /目录扫描 \/data\/user_data/);
+  assert.match(html, /name="coldMounts" value="\/data"/);
+  assert.match(html, /alice/);
+  assert.match(html, /bob/);
+  assert.doesNotMatch(html, /uid 100006/);
+  assert.doesNotMatch(html, /mwb/);
+
+  const browser = buildBrowserHtml({
+    path: "/data/user_data",
+    crumbs: [{ name: "/data/user_data", rel: "" }],
+    node: { blocks: 1000, size: 1000, files: 10, dirs: 2 },
+    job: { endedAt: NOW_S, partial: false },
+    children: [],
+    top: [],
+    owners: [
+      { uid: 1002, name: "bob", account: "user", bytes: 800, files: 8, share: 0.8 },
+      { uid: 1022, name: "mwb", account: "none", bytes: 200, files: 2, share: 0.2 },
+    ],
+  }, { now: NOW });
+  assert.match(browser, /bob/);
+  assert.doesNotMatch(browser, /mwb/);
+});

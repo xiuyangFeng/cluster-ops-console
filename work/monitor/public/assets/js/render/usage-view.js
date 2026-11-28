@@ -5,7 +5,7 @@ import { createElementLookup, morphInnerHtml, setAttr, setText } from "../dom-ut
 import { emptyStateHtml } from "../empty-state.js";
 import { createLineChart, niceCeil } from "../line-chart.js";
 import { escapeHtml } from "../store.js";
-import { observatoryHtml } from "./usage-observatory.js";
+import { observatoryHtml, observatorySpectrum } from "./usage-observatory.js";
 import { usageInsightsHtml } from "./usage-insights.js";
 import {
   AGENT_IDS, AGENT_LABELS, calendarGrid, calendarMonths, causesText, clockOf, codesText, compactDate, errorKindLabel, errorTextNote, contextTone, dateLabel, dayKeyOf, failureDetailText, filterSessions,
@@ -209,6 +209,29 @@ export function createUsageView({ doc, onPickBucket }) {
     const historical = state.date && state.date !== summary.today;
     setText($("usageSessionsUnit"), single ? (historical ? "个" : `个 · ${k.recentSessions} 个近期活跃`) : `个 · 日均 ${(k.sessions / summary.scope.days).toFixed(1)}`);
     morphInnerHtml($("usageSessionsDesc"), `<span>平均每轮 <strong>${k.avgTurnSec === null ? "—" : formatDuration(k.avgTurnSec)}</strong></span><span>${k.turnCount} 轮</span>`);
+
+    // 简洁版四卡底部微缩光谱条 / 比例尺（不侵入 Desc 文本，保持选择器与读屏纯净）
+    const totalBar = $("usageTotalBar");
+    if (totalBar) {
+      const spec = observatorySpectrum(k);
+      morphInnerHtml(totalBar, spec.segments.map((s) => `<i class="us-metric-seg" data-spec="${s.key}" style="width:${(Math.max(0.02, s.share) * 100).toFixed(1)}%" title="${escapeHtml(`${s.label} ${shortTokens(s.tokens)}`)}"></i>`).join(""));
+    }
+    const freshBar = $("usageFreshBar");
+    if (freshBar) {
+      const hitW = k.hitRate == null ? 0 : Math.max(0, Math.min(1, k.hitRate));
+      morphInnerHtml(freshBar, `<i class="us-metric-fill" data-tone="hit" style="transform:scaleX(${hitW.toFixed(3)})"></i>`);
+    }
+    const callsBar = $("usageCallsBar");
+    if (callsBar) {
+      const errRatio = k.calls > 0 && k.errors > 0 ? Math.max(0.03, k.errors / k.calls) : 0;
+      const okRatio = k.calls > 0 ? Math.max(0, 1 - errRatio) : 0;
+      morphInnerHtml(callsBar, `${okRatio > 0 ? `<i class="us-metric-seg" data-tone="ok" style="width:${(okRatio * 100).toFixed(1)}%"></i>` : ""}${errRatio > 0 ? `<i class="us-metric-seg" data-tone="error" style="width:${(errRatio * 100).toFixed(1)}%"></i>` : ""}`);
+    }
+    const sessionsBar = $("usageSessionsBar");
+    if (sessionsBar) {
+      const actRatio = single && !historical && k.sessions > 0 ? Math.max(0.08, k.recentSessions / k.sessions) : (k.sessions > 0 ? Math.min(1, Math.log10(k.sessions + 1) * 0.48) : 0);
+      morphInnerHtml(sessionsBar, `<i class="us-metric-fill" data-tone="${!historical && k.recentSessions ? "ok" : "neutral"}" style="transform:scaleX(${actRatio.toFixed(3)})"></i>`);
+    }
   }
 
   // 趋势：平滑曲线 + 渐变面积 + 外发光（同一路径叠一层宽描边，不用模糊滤镜，重绘便宜）。
@@ -346,8 +369,8 @@ export function createUsageView({ doc, onPickBucket }) {
     const list = trend.buckets;
     const wrap = $("usageTrendChart");
     const width = Math.max(280, wrap.clientWidth || 700);
-    const height = Math.max(150, wrap.clientHeight || 190);
-    const left = TREND_LEFT, right = TREND_RIGHT, bottom = 26, top = 20;
+    const height = Math.max(138, wrap.clientHeight || 156);
+    const left = TREND_LEFT, right = TREND_RIGHT, bottom = 24, top = 18;
     const plotBottom = height - bottom;
     const plotHeight = plotBottom - top;
     const max = Math.max(1, ...list.flatMap((b) => agents.map((a) => b[a] || 0)));
@@ -355,12 +378,22 @@ export function createUsageView({ doc, onPickBucket }) {
     const x = (i) => (list.length === 1 ? (left + width - right) / 2 : left + (i * (width - left - right)) / (list.length - 1));
     const y = (v) => top + plotHeight - (v / ceiling) * plotHeight;
     const grid = Array.from({ length: segments + 1 }, (_, i) => `<line x1="${left}" x2="${width - right}" y1="${y(step * i)}" y2="${y(step * i)}" class="us-grid${i === 0 ? " is-base" : ""}"/><text x="${left - 10}" y="${y(step * i) + 3}" text-anchor="end" class="us-axis">${axisLabel(step * i, divisor)}</text>`).join("");
-    const unitLabel = `<text x="${left - 10}" y="${top - 9}" text-anchor="end" class="us-axis us-axis-unit">${unit ? `${unit} Token` : "Token"}</text>`;
+    const unitLabel = `<text x="${left - 10}" y="${top - 8}" text-anchor="end" class="us-axis us-axis-unit">${unit ? `${unit} Token` : "Token"}</text>`;
     // 横轴标签约每 70px 一个；最后一个总是显示，离前一个太近时让位
     const stride = Math.max(1, Math.ceil(list.length / Math.max(2, Math.floor((width - left - right) / 70))));
     const labelAt = (i) => (i === list.length - 1 ? true : i % stride === 0 && list.length - 1 - i >= stride);
     const anchor = (i) => (list.length > 1 && i === list.length - 1 ? "end" : list.length > 1 && i === 0 ? "start" : "middle");
-    const labels = list.map((b, i) => (labelAt(i) ? `<text x="${x(i)}" y="${height - 8}" text-anchor="${anchor(i)}" class="us-axis">${b.label}</text>` : "")).join("");
+    const labels = list.map((b, i) => (labelAt(i) ? `<text x="${x(i)}" y="${height - 7}" text-anchor="${anchor(i)}" class="us-axis">${b.label}</text>` : "")).join("");
+
+    // 基线调用密度星尘刻度：反映该时段调用频次，有失败调用的分桶染耀斑色
+    const maxCalls = Math.max(0, ...list.map((b) => Number(b.calls) || 0));
+    const callTicks = maxCalls > 0 ? `<g class="us-call-ticks" aria-hidden="true">${list.map((b, i) => {
+      const c = Number(b.calls) || 0;
+      if (c <= 0) return "";
+      const h = Math.max(2, (c / maxCalls) * 16);
+      const cx = x(i).toFixed(1);
+      return `<line x1="${cx}" x2="${cx}" y1="${plotBottom}" y2="${(plotBottom - h).toFixed(1)}" class="us-call-tick${b.errors ? " is-error" : ""}"/>`;
+    }).join("")}</g>` : "";
 
     const ys = {};
     const defs = [];
@@ -413,7 +446,7 @@ export function createUsageView({ doc, onPickBucket }) {
       return `<rect class="us-hover" data-bucket="${i}" x="${x0}" y="${top}" width="${Math.max(1, x1 - x0)}" height="${plotHeight}"/>`;
     }).join("");
     trendGeometry = { xs: list.map((_, i) => x(i)), ys };
-    const nextHtml = `<svg width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" role="img" aria-label="${GRANULARITY_LABEL[trend.granularity] || ""} Token 用量"><defs>${defs.join("")}</defs>${grid}${unitLabel}${layers}${peakMark}${pulses}${cross}${labels}${hover}</svg>${rings}`;
+    const nextHtml = `<svg width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" role="img" aria-label="${GRANULARITY_LABEL[trend.granularity] || ""} Token 用量"><defs>${defs.join("")}</defs>${grid}${unitLabel}${callTicks}${layers}${peakMark}${pulses}${cross}${labels}${hover}</svg>${rings}`;
     if (nextHtml !== lastMergedTrendHtml || !wrap.firstChild) {
       lastMergedTrendHtml = nextHtml;
       wrap.innerHTML = nextHtml;
@@ -449,7 +482,9 @@ export function createUsageView({ doc, onPickBucket }) {
       return;
     }
     const agents = state.agent !== "all" ? [state.agent] : currentTrendAgents;
-    tip.innerHTML = `<strong>${bucket.label}${bucket.partial ? " · 进行中" : ""}</strong>${agents.map((a) => `<p><span><i class="us-line-key" data-agent="${a}"></i>${AGENT_LABELS[a] || a}</span><span>${shortTokens(bucket[a] || 0)}</span></p>`).join("")}${bucket.calls ? `<p class="us-tip-total"><span>调用</span><span>${integer(bucket.calls)} 次${bucket.errors ? ` · 失败 ${bucket.errors}` : ""}</span></p>` : ""}`;
+    const costLine = bucket.costUsd > 0 ? `<p class="us-tip-total"><span>等效花费</span><span>${formatUsd(bucket.costUsd)}</span></p>` : "";
+    const hitLine = bucket.input > 0 ? `<p><span>缓存命中</span><span>${((bucket.cacheRead / bucket.input) * 100).toFixed(1)}%</span></p>` : "";
+    tip.innerHTML = `<strong>${escapeHtml(bucket.label)}${bucket.partial ? " · 进行中" : ""}</strong>${agents.map((a) => `<p><span><i class="us-line-key" data-agent="${a}"></i>${AGENT_LABELS[a] || a}</span><span>${shortTokens(bucket[a] || 0)}</span></p>`).join("")}${costLine}${hitLine}${bucket.calls ? `<p class="us-tip-total"><span>调用</span><span>${integer(bucket.calls)} 次${bucket.errors ? ` · 失败 ${bucket.errors}` : ""}</span></p>` : ""}`;
     tip.hidden = false;
     const bounds = $("usageChartBody").getBoundingClientRect();
     tip.style.left = `${Math.max(6, Math.min(bounds.width - tip.offsetWidth - 6, clientX - bounds.left + 14))}px`;
@@ -497,14 +532,17 @@ export function createUsageView({ doc, onPickBucket }) {
   function renderProjects(summary, state) {
     const rows = summary?.projects || [];
     const max = Math.max(1, ...rows.map((r) => r.stats.total));
+    const grand = rows.reduce((sum, r) => sum + (r.stats.total || 0), 0);
     const selectedIndex = rows.findIndex((r) => r.key === state.project);
-    const shown = rows.slice(0, Math.max(5, selectedIndex + 1));
+    const shown = rows.slice(0, Math.max(6, selectedIndex + 1));
     const rest = rows.slice(shown.length);
     morphInnerHtml($("usageProjects"), rows.length ? shown.map((r) => {
       const selected = r.key === state.project;
+      const share = grand > 0 ? Math.round((r.stats.total / grand) * 100) : 0;
       const segs = AGENTS.filter((a) => (r.byAgent?.[a] || 0) > 0).map((a) => `<span class="us-seg" data-agent="${a}" style="width:${((r.byAgent[a] || 0) / max) * 100}%" title="${AGENT_LABELS[a] || a} ${shortTokens(r.byAgent[a] || 0)}"></span>`).join("");
       const costMeta = r.stats.costUsd > 0 ? `<span title="等效 API 花费">${formatUsd(r.stats.costUsd)}</span>` : "";
-      return `<button type="button" class="us-project${selected ? " is-selected" : ""}" data-project="${escapeHtml(r.key)}" aria-pressed="${selected}" title="${escapeHtml(r.key)}"><span class="us-project-top"><strong>${escapeHtml(r.label)}</strong><span>${shortTokens(r.stats.total)}</span></span><span class="us-bar">${segs}</span><span class="us-project-meta"><span>${r.sessions} 会话</span><span>未命中 ${shortTokens(r.stats.fresh)}</span>${costMeta}${r.stats.errors ? `<span class="is-error">失败 ${r.stats.errors}</span>` : ""}</span></button>`;
+      const shareMeta = grand > 0 ? `<span>占 ${share >= 1 ? `${share}%` : "<1%"}</span>` : "";
+      return `<button type="button" class="us-project${selected ? " is-selected" : ""}" data-project="${escapeHtml(r.key)}" aria-pressed="${selected}" title="${escapeHtml(r.key)}"><span class="us-project-top"><strong>${escapeHtml(r.label)}</strong><span>${shortTokens(r.stats.total)}</span></span><span class="us-bar">${segs}</span><span class="us-project-meta">${shareMeta}<span>${r.sessions} 会话</span>${costMeta}<span>未命中 ${shortTokens(r.stats.fresh)}</span>${r.stats.errors ? `<span class="is-error">失败 ${r.stats.errors}</span>` : ""}</span></button>`;
     }).join("") + (rest.length ? `<div class="us-project-rest" title="${rest.map((r) => escapeHtml(r.label)).join("、")}">其余 ${rest.length} 个 · ${shortTokens(rest.reduce((v, r) => v + r.stats.total, 0))}<span>${rest.map((r) => escapeHtml(r.label)).join("、")}</span></div>` : "")
       : '<p class="us-project-empty">当前范围没有会话</p>');
   }
@@ -529,8 +567,12 @@ export function createUsageView({ doc, onPickBucket }) {
     const rows = filterSessions(all, { filter: state.sessionFilter, search: state.search, sort: state.sort });
     const multiDay = !state.date && state.range > 1;
     const visible = rows.slice(0, state.limit);
+    const maxTok = Math.max(1, ...visible.map((s) => Number(s.stats?.total) || 0));
     const today = summary?.today;
-    morphInnerHtml($("usageSessionRows"), visible.map((s) => `<tr data-session="${escapeHtml(s.key)}" class="${s.status === "recent" ? "is-active" : ""}${highlight.has(s.key) ? " is-new" : ""}"><td>${multiDay || s.day !== today ? `<span class="us-sub us-date">${monthDay(s.day)}</span>` : ""}${clockOf(s.last)}<span class="us-sub">起 ${clockOf(s.first)}</span></td><td><span class="us-project-name">${escapeHtml(s.projectLabel)}</span><span class="us-sub us-narrow"><i class="us-key" data-agent="${s.agent}"></i>${AGENT_LABELS[s.agent]} · ${integer(s.stats.calls)} 次 · 未命中 ${shortTokens(s.stats.fresh)}</span></td><td class="us-col-agent"><span class="us-agent"><i class="us-key" data-agent="${s.agent}"></i>${AGENT_LABELS[s.agent]}</span><span class="us-sub us-mono">${escapeHtml(s.model || "—")}</span></td><td class="us-num us-col-calls">${integer(s.stats.calls)}</td><td class="us-num">${shortTokens(s.stats.total)}</td><td class="us-num us-col-fresh">${shortTokens(s.stats.fresh)}</td><td class="us-col-context">${contextCell(s.context)}</td><td>${statusCell(s)}</td><td><span class="us-chevron" aria-hidden="true">›</span></td></tr>`).join(""));
+    morphInnerHtml($("usageSessionRows"), visible.map((s) => {
+      const tokRatio = Math.max(0.02, Math.min(1, (Number(s.stats?.total) || 0) / maxTok));
+      return `<tr data-session="${escapeHtml(s.key)}" class="${s.status === "recent" ? "is-active" : ""}${highlight.has(s.key) ? " is-new" : ""}"><td>${multiDay || s.day !== today ? `<span class="us-sub us-date">${monthDay(s.day)}</span>` : ""}${clockOf(s.last)}<span class="us-sub">起 ${clockOf(s.first)}</span></td><td><span class="us-project-name">${escapeHtml(s.projectLabel)}</span><span class="us-sub us-narrow"><i class="us-key" data-agent="${s.agent}"></i>${AGENT_LABELS[s.agent]} · ${integer(s.stats.calls)} 次 · 未命中 ${shortTokens(s.stats.fresh)}</span></td><td class="us-col-agent"><span class="us-agent"><i class="us-key" data-agent="${s.agent}"></i>${AGENT_LABELS[s.agent]}</span><span class="us-sub us-mono">${escapeHtml(s.model || "—")}</span></td><td class="us-num us-col-calls">${integer(s.stats.calls)}</td><td class="us-num"><span class="us-tok-cell"><span>${shortTokens(s.stats.total)}</span><span class="us-tok-track" aria-hidden="true"><i class="us-tok-fill" data-agent="${s.agent}" style="transform:scaleX(${tokRatio.toFixed(3)})"></i></span></span></td><td class="us-num us-col-fresh">${shortTokens(s.stats.fresh)}</td><td class="us-col-context">${contextCell(s.context)}</td><td>${statusCell(s)}</td><td><span class="us-chevron" aria-hidden="true">›</span></td></tr>`;
+    }).join(""));
     const empty = usageSessionEmptyState(summary, state, rows.length);
     const emptyEl = $("usageSessionEmpty");
     if (emptyEl.hidden !== !empty) emptyEl.hidden = !empty;

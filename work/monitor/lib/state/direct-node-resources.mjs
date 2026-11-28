@@ -31,7 +31,7 @@ export function reconcileDirectNodeResources(resources, servers, config, now) {
       const connection = candidates[0];
       const sample = resources[connection.id];
       const sshUser = sample.agentsInstalled?.user || attachPersonalSsh(connection, config).sshUser;
-      return directNodeFromResource(node, { ...sample, gpu: gpuForAccount(sample.gpu, viewer) }, { connectionId: connection.id, sshUser });
+      return directNodeFromResource(node, { ...sample, gpu: gpuForAccount(sample.gpu, viewer, { adminUsers: config?.adminUsers }) }, { connectionId: connection.id, sshUser });
     });
     layer.slurm = { ...layer.slurm, nodes };
   }

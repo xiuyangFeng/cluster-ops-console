@@ -571,6 +571,28 @@ for (const shell of SHELLS) {
     });
   });
 
+  test(`collect.sh（${shell}）：CT_SLURM_ALL=1 查全员 squeue，未设时非 root 仅查本人`, { skip: process.platform === "win32" }, () => {
+    withFakeSlurm((dir) => {
+      const logFile = path.join(dir, "squeue.log");
+      writeFileSync(path.join(dir, "squeue"), `#!/bin/sh
+printf '%s\\n' "$*" >> "$FAKE_SQUEUE_LOG"
+case "$*" in
+  *"WorkDir"*) exit 0 ;;
+  *) printf '%s\\n' '16326|kai|CPU|RUNNING|44:19|UNLIMITED|1|92|cpu=92,node=1,billing=92|N/A|0|2026-09-30T11:53:47|2026-09-30T12:02:18|None|node07|job1|' ;;
+esac
+`);
+      chmodSync(path.join(dir, "squeue"), 0o755);
+      runSlow(shell, { PATH: `${dir}:${process.env.PATH}`, FAKE_SQUEUE_LOG: logFile });
+      const selfArgs = readFileSync(logFile, "utf8").trim().split("\n")[0] || "";
+      if (process.getuid?.() !== 0) assert.match(selfArgs, /(^| )-u /, "普通账号未设 CT_SLURM_ALL 时应带 -u 过滤本人");
+
+      writeFileSync(logFile, "");
+      runSlow(shell, { PATH: `${dir}:${process.env.PATH}`, FAKE_SQUEUE_LOG: logFile, CT_SLURM_ALL: "1" });
+      const adminArgs = readFileSync(logFile, "utf8").trim().split("\n")[0] || "";
+      assert.doesNotMatch(adminArgs, /(^| )-u /, "管理员设 CT_SLURM_ALL=1 时应查全员 squeue");
+    });
+  });
+
   test(`collect.sh（${shell}）：sinfo 超时 → state=error，不再跑回退与 squeue`, { skip: process.platform === "win32" }, () => {
     withFakeSlurm((dir) => {
       const section = runSlow(shell, { PATH: `${dir}:${process.env.PATH}`, FAKE_MODE: "timeout" });

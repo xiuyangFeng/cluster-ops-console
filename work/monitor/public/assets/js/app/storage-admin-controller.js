@@ -93,7 +93,7 @@ export function createStorageAdminController({
     if (body) {
       const focused = doc.activeElement;
       const keepFocus = body.contains?.(focused) && focused?.closest?.("[data-sa-target-form]")
-        && ["id", "label", "host", "port", "roots", "additionalRoots"].includes(focused.name)
+        && ["id", "label", "host", "port", "roots", "additionalRoots", "coldMounts"].includes(focused.name)
         ? { name: focused.name, start: focused.selectionStart, end: focused.selectionEnd } : null;
       // 展开 / 收起的状态跨重绘保留：有 data-sa-key 的按它认（摘要里带会变的数字），其余按摘要文字认。
       const keyOf = (d) => d.dataset?.saKey || d.querySelector("summary")?.textContent;
@@ -315,12 +315,32 @@ export function createStorageAdminController({
     render();
   }
 
+  async function refreshAllTargets() {
+    const targets = data?.targets || [];
+    if (!targets.length || busy.refreshAll) return;
+    busy.refreshAll = true;
+    const btn = $("storageAdminRefreshAll");
+    if (btn) { btn.disabled = true; btn.textContent = "刷新中…"; }
+    try {
+      await Promise.all(targets.map((t) => refreshTarget(t.id)));
+    } finally {
+      delete busy.refreshAll;
+      if (btn) { btn.disabled = false; btn.textContent = "全部刷新"; }
+    }
+  }
+
   async function saveTarget(button) {
     const form = button.closest("[data-sa-target-form]");
     if (!form) return;
     const value = (name) => form.querySelector(`[name="${name}"]`)?.value?.trim() || "";
     const roots = [...new Set(`${value("roots")} ${value("additionalRoots")}`.split(/[\s,，]+/).filter(Boolean))];
-    const target = { id: value("id"), label: value("label"), host: value("host"), port: Number(value("port")), roots, ...(value("connectionId") ? { connectionId: value("connectionId") } : {}) };
+    const coldInput = form.querySelector('[name="coldMounts"]');
+    const coldMounts = coldInput ? [...new Set(value("coldMounts").split(/[\s,，]+/).filter(Boolean))] : undefined;
+    const target = {
+      id: value("id"), label: value("label"), host: value("host"), port: Number(value("port")), roots,
+      ...(coldMounts !== undefined ? { coldMounts } : {}),
+      ...(value("connectionId") ? { connectionId: value("connectionId") } : {}),
+    };
     captureTargetForm(form);
     const saved = await act("target", () => postJson("/api/storage-admin/targets", target));
     if (saved) {
@@ -334,7 +354,7 @@ export function createStorageAdminController({
   function captureTargetForm(form) {
     if (!form) return;
     const draft = { ...(targetDraft || data?.setup || {}) };
-    for (const name of ["id", "label", "host", "port", "connectionId", "roots", "additionalRoots"]) {
+    for (const name of ["id", "label", "host", "port", "connectionId", "roots", "additionalRoots", "coldMounts"]) {
       const input = form.querySelector(`[name="${name}"]`);
       if (input) draft[name] = input.value;
     }
@@ -352,7 +372,7 @@ export function createStorageAdminController({
   function editTarget(id) {
     const target = data?.targets?.find((item) => item.id === id);
     if (!target || !data.setup || target.running || target.refreshing) return;
-    targetDraft = { ...target, roots: target.roots.join(" "), additionalRoots: "", editing: true };
+    targetDraft = { ...target, roots: target.roots.join(" "), additionalRoots: "", coldMounts: (target.coldMounts || []).join(" "), editing: true };
     render();
     showTargetForm();
   }
@@ -361,14 +381,14 @@ export function createStorageAdminController({
     const connection = data?.connections?.find((item) => item.id === id);
     if (!connection) return;
     targetDraft = { id: `${connection.id}-storage`, label: `${connection.name} · ${connection.sshUser}`,
-      connectionId: connection.id, host: connection.host, port: connection.port || 22, roots: "" };
+      connectionId: connection.id, host: connection.host, port: connection.port || 22, roots: "", coldMounts: "" };
     render();
     showTargetForm();
   }
 
-  // 容量条列表里点一行：跳到那块盘的分析卡（收起的先展开）；没有对应的卡就跳到那台机器。
+  // 容量条 / 物理容量版图 / 磁盘微卡点一项：跳到那块盘的分析卡（收起的先展开）；没有对应的卡就跳到那台机器。
   function jump(button) {
-    const key = button.dataset.saJump || "";
+    const key = button.dataset.saJump || button.dataset.saFocusDisk || "";
     const [, targetId, ...rest] = key.split(":");
     const mount = rest.join(":");
     const block = `ublock:${targetId}:${mount}`;
@@ -384,6 +404,7 @@ export function createStorageAdminController({
 
   const BODY_ACTIONS = [
     ["[data-sa-jump]", jump],
+    ["[data-sa-focus-disk]", jump],
     ["[data-sa-show-setup]", showTargetForm],
     ["[data-sa-configure]", (button) => configureConnection(button.dataset.saConfigure)],
     ["[data-sa-edit-target]", (button) => editTarget(button.dataset.saEditTarget)],
@@ -435,6 +456,7 @@ export function createStorageAdminController({
     for (const [selector, run] of actions) {
       const button = event.target.closest(selector);
       if (button) {
+        if (button.closest?.("summary")) event.preventDefault?.();
         run(button);
         return;
       }
@@ -549,6 +571,7 @@ export function createStorageAdminController({
       onOpen();
     });
     $("storageAdminReload")?.addEventListener("click", () => load());
+    $("storageAdminRefreshAll")?.addEventListener("click", () => refreshAllTargets());
     doc.addEventListener?.("visibilitychange", () => {
       if (shown("storage")) load({ quiet: true });
       else schedule();
